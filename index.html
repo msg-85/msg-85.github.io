@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>데이터 창구</title>
+<style>
+/* This page holds no data. Everything it shows comes from the private repo, using the viewer's own token. */
+:root {
+  --bg: #eef2f0; --panel: #fbfcfb; --sheet: #ffffff; --head: #e3e9e6;
+  --line: #d2dad6; --fg: #17211d; --muted: #5b6a63;
+  --in: #0f6b4f; --out: #3a4fb0; --warn: #a3341f; --on-accent: #ffffff;
+  --sans: "Malgun Gothic", "Segoe UI", sans-serif;
+  --mono: Consolas, "Malgun Gothic", monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #121715; --panel: #181f1c; --sheet: #1c2421; --head: #252e2a;
+  --line: #333f3a; --fg: #e6ece9; --muted: #98a7a0;
+  --in: #4fc29b; --out: #9aa9f2; --warn: #f09a86; --on-accent: #10231c; color-scheme: dark;
+} }
+[hidden] { display: none !important; }
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans); padding: 12px 16px; }
+button, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--in); outline-offset: 1px; }
+a { color: var(--out); }
+
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.top h1 { font-size: 18px; font-weight: 700; margin: 0; }
+.tabs { display: flex; gap: 4px; }
+.tab { border: 1px solid var(--line); background: var(--panel); padding: 4px 14px; cursor: pointer; font-weight: 600; }
+.tab[aria-selected="true"] { background: var(--in); border-color: var(--in); color: var(--on-accent); }
+#tabIn[aria-selected="true"] { background: var(--out); border-color: var(--out); }
+.who { margin-left: auto; color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: center; }
+
+.pane { background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; min-width: 0; }
+.login { max-width: 640px; width: 100%; margin: 0 auto; align-self: start; }
+.login h2 { font-size: 17px; margin: 0; }
+.login ol { margin: 0; padding-left: 20px; }
+.login p { margin: 0; }
+.drop { flex: 1; min-height: 180px; width: 100%; resize: none; border: 2px dashed var(--line); background: var(--sheet); padding: 18px; text-align: center; }
+.drop::placeholder { color: var(--muted); }
+.drop:focus { border-color: var(--in); outline: none; }
+body.dragging .drop { border-color: var(--out); }
+.fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); min-width: 0; }
+.field input { border: 1px solid var(--line); background: var(--sheet); padding: 6px 8px; color: var(--fg); width: 100%; font-size: 15px; }
+.check { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bar .grow { flex: 1; min-width: 0; color: var(--muted); font-size: 13px; }
+.btn { border: 1px solid var(--line); background: var(--sheet); padding: 6px 12px; cursor: pointer; font-weight: 500; }
+.btn:hover { background: var(--head); }
+.btn.small { padding: 1px 8px; font-size: 13px; }
+.btn.primary { background: var(--in); border-color: var(--in); color: var(--on-accent); font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+.next { background: var(--sheet); border: 1px solid var(--in); padding: 8px 12px; margin: 0; }
+.err { color: var(--warn); margin: 0; font-size: 14px; }
+progress { width: 100%; height: 10px; accent-color: var(--in); }
+.list { display: flex; flex-direction: column; gap: 4px; max-height: 30%; overflow-y: auto; flex-shrink: 0; }
+.item { text-align: left; font: 13px var(--mono); }
+.item[aria-current="true"] { border-color: var(--out); }
+.dh h2 { font-size: 17px; margin: 0; overflow-wrap: anywhere; }
+.note { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--sheet); border: 1px solid var(--line); padding: 10px 12px; max-height: 38%; overflow-y: auto; flex-shrink: 0; }
+
+.grid { flex: 1; min-height: 120px; overflow: auto; border: 1px solid var(--line); background: var(--sheet); }
+table { border-collapse: separate; border-spacing: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 2px 8px; white-space: pre; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+thead th { position: sticky; top: 0; background: var(--head); font: 500 12px var(--mono); color: var(--muted); z-index: 2; text-align: center; }
+tbody th { position: sticky; left: 0; background: var(--head); font: 500 12px var(--mono); color: var(--muted); z-index: 1; text-align: right; }
+thead th:first-child { left: 0; z-index: 3; }
+td.num { text-align: right; font-family: var(--mono); }
+
+@media (max-width: 700px) {
+  html, body { height: auto; }
+  .app { height: auto; }
+  .pane { min-height: 70vh; }
+  .login { min-height: 0; }
+  .fields { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>데이터 창구</h1>
+    <div class="tabs" role="tablist" id="tabs" hidden>
+      <button class="tab" id="tabOut" role="tab" type="button" aria-selected="true">보내기</button>
+      <button class="tab" id="tabIn" role="tab" type="button" aria-selected="false">답장 보기</button>
+    </div>
+    <span class="who" id="who" hidden>연결됨 <button class="btn small" id="logoutBtn" type="button">연결 끊기</button></span>
+  </header>
+
+  <section class="pane login" id="loginPane">
+    <h2>열쇠로 연결하기</h2>
+    <ol>
+      <li><a href="https://github.com/settings/personal-access-tokens/new?name=data-window&amp;description=Data%20window%20page&amp;target_name=msg-85&amp;expires_in=90&amp;contents=write" target="_blank" rel="noopener noreferrer">GitHub 열쇠 만들기 화면</a>을 엽니다.</li>
+      <li><b>Repository access</b>에서 <b>Only select repositories</b>를 고르고 <b>price-data</b>만 선택합니다.</li>
+      <li><b>Contents</b>가 <b>Read and write</b>인지 확인하고 <b>Generate token</b>을 누릅니다.</li>
+      <li>나온 열쇠(<code>github_pat_</code>로 시작)를 복사해 아래에 붙여넣습니다.</li>
+    </ol>
+    <label class="field">열쇠<input id="token" type="password" autocomplete="off" spellcheck="false"></label>
+    <label class="check"><input id="remember" type="checkbox"> 이 브라우저에 기억하기 (혼자 쓰는 컴퓨터에서만)</label>
+    <div class="bar">
+      <span class="grow">열쇠는 GitHub에만 전달됩니다. 디스코드나 대화창에는 보내지 마세요.</span>
+      <button class="btn primary" id="loginBtn" type="button">연결</button>
+    </div>
+    <p class="err" id="loginErr" hidden></p>
+  </section>
+
+  <section class="pane" id="sendPane" hidden>
+    <textarea class="drop" id="drop" aria-label="엑셀 데이터 붙여넣기" placeholder="엑셀에서 셀을 복사해 여기에 붙여넣거나, 파일을 이 창에 끌어다 놓으세요."></textarea>
+    <div class="grid" id="draftGrid" hidden></div>
+    <div class="fields">
+      <label class="field">제목<input id="title" type="text" maxlength="80" placeholder="예: 2024-2026 판매가"></label>
+      <label class="field">Claude에게 요청 (선택)<input id="note" type="text" maxlength="2000" placeholder="예: 품목별 월평균을 내주고 이상한 값을 찾아줘"></label>
+    </div>
+    <progress id="prog" max="1" value="0" hidden></progress>
+    <div class="bar">
+      <span class="grow" id="draftInfo">표를 붙여넣거나 파일을 고르면 올릴 수 있습니다.</span>
+      <input id="upIn" type="file" multiple hidden>
+      <button class="btn" id="clearBtn" type="button" hidden>지우기</button>
+      <button class="btn" id="upPick" type="button">파일 선택</button>
+      <button class="btn primary" id="sendBtn" type="button" disabled>올리기</button>
+    </div>
+    <p class="next" id="saved" hidden></p>
+    <p class="err" id="sendErr" hidden></p>
+  </section>
+
+  <section class="pane" id="readPane" hidden>
+    <div class="bar">
+      <span class="grow" id="listInfo"></span>
+      <button class="btn" id="refreshBtn" type="button">새로고침</button>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="dh" id="rHead" hidden><h2 id="rTitle"></h2></div>
+    <div class="note" id="rNote" hidden></div>
+    <div class="grid" id="rGrid" hidden></div>
+    <div class="bar">
+      <span class="grow" id="rInfo"></span>
+      <button class="btn primary" id="copyBtn" type="button" hidden>표 복사 (엑셀에 붙여넣기용)</button>
+    </div>
+    <p class="err" id="rErr" hidden></p>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const REPO = '/repos/msg-85/price-data';
+  const PART = 8 * 1024 * 1024;              // bytes of compressed data per uploaded piece
+  const MAX_ROWS = 500, MAX_CELLS = 30000;   // on-screen preview only
+  const KEY = 'data-window-token';
+  let token = '', draft = null, files = [], reply = null, busy = false;
+
+  // ---------- storage: may be unavailable, so never let it stop the page ----------
+  const store = {
+    get() { for (const s of ['sessionStorage', 'localStorage']) { try { const v = window[s].getItem(KEY); if (v) return v; } catch (e) {} } return ''; },
+    set(v, keep) { try { window[keep ? 'localStorage' : 'sessionStorage'].setItem(KEY, v); } catch (e) {} },
+    clear() { for (const s of ['sessionStorage', 'localStorage']) { try { window[s].removeItem(KEY); } catch (e) {} } },
+  };
+
+  // ---------- GitHub ----------
+  class ApiError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
+  async function api(path, opts = {}) {
+    const res = await fetch('https://api.github.com' + REPO + path, {
+      cache: 'no-store', ...opts,
+      headers: { Authorization: 'Bearer ' + token, Accept: opts.accept || 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    });
+    if (!res.ok) {
+      let msg = ''; try { msg = (await res.json()).message || ''; } catch (e) {}
+      throw new ApiError(res.status, msg);
+    }
+    return res;
+  }
+  function explain(e) {
+    if (e.status === 401) return '열쇠가 맞지 않거나 기간이 끝났습니다. 연결을 끊고 새 열쇠로 다시 연결해 주세요.';
+    if (e.status === 403) return '이 열쇠에 쓰기 권한이 없습니다. Contents가 Read and write인지 확인해 주세요.';
+    if (e.status === 404) return '저장소를 찾지 못했습니다. 열쇠를 만들 때 price-data를 선택했는지 확인해 주세요.';
+    if (e instanceof TypeError) return 'GitHub에 연결하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.';
+    return 'GitHub 오류입니다: ' + (e.status || '') + ' ' + e.message;
+  }
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  function toBase64(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  // Commits happen one at a time, so a retry after a dropped reply can find the file already there.
+  async function put(path, base64, message) {
+    const body = JSON.stringify({ message, content: base64 });
+    for (let attempt = 0; ; attempt++) {
+      try { await api('/contents/' + path, { method: 'PUT', body }); return; }
+      catch (e) {
+        if (e.status === 422 && attempt > 0) return;
+        const retry = e instanceof TypeError || e.status === 409 || e.status === 429 || e.status >= 500;
+        if (!retry || attempt >= 4) throw e;
+        await wait(2000 * 2 ** attempt);
+      }
+    }
+  }
+
+  // ---------- login ----------
+  async function connect(t, keep, quiet) {
+    token = t; $('loginBtn').disabled = true; $('loginErr').hidden = true;
+    try {
+      await api('');
+      store.set(t, keep);
+      $('token').value = '';
+      $('loginPane').hidden = true; $('tabs').hidden = false; $('who').hidden = false;
+      tab('send');
+    } catch (e) {
+      token = ''; if (e.status === 401) store.clear();
+      if (!quiet || e.status !== 401) { $('loginErr').textContent = explain(e); $('loginErr').hidden = false; }
+    }
+    $('loginBtn').disabled = false;
+  }
+  $('loginBtn').addEventListener('click', () => { const t = $('token').value.trim(); if (t) connect(t, $('remember').checked); });
+  $('token').addEventListener('keydown', e => { if (e.key === 'Enter') $('loginBtn').click(); });
+  $('logoutBtn').addEventListener('click', () => {
+    if (busy) return;
+    store.clear(); token = '';
+    $('sendPane').hidden = true; $('readPane').hidden = true; $('tabs').hidden = true; $('who').hidden = true;
+    $('loginPane').hidden = false;
+  });
+
+  // ---------- tabs ----------
+  function tab(name) {
+    const send = name === 'send';
+    $('sendPane').hidden = !send; $('readPane').hidden = send;
+    $('tabOut').setAttribute('aria-selected', String(send));
+    $('tabIn').setAttribute('aria-selected', String(!send));
+    if (!send) loadList();
+  }
+  $('tabOut').addEventListener('click', () => tab('send'));
+  $('tabIn').addEventListener('click', () => tab('read'));
+
+  // ---------- table helpers ----------
+  const clean = t => t.replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+  function split(text, d) {
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += c;
+      } else if (c === '"' && cell === '') q = true;
+      else if (c === d) { row.push(cell); cell = ''; }
+      else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+      else cell += c;
+    }
+    row.push(cell); rows.push(row);
+    return q ? text.split('\n').map(l => l.split(d)) : rows;   // a stray quote: read it literally
+  }
+  function parse(text) {
+    const first = text.split('\n', 1)[0];
+    const d = text.includes('\t') || !first.includes(',') ? '\t' : ',';
+    const rows = split(text, d);
+    return { rows, delim: d, cols: rows.reduce((m, r) => Math.max(m, r.length), 0) };
+  }
+  // Reply file: optional "#TITLE:" and "#NOTE:" lines (note newlines written as \n), then the table.
+  function readFile(text) {
+    let body = clean(text), title = '', note = '', m;
+    while ((m = /^#(TITLE|NOTE): ?(.*)(\n|$)/.exec(body))) {
+      if (m[1] === 'TITLE') title = m[2]; else note = m[2].replace(/\\n/g, '\n');
+      body = body.slice(m[0].length);
+    }
+    return { title, note, body };
+  }
+  const colName = i => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = (i - m - 1) / 26; } return s; };
+  const isNum = v => /^-?[\d,]*\.?\d+%?$/.test(v);
+  function drawGrid(host, t) {
+    const shown = Math.min(t.rows.length, MAX_ROWS, Math.max(1, Math.floor(MAX_CELLS / Math.max(1, t.cols))));
+    const table = document.createElement('table');
+    const head = table.createTHead().insertRow();
+    head.appendChild(document.createElement('th'));
+    for (let c = 0; c < t.cols; c++) { const th = document.createElement('th'); th.textContent = colName(c); head.appendChild(th); }
+    const body = table.createTBody();
+    for (let r = 0; r < shown; r++) {
+      const tr = body.insertRow();
+      const th = document.createElement('th'); th.textContent = r + 1; tr.appendChild(th);
+      for (let c = 0; c < t.cols; c++) {
+        const v = t.rows[r][c] ?? '', td = tr.insertCell();
+        td.textContent = v; if (isNum(v)) td.className = 'num';
+      }
+    }
+    host.replaceChildren(table); host.scrollTop = 0; host.scrollLeft = 0; host.hidden = false;
+    return shown;
+  }
+  const mb = n => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + 'MB';
+
+  // ---------- choosing what to send ----------
+  function ready() {
+    $('sendBtn').disabled = busy || !(draft || files.length);
+    $('clearBtn').hidden = !(draft || files.length);
+    $('saved').hidden = true; $('sendErr').hidden = true;
+  }
+  function takePaste(text) {
+    const raw = clean(text);
+    if (!raw || busy) return;
+    files = []; draft = { raw, ...parse(raw) };
+    const shown = drawGrid($('draftGrid'), draft);
+    $('drop').hidden = true;
+    $('draftInfo').textContent = `${draft.rows.length.toLocaleString()}행 × ${draft.cols}열` +
+      (shown < draft.rows.length ? ` · 미리보기는 ${shown}행까지, 올릴 때는 전체가 올라갑니다` : '');
+    ready(); $('title').focus();
+  }
+  function takeFiles(list) {
+    if (busy || !list.length) return;
+    draft = null; files = [...list];
+    $('draftGrid').hidden = true; $('draftGrid').replaceChildren(); $('drop').hidden = false;
+    const total = files.reduce((s, f) => s + f.size, 0);
+    $('draftInfo').textContent = `파일 ${files.length}개 · ${mb(total)} · ` + files.map(f => f.name).join(', ');
+    ready();
+  }
+  function clearDraft() {
+    if (busy) return;
+    draft = null; files = [];
+    $('draftGrid').hidden = true; $('draftGrid').replaceChildren();
+    $('drop').hidden = false; $('drop').value = '';
+    $('draftInfo').textContent = '표를 붙여넣거나 파일을 고르면 올릴 수 있습니다.';
+    ready();
+  }
+
+  // ---------- upload ----------
+  // A file is read, gzipped and sent piece by piece, so a 300MB file never sits in memory whole.
+  // manifest.json goes last: a folder without one is an upload that did not finish.
+  async function sendOne(file, index, stamp, onProgress) {
+    let read = 0;
+    const counted = file.stream().pipeThrough(new TransformStream({
+      transform(c, ctl) { read += c.byteLength; ctl.enqueue(c); },
+    }));
+    const reader = counted.pipeThrough(new CompressionStream('gzip')).getReader();
+    const parts = []; let buf = new Uint8Array(PART), used = 0, stored = 0;
+    const flush = async () => {
+      if (!used) return;
+      const name = `f${index + 1}-${String(parts.length + 1).padStart(4, '0')}.gz`;
+      await put(`inbox/${stamp}/${name}`, toBase64(buf.subarray(0, used)), `upload ${stamp} ${name}`);
+      parts.push(name); stored += used; used = 0;
+      onProgress(read, parts.length);
+    };
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      let at = 0;
+      while (at < value.length) {
+        const n = Math.min(PART - used, value.length - at);
+        buf.set(value.subarray(at, at + n), used);
+        used += n; at += n;
+        if (used === PART) await flush();
+      }
+      onProgress(read, parts.length);
+    }
+    await flush();
+    return { name: file.name, size: file.size, gzipBytes: stored, parts };
+  }
+  async function send() {
+    if (busy || !(draft || files.length)) return;
+    if (!('CompressionStream' in window)) { $('sendErr').textContent = '이 브라우저는 너무 오래돼서 올리기를 지원하지 않습니다. 최신 Chrome이나 Edge를 써주세요.'; $('sendErr').hidden = false; return; }
+    const p2 = n => String(n).padStart(2, '0'), d = new Date();
+    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+    const list = draft ? [new File([draft.raw], 'paste.tsv', { type: 'text/tab-separated-values' })] : files;
+    const total = list.reduce((s, f) => s + f.size, 0) || 1;
+    busy = true; $('sendBtn').disabled = true; $('upPick').disabled = true; $('clearBtn').disabled = true;
+    $('saved').hidden = true; $('sendErr').hidden = true; $('prog').hidden = false; $('prog').value = 0;
+    try {
+      const out = []; let before = 0;
+      for (let i = 0; i < list.length; i++) {
+        out.push(await sendOne(list[i], i, stamp, (read, n) => {
+          $('prog').value = (before + read) / total;
+          $('draftInfo').textContent = `${list[i].name} 올리는 중 · ${mb(before + read)} / ${mb(total)} · 이 창을 닫지 마세요`;
+        }));
+        before += list[i].size;
+      }
+      const manifest = { title: $('title').value.trim(), note: $('note').value.trim(), createdAt: d.toISOString(), files: out };
+      const json = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
+      await put(`inbox/${stamp}/manifest.json`, toBase64(json), `upload ${stamp} done`);
+      const kept = out.reduce((s, f) => s + f.gzipBytes, 0);
+      busy = false; $('clearBtn').disabled = false; clearDraft();
+      $('title').value = ''; $('note').value = '';
+      $('saved').textContent = `올렸습니다. ${mb(total)}를 ${mb(kept)}로 압축했습니다. 번호 ${stamp}를 Claude에게 알려주시면 바로 읽습니다.`;
+      $('saved').hidden = false;
+    } catch (e) {
+      busy = false; $('clearBtn').disabled = false; $('sendBtn').disabled = false;
+      $('sendErr').textContent = '올리지 못했습니다. ' + explain(e) + ' 다시 올리면 처음부터 새로 올라갑니다.';
+      $('sendErr').hidden = false;
+    }
+    $('upPick').disabled = false; $('prog').hidden = true;
+  }
+  document.addEventListener('paste', e => {
+    if (!token) return;
+    const t = e.target;
+    if (t.tagName === 'INPUT' || (t.tagName === 'TEXTAREA' && t.id !== 'drop')) return;
+    const text = e.clipboardData && e.clipboardData.getData('text/plain');
+    if (text) { e.preventDefault(); tab('send'); takePaste(text); }
+  });
+  $('drop').addEventListener('input', () => { const v = $('drop').value; if (v) { $('drop').value = ''; takePaste(v); } });
+  $('clearBtn').addEventListener('click', clearDraft);
+  $('sendBtn').addEventListener('click', send);
+  $('upPick').addEventListener('click', () => $('upIn').click());
+  $('upIn').addEventListener('change', e => { takeFiles(e.target.files); e.target.value = ''; });
+  window.addEventListener('beforeunload', e => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
+  window.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
+  window.addEventListener('drop', e => {
+    e.preventDefault(); document.body.classList.remove('dragging');
+    if (token && e.dataTransfer && e.dataTransfer.files.length) { tab('send'); takeFiles(e.dataTransfer.files); }
+  });
+
+  // ---------- replies ----------
+  async function loadList() {
+    $('listInfo').textContent = '불러오는 중입니다.'; $('rErr').hidden = true;
+    try {
+      const items = await (await api('/contents/outbox')).json();
+      const names = items.filter(i => i.type === 'file' && i.name.endsWith('.txt')).map(i => i.name).sort().reverse();
+      $('list').replaceChildren(...names.map(name => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'btn item'; b.textContent = name;
+        b.addEventListener('click', () => openReply(name, b));
+        return b;
+      }));
+      $('listInfo').textContent = names.length ? `답장 ${names.length}개` : '아직 답장이 없습니다.';
+    } catch (e) {
+      $('list').replaceChildren();
+      if (e.status === 404) { $('listInfo').textContent = '아직 답장이 없습니다.'; return; }
+      $('listInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false;
+    }
+  }
+  async function openReply(name, button) {
+    $('rErr').hidden = true; $('rInfo').textContent = '여는 중입니다.';
+    for (const b of $('list').children) b.removeAttribute('aria-current');
+    button.setAttribute('aria-current', 'true');
+    try {
+      const res = await api('/contents/outbox/' + encodeURIComponent(name), { accept: 'application/vnd.github.raw+json' });
+      const f = readFile(await res.text());
+      $('rHead').hidden = false; $('rTitle').textContent = f.title || name;
+      $('rNote').textContent = f.note; $('rNote').hidden = !f.note;
+      $('rGrid').hidden = true; $('copyBtn').hidden = true; $('rInfo').textContent = '';
+      if (!f.body) return;
+      reply = parse(f.body); reply.raw = f.body;
+      const shown = drawGrid($('rGrid'), reply);
+      $('rInfo').textContent = `${reply.rows.length.toLocaleString()}행 × ${reply.cols}열` +
+        (shown < reply.rows.length ? ` · 화면은 ${shown}행까지, 복사하면 전체가 복사됩니다` : '');
+      $('copyBtn').hidden = false; $('copyBtn').textContent = '표 복사 (엑셀에 붙여넣기용)';
+    } catch (e) { $('rInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false; }
+  }
+  function copyTable() {
+    const text = reply.delim === '\t' ? reply.raw : reply.rows.map(r => r.join('\t')).join('\n');
+    const done = () => { $('copyBtn').textContent = '복사했습니다'; };
+    const fallback = () => {
+      const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+      try { if (document.execCommand('copy')) done(); } catch (e) {}
+      ta.remove();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  }
+  $('copyBtn').addEventListener('click', copyTable);
+  $('refreshBtn').addEventListener('click', loadList);
+
+  const saved = store.get();
+  if (saved) connect(saved, false, true);
+})();
+</script>
