@@ -119,6 +119,24 @@ td.num { text-align: right; font-family: var(--mono); }
   .login { min-height: 0; }
   .fields { grid-template-columns: minmax(0, 1fr); }
 }
+/* 인쇄: the open reply view only, light colors, cards kept whole */
+@media print {
+  :root {
+    --bg: #ffffff; --panel: #ffffff; --sheet: #ffffff; --head: #eef1ef;
+    --line: #c9d1cd; --fg: #111111; --muted: #4f5b55; --out: #3a4fb0; color-scheme: light;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --grid: #e6ebe8;
+  }
+  @page { size: A4; margin: 10mm; }
+  html, body, .app { height: auto; }
+  body { padding: 0; background: #fff; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .top, #readPane > .bar, #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles { display: none !important; }
+  .pane { border: 0; padding: 0; gap: 8px; }
+  .view { overflow: visible; flex: none; }
+  .grid { overflow: visible; max-height: none; }
+  .charts { grid-template-columns: 1fr 1fr; }
+  .kpis { grid-template-columns: repeat(3, 1fr); }
+  .kpi, .card, .items article, .summary { break-inside: avoid; }
+}
 </style>
 
 <div class="app">
@@ -173,7 +191,7 @@ td.num { text-align: right; font-family: var(--mono); }
       <button class="btn" id="refreshBtn" type="button">새로고침</button>
     </div>
     <div class="list" id="list"></div>
-    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button></div>
+    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button></div>
     <div class="sub" role="tablist" id="rTabs" hidden>
       <button type="button" role="tab" data-v="vDash">대시보드</button>
       <button type="button" role="tab" data-v="vNote">분석</button>
@@ -562,7 +580,8 @@ td.num { text-align: right; font-family: var(--mono); }
   $('copyBtn').addEventListener('click', () => reply && copyText(reply, $('copyBtn')));
 
   // ---------- uploaded data, shown exactly as it was sent ----------
-  const SRC_CHARS = 3000000;   // read at most this much text for the screen; big uploads show their start  async function loadSource() {
+  const SRC_CHARS = 3000000;   // read at most this much text for the screen; big uploads show their start
+  async function loadSource() {
     const st = srcState; st.loaded = true;
     if (!st.stamp) { $('sInfo').textContent = '이 답장과 연결된 올린 데이터가 없습니다.'; return; }
     $('sInfo').textContent = '올린 데이터를 불러오는 중입니다.';
@@ -754,6 +773,7 @@ td.num { text-align: right; font-family: var(--mono); }
     btn.disabled = false;
   }
   $('xlsxBtn').addEventListener('click', downloadXlsx);
+  $('printBtn').addEventListener('click', () => window.print());
 
   // ---------- dashboard ----------
   const SVGNS = 'http://www.w3.org/2000/svg';
