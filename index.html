@@ -129,7 +129,7 @@ td.num { text-align: right; font-family: var(--mono); }
   @page { size: A4; margin: 10mm; }
   html, body, .app { height: auto; }
   body { padding: 0; background: #fff; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .top, #readPane > .bar, #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles { display: none !important; }
+  .top, #readPane > .bar:not(#rHead), #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles { display: none !important; }
   .pane { border: 0; padding: 0; gap: 8px; }
   .view { overflow: visible; flex: none; }
   .grid { overflow: visible; max-height: none; }
