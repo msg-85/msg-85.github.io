@@ -12,6 +12,7 @@
   --bg: #eef2f0; --panel: #fbfcfb; --sheet: #ffffff; --head: #e3e9e6;
   --line: #d2dad6; --fg: #17211d; --muted: #5b6a63;
   --in: #0f6b4f; --out: #3a4fb0; --warn: #a3341f; --on-accent: #ffffff;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --grid: #e6ebe8;
   --sans: "Malgun Gothic", "Segoe UI", sans-serif;
   --mono: Consolas, "Malgun Gothic", monospace;
 }
@@ -19,6 +20,7 @@
   --bg: #121715; --panel: #181f1c; --sheet: #1c2421; --head: #252e2a;
   --line: #333f3a; --fg: #e6ece9; --muted: #98a7a0;
   --in: #4fc29b; --out: #9aa9f2; --warn: #f09a86; --on-accent: #10231c; color-scheme: dark;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --grid: #2a3430;
 } }
 [hidden] { display: none !important; }
 *, *::before, *::after { box-sizing: border-box; }
@@ -28,7 +30,7 @@ button, input, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--in); outline-offset: 1px; }
 a { color: var(--out); }
 
-.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .top h1 { font-size: 18px; font-weight: 700; margin: 0; }
 .tabs { display: flex; gap: 4px; }
@@ -73,6 +75,42 @@ thead th { position: sticky; top: 0; background: var(--head); font: 500 12px var
 tbody th { position: sticky; left: 0; background: var(--head); font: 500 12px var(--mono); color: var(--muted); z-index: 1; text-align: right; }
 thead th:first-child { left: 0; z-index: 3; }
 td.num { text-align: right; font-family: var(--mono); }
+
+/* reply views */
+.sub { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.sub button { border: 0; border-bottom: 3px solid transparent; background: none; padding: 6px 14px; cursor: pointer; font-weight: 600; color: var(--muted); }
+.sub button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--out); }
+.view { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.view > .grid { min-height: 240px; }
+.empty { color: var(--muted); margin: 0; padding: 16px 0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.kpi { background: var(--sheet); border: 1px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.kpi .k { font-size: 13px; color: var(--muted); }
+.kpi .v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.kpi .d { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 10px; }
+.card { position: relative; background: var(--sheet); border: 1px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.card h3 { font-size: 15px; margin: 0; }
+.card .cn { font-size: 13px; color: var(--muted); margin: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend i.box { height: 10px; }
+.card svg { width: 100%; height: auto; display: block; touch-action: pan-y; }
+.card svg text { fill: var(--muted); font: 11px var(--sans); }
+.card svg .val { fill: var(--fg); }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 2px 8px rgba(0,0,0,.15); padding: 6px 9px; font-size: 13px; white-space: nowrap; z-index: 5; font-variant-numeric: tabular-nums; }
+.tip b { display: block; margin-bottom: 2px; }
+.tip div { display: flex; align-items: center; gap: 6px; }
+.tip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.tip em { font-style: normal; margin-left: auto; padding-left: 12px; font-weight: 600; }
+.summary { background: var(--sheet); border: 1px solid var(--line); border-left: 4px solid var(--out); padding: 10px 12px; margin: 0; white-space: pre-wrap; }
+.items { display: grid; gap: 8px; }
+.items article { background: var(--sheet); border: 1px solid var(--line); padding: 10px 12px; }
+.items h3 { font-size: 15px; margin: 0 0 4px; display: flex; gap: 8px; align-items: baseline; }
+.items h3 small { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); padding: 0 6px; }
+.items p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.files { display: flex; flex-wrap: wrap; gap: 4px; }
 
 @media (max-width: 700px) {
   html, body { height: auto; }
@@ -136,11 +174,29 @@ td.num { text-align: right; font-family: var(--mono); }
     </div>
     <div class="list" id="list"></div>
     <div class="dh" id="rHead" hidden><h2 id="rTitle"></h2></div>
-    <div class="note" id="rNote" hidden></div>
-    <div class="grid" id="rGrid" hidden></div>
-    <div class="bar">
-      <span class="grow" id="rInfo"></span>
-      <button class="btn primary" id="copyBtn" type="button" hidden>표 복사 (엑셀에 붙여넣기용)</button>
+    <div class="sub" role="tablist" id="rTabs" hidden>
+      <button type="button" role="tab" data-v="vDash">대시보드</button>
+      <button type="button" role="tab" data-v="vNote">분석</button>
+      <button type="button" role="tab" data-v="vTable">결과표</button>
+      <button type="button" role="tab" data-v="vSrc">올린 데이터</button>
+    </div>
+    <div class="view" id="vDash" hidden></div>
+    <div class="view" id="vNote" hidden></div>
+    <div class="view" id="vTable" hidden>
+      <div class="grid" id="rGrid" hidden></div>
+      <div class="bar">
+        <span class="grow" id="rInfo"></span>
+        <button class="btn primary" id="copyBtn" type="button" hidden>표 복사 (엑셀에 붙여넣기용)</button>
+      </div>
+    </div>
+    <div class="view" id="vSrc" hidden>
+      <p class="cn" id="sNote" hidden></p>
+      <div class="files" id="sFiles"></div>
+      <div class="grid" id="sGrid" hidden></div>
+      <div class="bar">
+        <span class="grow" id="sInfo"></span>
+        <button class="btn primary" id="sCopy" type="button" hidden>표 복사 (엑셀에 붙여넣기용)</button>
+      </div>
     </div>
     <p class="err" id="rErr" hidden></p>
   </section>
@@ -428,27 +484,81 @@ td.num { text-align: right; font-family: var(--mono); }
       $('listInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false;
     }
   }
+  // A reply is <name>.txt (title, note, result table) plus an optional <name>.json beside it:
+  // { source, summary, kpis:[{label,value,delta}], charts:[{type:'line'|'bar',title,note,unit,x|categories,series:[{name,values}]}],
+  //   items:[{title,tag,body}] }. Without the JSON, the note is split into items and there is no dashboard.
+  let openToken = 0, srcState = null;
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   async function openReply(name, button) {
-    $('rErr').hidden = true; $('rInfo').textContent = '여는 중입니다.';
+    const my = ++openToken;
+    $('rErr').hidden = true; $('listInfo').textContent = '여는 중입니다.';
     for (const b of $('list').children) b.removeAttribute('aria-current');
     button.setAttribute('aria-current', 'true');
     try {
       const res = await api('/contents/outbox/' + encodeURIComponent(name), { accept: 'application/vnd.github.raw+json' });
       const f = readFile(await res.text());
+      let extra = null;
+      try {
+        const j = await api('/contents/outbox/' + encodeURIComponent(name.replace(/\.txt$/, '.json')), { accept: 'application/vnd.github.raw+json' });
+        extra = JSON.parse(await j.text());
+      } catch (e) { if (e.status !== 404 && !(e instanceof SyntaxError)) throw e; }
+      if (my !== openToken) return;
+      $('listInfo').textContent = '';
       $('rHead').hidden = false; $('rTitle').textContent = f.title || name;
-      $('rNote').textContent = f.note; $('rNote').hidden = !f.note;
-      $('rGrid').hidden = true; $('copyBtn').hidden = true; $('rInfo').textContent = '';
-      if (!f.body) return;
-      reply = parse(f.body); reply.raw = f.body;
-      const shown = drawGrid($('rGrid'), reply);
-      $('rInfo').textContent = `${reply.rows.length.toLocaleString()}행 × ${reply.cols}열` +
-        (shown < reply.rows.length ? ` · 화면은 ${shown}행까지, 복사하면 전체가 복사됩니다` : '');
-      $('copyBtn').hidden = false; $('copyBtn').textContent = '표 복사 (엑셀에 붙여넣기용)';
-    } catch (e) { $('rInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false; }
+      $('rTabs').hidden = false;
+      drawDash(extra); drawNote(f.note, extra); drawTable(f.body);
+      const m = /^(\d{8}-\d{6})/.exec(name);
+      srcState = { stamp: (extra && extra.source) || (m && m[1]) || '', loaded: false };
+      $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
+      view(extra && extra.kpis ? 'vDash' : 'vNote');
+    } catch (e) { $('listInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false; }
   }
-  function copyTable() {
-    const text = reply.delim === '\t' ? reply.raw : reply.rows.map(r => r.join('\t')).join('\n');
-    const done = () => { $('copyBtn').textContent = '복사했습니다'; };
+  function view(id) {
+    for (const b of $('rTabs').children) b.setAttribute('aria-selected', String(b.dataset.v === id));
+    for (const v of ['vDash', 'vNote', 'vTable', 'vSrc']) $(v).hidden = v !== id;
+    if (id === 'vSrc' && srcState && !srcState.loaded) loadSource();
+  }
+  for (const b of $('rTabs').children) b.addEventListener('click', () => view(b.dataset.v));
+
+  // ---------- analysis ----------
+  function drawNote(note, extra) {
+    const host = $('vNote'); host.replaceChildren();
+    let summary = extra && extra.summary, items = extra && extra.items;
+    if (!items) {   // plain reply: first paragraph is the summary, every other paragraph or numbered line is an item
+      const paras = (note || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+      summary = summary || paras.shift() || '';
+      items = [];
+      for (const p of paras) for (const part of p.split(/\n(?=\d+\.\s)/)) {
+        const lines = part.split('\n'), m = /^(\d+)\.\s*(.*)$/.exec(lines[0]);
+        if (m) items.push({ tag: m[1], title: m[2].split(/[.:]\s/)[0], body: part.replace(/^\d+\.\s*/, '') });
+        else items.push({ title: lines.length > 1 ? lines[0] : '', body: lines.length > 1 ? lines.slice(1).join('\n') : part });
+      }
+    }
+    if (summary) host.appendChild(el('p', 'summary', summary));
+    const list = el('div', 'items');
+    for (const it of items || []) {
+      const a = el('article');
+      if (it.title || it.tag) { const h = el('h3'); if (it.tag) h.appendChild(el('small', '', it.tag)); h.appendChild(document.createTextNode(it.title || '')); a.appendChild(h); }
+      a.appendChild(el('p', '', it.body || ''));
+      list.appendChild(a);
+    }
+    host.appendChild(list);
+    if (!summary && !(items || []).length) host.appendChild(el('p', 'empty', '이 답장에는 설명이 없습니다.'));
+  }
+
+  // ---------- result table ----------
+  function drawTable(body) {
+    $('rGrid').hidden = true; $('copyBtn').hidden = true; reply = null;
+    if (!body) { $('rInfo').textContent = '이 답장에는 표가 없습니다.'; return; }
+    reply = parse(body); reply.raw = body;
+    const shown = drawGrid($('rGrid'), reply);
+    $('rInfo').textContent = `${reply.rows.length.toLocaleString()}행 × ${reply.cols}열` +
+      (shown < reply.rows.length ? ` · 화면은 ${shown}행까지, 복사하면 전체가 복사됩니다` : '');
+    $('copyBtn').hidden = false; $('copyBtn').textContent = '표 복사 (엑셀에 붙여넣기용)';
+  }
+  function copyText(t, btn) {
+    const text = t.delim === '\t' ? t.raw : t.rows.map(r => r.join('\t')).join('\n');
+    const done = () => { btn.textContent = '복사했습니다'; };
     const fallback = () => {
       const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
       try { if (document.execCommand('copy')) done(); } catch (e) {}
@@ -457,7 +567,171 @@ td.num { text-align: right; font-family: var(--mono); }
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
     else fallback();
   }
-  $('copyBtn').addEventListener('click', copyTable);
+  $('copyBtn').addEventListener('click', () => reply && copyText(reply, $('copyBtn')));
+
+  // ---------- uploaded data, shown exactly as it was sent ----------
+  const SRC_CHARS = 3000000;   // read at most this much text for the screen; big uploads show their start
+  async function loadSource() {
+    const st = srcState; st.loaded = true;
+    if (!st.stamp) { $('sInfo').textContent = '이 답장과 연결된 올린 데이터가 없습니다.'; return; }
+    $('sInfo').textContent = '올린 데이터를 불러오는 중입니다.';
+    try {
+      const man = JSON.parse(await (await api(`/contents/inbox/${st.stamp}/manifest.json`, { accept: 'application/vnd.github.raw+json' })).text());
+      if (st !== srcState) return;
+      const bits = [man.title && '제목: ' + man.title, man.note && '요청: ' + man.note, '번호 ' + st.stamp].filter(Boolean);
+      $('sNote').textContent = bits.join(' · '); $('sNote').hidden = false;
+      const fl = man.files || [];
+      $('sFiles').replaceChildren(...(fl.length > 1 ? fl.map((f, i) => {
+        const b = el('button', 'btn small item', f.name); b.type = 'button';
+        b.addEventListener('click', () => showSource(st, man, i)); return b;
+      }) : []));
+      if (fl.length) await showSource(st, man, 0); else $('sInfo').textContent = '파일이 없습니다.';
+    } catch (e) {
+      if (st !== srcState) return;
+      $('sInfo').textContent = e.status === 404 ? `올린 데이터(번호 ${st.stamp})를 찾지 못했습니다.` : '';
+      if (e.status !== 404) { $('rErr').textContent = explain(e); $('rErr').hidden = false; }
+    }
+  }
+  async function showSource(st, man, index) {
+    const f = man.files[index];
+    [...$('sFiles').children].forEach((b, i) => b.setAttribute('aria-current', String(i === index)));
+    $('sInfo').textContent = `${f.name} 불러오는 중입니다.`; $('sCopy').hidden = true;
+    let i = 0;
+    const gz = new ReadableStream({ async pull(ctl) {
+      if (i >= f.parts.length) { ctl.close(); return; }
+      const r = await api(`/contents/inbox/${st.stamp}/${f.parts[i++]}`, { accept: 'application/vnd.github.raw+json' });
+      ctl.enqueue(new Uint8Array(await r.arrayBuffer()));
+    } });
+    const reader = gz.pipeThrough(new DecompressionStream('gzip')).pipeThrough(new TextDecoderStream()).getReader();
+    let text = '', cut = false;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      text += value;
+      if (text.length >= SRC_CHARS) { cut = true; reader.cancel().catch(() => {}); break; }
+    }
+    if (st !== srcState) return;
+    if (cut) text = text.slice(0, text.lastIndexOf('\n') > 0 ? text.lastIndexOf('\n') : text.length);
+    const body = clean(text), t = parse(body); t.raw = body; st.table = t;
+    const shown = drawGrid($('sGrid'), t);
+    $('sInfo').textContent = `${f.name} · ${mb(f.size)} · ` + (cut
+      ? `앞부분 ${t.rows.length.toLocaleString()}행만 불러왔습니다(화면 ${shown}행). 전체는 Claude가 읽습니다.`
+      : `${t.rows.length.toLocaleString()}행 × ${t.cols}열` + (shown < t.rows.length ? ` · 화면은 ${shown}행까지, 복사하면 전체가 복사됩니다` : ''));
+    $('sCopy').hidden = false; $('sCopy').textContent = cut ? '불러온 부분 복사' : '표 복사 (엑셀에 붙여넣기용)';
+  }
+  $('sCopy').addEventListener('click', () => srcState && srcState.table && copyText(srcState.table, $('sCopy')));
+
+  // ---------- dashboard ----------
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const sv = (tag, attrs, parent) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+  const COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'];
+  const fmt = (v, unit) => v == null ? '–' : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : (+v.toFixed(1)).toLocaleString()) + (unit || '');
+  function ticks(lo, hi, n) {
+    if (lo === hi) { lo -= 1; hi += 1; }
+    const raw = (hi - lo) / n, p = 10 ** Math.floor(Math.log10(raw)), s = [1, 2, 2.5, 5, 10].map(x => x * p).find(x => x >= raw);
+    const out = []; for (let v = Math.floor(lo / s) * s; v <= hi + s * 1e-9; v += s) out.push(+v.toFixed(6));
+    if (out[out.length - 1] < hi) out.push(out[out.length - 1] + s);
+    return out;
+  }
+  function drawDash(extra) {
+    const host = $('vDash'); host.replaceChildren();
+    if (!extra || !(extra.kpis || extra.charts)) { host.appendChild(el('p', 'empty', '이 답장에는 대시보드가 없습니다. 분석과 결과표 탭을 봐주세요.')); return; }
+    if (extra.kpis) {
+      const k = el('div', 'kpis');
+      for (const x of extra.kpis) { const c = el('div', 'kpi'); c.append(el('span', 'k', x.label), el('span', 'v', x.value)); if (x.delta) c.appendChild(el('span', 'd', x.delta)); k.appendChild(c); }
+      host.appendChild(k);
+    }
+    const g = el('div', 'charts');
+    for (const ch of extra.charts || []) { try { g.appendChild(chart(ch)); } catch (e) { g.appendChild(el('p', 'err', '그래프를 그리지 못했습니다: ' + (ch.title || ''))); } }
+    host.appendChild(g);
+  }
+  function chart(ch) {
+    const card = el('div', 'card'); card.appendChild(el('h3', '', ch.title || ''));
+    const series = ch.series || [];
+    if (series.length > 1) {
+      const lg = el('div', 'legend');
+      series.forEach((s, i) => { const sp = el('span'); const sw = el('i', ch.type === 'bar' ? 'box' : ''); sw.style.background = COLORS[i % COLORS.length]; sp.append(sw, s.name); lg.appendChild(sp); });
+      card.appendChild(lg);
+    }
+    const tip = el('div', 'tip'); tip.hidden = true;
+    const svg = (ch.type === 'bar' ? barChart : lineChart)(ch, series, tip, card);
+    card.append(svg, tip);
+    if (ch.note) card.appendChild(el('p', 'cn', ch.note));
+    return card;
+  }
+  function showTip(tip, card, title, rows, x, y) {
+    tip.replaceChildren(el('b', '', title));
+    for (const r of rows) { const d = el('div'); const sw = el('i'); sw.style.background = r.color; d.append(sw, r.name, el('em', '', r.value)); tip.appendChild(d); }
+    tip.hidden = false;
+    const cw = card.clientWidth, tw = tip.offsetWidth;
+    tip.style.left = Math.max(4, Math.min(cw - tw - 4, x + 12)) + 'px'; tip.style.top = (y + 12) + 'px';
+  }
+  function local(svg, card, e, W) {
+    const r = svg.getBoundingClientRect(), cr = card.getBoundingClientRect();
+    return { vx: (e.clientX - r.left) * W / r.width, cx: e.clientX - cr.left, cy: e.clientY - cr.top };
+  }
+  function lineChart(ch, series, tip, card) {
+    const W = 560, H = 240, L = 54, R = 14, T = 10, B = 26, x = ch.x || [];
+    const all = series.flatMap(s => s.values).filter(v => v != null);
+    let lo = Math.min(...all), hi = Math.max(...all);
+    if (ch.zero !== false && lo >= 0 && lo < hi * 0.5) lo = 0;
+    const tk = ticks(lo, hi, 4); lo = tk[0]; hi = tk[tk.length - 1];
+    const px = i => x.length < 2 ? (L + W - R) / 2 : L + i * (W - L - R) / (x.length - 1);
+    const py = v => T + (hi - v) * (H - T - B) / (hi - lo);
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': ch.title || '' });
+    for (const v of tk) { sv('line', { x1: L, x2: W - R, y1: py(v), y2: py(v), stroke: 'var(--grid)' }, svg); sv('text', { x: L - 6, y: py(v) + 4, 'text-anchor': 'end' }, svg).textContent = fmt(v); }
+    x.forEach((lab, i) => { sv('text', { x: px(i), y: H - 8, 'text-anchor': 'middle' }, svg).textContent = lab; });
+    const cross = sv('line', { y1: T, y2: H - B, stroke: 'var(--muted)', 'stroke-dasharray': '3 3', visibility: 'hidden' }, svg);
+    series.forEach((s, si) => {
+      const c = COLORS[si % COLORS.length]; let d = '';
+      s.values.forEach((v, i) => { if (v == null) return; d += (d && s.values[i - 1] != null ? 'L' : 'M') + px(i) + ' ' + py(v); });
+      sv('path', { d, fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+      s.values.forEach((v, i) => { if (v != null) sv('circle', { cx: px(i), cy: py(v), r: 4, fill: c, stroke: 'var(--sheet)', 'stroke-width': 2 }, svg); });
+    });
+    const hit = sv('rect', { x: L - 20, y: 0, width: W - L - R + 40, height: H, fill: 'transparent' }, svg);
+    const move = e => {
+      const p = local(svg, card, e, W);
+      let i = Math.round((p.vx - L) / ((W - L - R) / Math.max(1, x.length - 1))); i = Math.max(0, Math.min(x.length - 1, i));
+      cross.setAttribute('x1', px(i)); cross.setAttribute('x2', px(i)); cross.setAttribute('visibility', 'visible');
+      showTip(tip, card, x[i], series.map((s, si) => ({ name: s.name, color: COLORS[si % COLORS.length], value: fmt(s.values[i], ch.unit) })), p.cx, p.cy);
+    };
+    hit.addEventListener('pointermove', move); hit.addEventListener('pointerdown', move);
+    hit.addEventListener('pointerleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); });
+    return svg;
+  }
+  function barChart(ch, series, tip, card) {   // horizontal bars from zero; negatives go left
+    const cats = ch.categories || [], n = series.length, bh = n > 1 ? 9 : 14, gap = 2, row = n * bh + (n - 1) * gap + 10;
+    const W = 560, L = ch.labelWidth || 150, R = 46, T = 6, B = 22, H = T + B + cats.length * row;
+    const all = series.flatMap(s => s.values).filter(v => v != null).concat(0);
+    let mn = Math.min(...all), mx = Math.max(...all);
+    if (ch.labels) { const pad = (mx - mn) * 0.18; if (mn < 0) mn -= pad; if (mx > 0) mx += pad; }   // room for value labels
+    const tk = ticks(mn, mx, 4), lo = tk[0], hi = tk[tk.length - 1];
+    const px = v => L + (v - lo) * (W - L - R) / (hi - lo);
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': ch.title || '' });
+    for (const v of tk) { sv('line', { x1: px(v), x2: px(v), y1: T, y2: H - B, stroke: 'var(--grid)' }, svg); sv('text', { x: px(v), y: H - 6, 'text-anchor': 'middle' }, svg).textContent = fmt(v); }
+    sv('line', { x1: px(0), x2: px(0), y1: T, y2: H - B, stroke: 'var(--muted)' }, svg);
+    cats.forEach((c, ci) => {
+      const y0 = T + ci * row + 5;
+      sv('text', { x: L - 8, y: y0 + (row - 10) / 2 + 4, 'text-anchor': 'end' }, svg).textContent = c;
+      series.forEach((s, si) => {
+        const v = s.values[ci]; if (v == null) return;
+        const y = y0 + si * (bh + gap), a = px(Math.min(0, v)), b = px(Math.max(0, v)), w = Math.max(1, b - a), rr = Math.min(4, w / 2, bh / 2);
+        // round only the data end, keep the zero end square
+        const d = v >= 0
+          ? `M${a} ${y}H${a + w - rr}Q${a + w} ${y} ${a + w} ${y + rr}V${y + bh - rr}Q${a + w} ${y + bh} ${a + w - rr} ${y + bh}H${a}Z`
+          : `M${b} ${y}H${a + rr}Q${a} ${y} ${a} ${y + rr}V${y + bh - rr}Q${a} ${y + bh} ${a + rr} ${y + bh}H${b}Z`;
+        const color = COLORS[si % COLORS.length];
+        const bar = sv('path', { d, fill: color }, svg);
+        if (ch.labels) { const t = sv('text', { class: 'val', x: v >= 0 ? b + 4 : a - 4, y: y + bh / 2 + 4, 'text-anchor': v >= 0 ? 'start' : 'end' }, svg); t.textContent = (v > 0 ? '+' : '') + fmt(v, ch.unit); }
+        const hit = sv('rect', { x: L, y: y0 - 4, width: W - L, height: row - 2, fill: 'transparent' }, svg);
+        const show = e => { const p = local(svg, card, e, W); showTip(tip, card, c, series.map((s2, k) => ({ name: s2.name, color: COLORS[k % COLORS.length], value: fmt(s2.values[ci], ch.unit) })), p.cx, p.cy); };
+        if (si === 0) { hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show); hit.addEventListener('pointerleave', () => { tip.hidden = true; }); }
+        else hit.remove();
+        bar.style.pointerEvents = 'none';
+      });
+    });
+    return svg;
+  }
   $('refreshBtn').addEventListener('click', loadList);
 
   const saved = store.get();
