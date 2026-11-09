@@ -563,6 +563,8 @@ td.num { text-align: right; font-family: var(--mono); }
 
   // ---------- uploaded data, shown exactly as it was sent ----------
   const SRC_CHARS = 3000000;   // read at most this much text for the screen; big uploads show their start
+  const SRC_FULL_BYTES = 120e6;  // Excel gets the whole upload up to this size; bigger ones get the start (browser memory)
+  const XLSX_ROWS = 1048576;     // Excel's row limit per sheet
   async function loadSource() {
     const st = srcState; st.loaded = true;
     if (!st.stamp) { $('sInfo').textContent = '이 답장과 연결된 올린 데이터가 없습니다.'; return; }
@@ -584,27 +586,33 @@ td.num { text-align: right; font-family: var(--mono); }
       if (e.status !== 404) { $('rErr').textContent = explain(e); $('rErr').hidden = false; }
     }
   }
+  // Streams one uploaded file's gzip parts as text, stopping after `limit` characters (at a line end).
+  async function readSource(stamp, f, limit) {
+    let i = 0;
+    const gz = new ReadableStream({ async pull(ctl) {
+      if (i >= f.parts.length) { ctl.close(); return; }
+      const r = await api(`/contents/inbox/${stamp}/${f.parts[i++]}`, { accept: 'application/vnd.github.raw+json' });
+      ctl.enqueue(new Uint8Array(await r.arrayBuffer()));
+    } });
+    const reader = gz.pipeThrough(new DecompressionStream('gzip')).pipeThrough(new TextDecoderStream()).getReader();
+    const chunks = []; let len = 0, cut = false;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); len += value.length;
+      if (len >= limit) { cut = true; reader.cancel().catch(() => {}); break; }
+    }
+    let text = chunks.join('');
+    if (cut) text = text.slice(0, text.lastIndexOf('\n') > 0 ? text.lastIndexOf('\n') : text.length);
+    return { text, cut };
+  }
   async function showSource(st, man, index) {
     const f = man.files[index];
     [...$('sFiles').children].forEach((b, i) => b.setAttribute('aria-current', String(i === index)));
     $('sInfo').textContent = `${f.name} 불러오는 중입니다.`; $('sCopy').hidden = true;
-    let i = 0;
-    const gz = new ReadableStream({ async pull(ctl) {
-      if (i >= f.parts.length) { ctl.close(); return; }
-      const r = await api(`/contents/inbox/${st.stamp}/${f.parts[i++]}`, { accept: 'application/vnd.github.raw+json' });
-      ctl.enqueue(new Uint8Array(await r.arrayBuffer()));
-    } });
-    const reader = gz.pipeThrough(new DecompressionStream('gzip')).pipeThrough(new TextDecoderStream()).getReader();
-    let text = '', cut = false;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      text += value;
-      if (text.length >= SRC_CHARS) { cut = true; reader.cancel().catch(() => {}); break; }
-    }
+    const { text, cut } = await readSource(st.stamp, f, SRC_CHARS);
     if (st !== srcState) return;
-    if (cut) text = text.slice(0, text.lastIndexOf('\n') > 0 ? text.lastIndexOf('\n') : text.length);
-    const body = clean(text), t = parse(body); t.raw = body; st.table = t; st.cut = cut; st.fileName = f.name;
+    const body = clean(text), t = parse(body); t.raw = body; st.table = t; st.cut = cut; st.fileName = f.name; st.file = f;
     const shown = drawGrid($('sGrid'), t);
     $('sInfo').textContent = `${f.name} · ${mb(f.size)} · ` + (cut
       ? `앞부분 ${t.rows.length.toLocaleString()}행만 불러왔습니다(화면 ${shown}행). 전체는 Claude가 읽습니다.`
@@ -615,23 +623,27 @@ td.num { text-align: right; font-family: var(--mono); }
 
   // ---------- Excel download: one .xlsx built here (no outside library), one sheet per part of the reply ----------
   const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
-  const crc32 = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
-  async function deflate(bytes) {
+  const crc32 = (b, c = 0xffffffff) => { for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return c; };
+  async function deflate(blob) {
     if (!('CompressionStream' in window)) return null;
-    try { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()); }
+    try { return new Blob([await new Response(blob.stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()]); }
     catch (e) { return null; }
   }
-  async function zip(entries) {   // entries: [{name, data: string}]
+  async function zip(entries) {   // entries: [{name, data: string or array of strings}]
     const enc = new TextEncoder(), out = [], dir = []; let off = 0;
     const u16 = v => [v & 255, (v >>> 8) & 255], u32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
     for (const e of entries) {
-      const name = enc.encode(e.name), raw = enc.encode(e.data), crc = crc32(raw), z = await deflate(raw);
+      const parts = (Array.isArray(e.data) ? e.data : [e.data]).map(s => enc.encode(s));
+      let c = 0xffffffff, rawLen = 0;
+      for (const p of parts) { c = crc32(p, c); rawLen += p.length; }
+      const crc = (c ^ 0xffffffff) >>> 0, raw = new Blob(parts); parts.length = 0;
+      const z = await deflate(raw), name = enc.encode(e.name);
       const method = z ? 8 : 0, body = z || raw;
-      const common = [...u16(20), ...u16(0x0800), ...u16(method), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0)];
+      const common = [...u16(20), ...u16(0x0800), ...u16(method), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(body.size), ...u32(rawLen), ...u16(name.length), ...u16(0)];
       const head = new Uint8Array([...u32(0x04034b50), ...common]);
       out.push(head, name, body);
       dir.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...common, ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), name);
-      off += head.length + name.length + body.length;
+      off += head.length + name.length + body.size;
     }
     const dirLen = dir.reduce((s, b) => s + b.length, 0);
     const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(entries.length), ...u16(entries.length), ...u32(dirLen), ...u32(off), ...u16(0)]);
@@ -655,12 +667,18 @@ td.num { text-align: right; font-family: var(--mono); }
       let m = 6; for (let r = 0; r < Math.min(sh.rows.length, 2000); r++) { const v = String(sh.rows[r][c] ?? ''); let n = 0; for (const ch of v.split('\n')[0]) n += ch.charCodeAt(0) > 0x2e80 ? 2 : 1; m = Math.max(m, n); }
       w.push(sh.widths && sh.widths[c] || Math.min(60, m + 2));
     }
-    const body = sh.rows.map((r, ri) => `<row r="${ri + 1}">` + r.map((v, ci) => cellXml(colName(ci) + (ri + 1), v,
-      sh.header && ri === 0 ? 1 : (sh.wrap || []).includes(ci) ? 3 : 0)).join('') + '</row>').join('');
-    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    const out = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
       (sh.header ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : '') +
-      (cols ? '<cols>' + w.map((x, i) => `<col min="${i + 1}" max="${i + 1}" width="${x}" customWidth="1"/>`).join('') + '</cols>' : '') +
-      `<sheetData>${body}</sheetData></worksheet>`;
+      (cols ? '<cols>' + w.map((x, i) => `<col min="${i + 1}" max="${i + 1}" width="${x}" customWidth="1"/>`).join('') + '</cols>' : '') + '<sheetData>'];
+    const names = Array.from({ length: cols }, (_, i) => colName(i));
+    for (let s = 0; s < sh.rows.length; s += 5000) {   // pieces, so a big sheet is never one huge string
+      let piece = '';
+      for (let ri = s; ri < Math.min(s + 5000, sh.rows.length); ri++) piece += `<row r="${ri + 1}">` + sh.rows[ri].map((v, ci) => cellXml(names[ci] + (ri + 1), v,
+        sh.header && ri === 0 ? 1 : (sh.wrap || []).includes(ci) ? 3 : 0)).join('') + '</row>';
+      out.push(piece);
+    }
+    out.push('</sheetData></worksheet>');
+    return out;
   }
   async function buildXlsx(sheets) {
     const used = new Set();
@@ -725,7 +743,18 @@ td.num { text-align: right; font-family: var(--mono); }
         }
         sheets.push({ name: '그래프 데이터', rows, widths: [22, 14, 14, 14, 14, 14] });
       }
-      if (st && st.table) sheets.push({ name: st.cut ? '올린 데이터(앞부분)' : '올린 데이터', rows: st.table.rows });
+      if (st && st.table) {
+        let rows = st.table.rows, part = st.cut;
+        if (st.cut && st.file && st.file.size <= SRC_FULL_BYTES) {   // the screen read only the start: read the whole file for Excel
+          btn.textContent = '전체 올린 데이터 읽는 중…';
+          const { text } = await readSource(st.stamp, st.file, Infinity);
+          if (c !== cur) return;
+          rows = parse(clean(text)).rows; part = false;
+        }
+        if (rows.length > XLSX_ROWS) { rows = rows.slice(0, XLSX_ROWS); part = true; }
+        btn.textContent = '엑셀 만드는 중…';
+        sheets.push({ name: part ? '올린 데이터(앞부분)' : '올린 데이터', rows });
+      }
       const blob = await buildXlsx(sheets);
       const a2 = document.createElement('a'), url = URL.createObjectURL(blob);
       a2.href = url; a2.download = (c.title.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'reply') + '.xlsx';
