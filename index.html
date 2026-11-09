@@ -65,7 +65,7 @@ progress { width: 100%; height: 10px; accent-color: var(--in); }
 .list { display: flex; flex-direction: column; gap: 4px; max-height: 30%; overflow-y: auto; flex-shrink: 0; }
 .item { text-align: left; font: 13px var(--mono); }
 .item[aria-current="true"] { border-color: var(--out); }
-.dh h2 { font-size: 17px; margin: 0; overflow-wrap: anywhere; }
+.dh h2 { font-size: 17px; margin: 0; overflow-wrap: anywhere; flex: 1; min-width: 0; }
 .note { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--sheet); border: 1px solid var(--line); padding: 10px 12px; max-height: 38%; overflow-y: auto; flex-shrink: 0; }
 
 .grid { flex: 1; min-height: 120px; overflow: auto; border: 1px solid var(--line); background: var(--sheet); }
@@ -173,7 +173,7 @@ td.num { text-align: right; font-family: var(--mono); }
       <button class="btn" id="refreshBtn" type="button">새로고침</button>
     </div>
     <div class="list" id="list"></div>
-    <div class="dh" id="rHead" hidden><h2 id="rTitle"></h2></div>
+    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button></div>
     <div class="sub" role="tablist" id="rTabs" hidden>
       <button type="button" role="tab" data-v="vDash">대시보드</button>
       <button type="button" role="tab" data-v="vNote">분석</button>
@@ -487,7 +487,7 @@ td.num { text-align: right; font-family: var(--mono); }
   // A reply is <name>.txt (title, note, result table) plus an optional <name>.json beside it:
   // { source, summary, kpis:[{label,value,delta}], charts:[{type:'line'|'bar',title,note,unit,x|categories,series:[{name,values}]}],
   //   items:[{title,tag,body}] }. Without the JSON, the note is split into items and there is no dashboard.
-  let openToken = 0, srcState = null;
+  let openToken = 0, srcState = null, cur = null;
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   async function openReply(name, button) {
     const my = ++openToken;
@@ -507,6 +507,8 @@ td.num { text-align: right; font-family: var(--mono); }
       $('rHead').hidden = false; $('rTitle').textContent = f.title || name;
       $('rTabs').hidden = false;
       drawDash(extra); drawNote(f.note, extra); drawTable(f.body);
+      cur = { name, title: f.title || name.replace(/\.txt$/, ''), note: f.note, body: f.body, extra };
+      $('xlsxBtn').textContent = '엑셀로 내려받기'; $('xlsxBtn').disabled = false;
       const m = /^(\d{8}-\d{6})/.exec(name);
       srcState = { stamp: (extra && extra.source) || (m && m[1]) || '', loaded: false };
       $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
@@ -516,24 +518,14 @@ td.num { text-align: right; font-family: var(--mono); }
   function view(id) {
     for (const b of $('rTabs').children) b.setAttribute('aria-selected', String(b.dataset.v === id));
     for (const v of ['vDash', 'vNote', 'vTable', 'vSrc']) $(v).hidden = v !== id;
-    if (id === 'vSrc' && srcState && !srcState.loaded) loadSource();
+    if (id === 'vSrc' && srcState && !srcState.loaded) srcState.loading = loadSource();
   }
   for (const b of $('rTabs').children) b.addEventListener('click', () => view(b.dataset.v));
 
   // ---------- analysis ----------
   function drawNote(note, extra) {
     const host = $('vNote'); host.replaceChildren();
-    let summary = extra && extra.summary, items = extra && extra.items;
-    if (!items) {   // plain reply: first paragraph is the summary, every other paragraph or numbered line is an item
-      const paras = (note || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
-      summary = summary || paras.shift() || '';
-      items = [];
-      for (const p of paras) for (const part of p.split(/\n(?=\d+\.\s)/)) {
-        const lines = part.split('\n'), m = /^(\d+)\.\s*(.*)$/.exec(lines[0]);
-        if (m) items.push({ tag: m[1], title: m[2].split(/[.:]\s/)[0], body: part.replace(/^\d+\.\s*/, '') });
-        else items.push({ title: lines.length > 1 ? lines[0] : '', body: lines.length > 1 ? lines.slice(1).join('\n') : part });
-      }
-    }
+    const { summary, items } = noteItems(note, extra);
     if (summary) host.appendChild(el('p', 'summary', summary));
     const list = el('div', 'items');
     for (const it of items || []) {
@@ -612,7 +604,7 @@ td.num { text-align: right; font-family: var(--mono); }
     }
     if (st !== srcState) return;
     if (cut) text = text.slice(0, text.lastIndexOf('\n') > 0 ? text.lastIndexOf('\n') : text.length);
-    const body = clean(text), t = parse(body); t.raw = body; st.table = t;
+    const body = clean(text), t = parse(body); t.raw = body; st.table = t; st.cut = cut; st.fileName = f.name;
     const shown = drawGrid($('sGrid'), t);
     $('sInfo').textContent = `${f.name} · ${mb(f.size)} · ` + (cut
       ? `앞부분 ${t.rows.length.toLocaleString()}행만 불러왔습니다(화면 ${shown}행). 전체는 Claude가 읽습니다.`
@@ -620,6 +612,133 @@ td.num { text-align: right; font-family: var(--mono); }
     $('sCopy').hidden = false; $('sCopy').textContent = cut ? '불러온 부분 복사' : '표 복사 (엑셀에 붙여넣기용)';
   }
   $('sCopy').addEventListener('click', () => srcState && srcState.table && copyText(srcState.table, $('sCopy')));
+
+  // ---------- Excel download: one .xlsx built here (no outside library), one sheet per part of the reply ----------
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  async function deflate(bytes) {
+    if (!('CompressionStream' in window)) return null;
+    try { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()); }
+    catch (e) { return null; }
+  }
+  async function zip(entries) {   // entries: [{name, data: string}]
+    const enc = new TextEncoder(), out = [], dir = []; let off = 0;
+    const u16 = v => [v & 255, (v >>> 8) & 255], u32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+    for (const e of entries) {
+      const name = enc.encode(e.name), raw = enc.encode(e.data), crc = crc32(raw), z = await deflate(raw);
+      const method = z ? 8 : 0, body = z || raw;
+      const common = [...u16(20), ...u16(0x0800), ...u16(method), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0)];
+      const head = new Uint8Array([...u32(0x04034b50), ...common]);
+      out.push(head, name, body);
+      dir.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...common, ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), name);
+      off += head.length + name.length + body.length;
+    }
+    const dirLen = dir.reduce((s, b) => s + b.length, 0);
+    const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(entries.length), ...u16(entries.length), ...u32(dirLen), ...u32(off), ...u16(0)]);
+    return new Blob([...out, ...dir, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+  const xesc = s => String(s).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // styles: 0 plain, 1 bold header, 2 percent, 3 wrapped text, 4 thousands
+  function cellXml(ref, v, style) {
+    if (v == null || v === '') return '';
+    if (typeof v === 'number') return `<c r="${ref}"${style ? ` s="${style}"` : ''}><v>${v}</v></c>`;
+    const s = String(v).trim();
+    if (!style && /^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?%$/.test(s)) return `<c r="${ref}" s="2"><v>${+(parseFloat(s.replace(/,/g, '')) / 100).toPrecision(12)}</v></c>`;
+    if (!style && /^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/.test(s) && !/^-?0\d/.test(s) && s.replace(/[-,.]/g, '').length <= 15)
+      return `<c r="${ref}"${s.includes(',') ? ' s="4"' : ''}><v>${+s.replace(/,/g, '')}</v></c>`;
+    return `<c r="${ref}" t="inlineStr"${style ? ` s="${style}"` : ''}><is><t xml:space="preserve">${xesc(v)}</t></is></c>`;
+  }
+  // sheet: {name, rows: [[...]], header: bool (bold first row), wrap: [column indexes], widths?: [..]}
+  function sheetXml(sh) {
+    const cols = sh.rows.reduce((m, r) => Math.max(m, r.length), 0), w = [];
+    for (let c = 0; c < cols; c++) {
+      let m = 6; for (let r = 0; r < Math.min(sh.rows.length, 2000); r++) { const v = String(sh.rows[r][c] ?? ''); let n = 0; for (const ch of v.split('\n')[0]) n += ch.charCodeAt(0) > 0x2e80 ? 2 : 1; m = Math.max(m, n); }
+      w.push(sh.widths && sh.widths[c] || Math.min(60, m + 2));
+    }
+    const body = sh.rows.map((r, ri) => `<row r="${ri + 1}">` + r.map((v, ci) => cellXml(colName(ci) + (ri + 1), v,
+      sh.header && ri === 0 ? 1 : (sh.wrap || []).includes(ci) ? 3 : 0)).join('') + '</row>').join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      (sh.header ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : '') +
+      (cols ? '<cols>' + w.map((x, i) => `<col min="${i + 1}" max="${i + 1}" width="${x}" customWidth="1"/>`).join('') + '</cols>' : '') +
+      `<sheetData>${body}</sheetData></worksheet>`;
+  }
+  async function buildXlsx(sheets) {
+    const used = new Set();
+    const names = sheets.map(s => { let n = s.name.replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31), k = 2; while (used.has(n)) n = s.name.slice(0, 28) + ' ' + k++; used.add(n); return n; });
+    const ns = 'http://schemas.openxmlformats.org/', hdr = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    return zip([
+      { name: '[Content_Types].xml', data: hdr + `<Types xmlns="${ns}package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+        sheets.map((s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') + '</Types>' },
+      { name: '_rels/.rels', data: hdr + `<Relationships xmlns="${ns}package/2006/relationships"><Relationship Id="rId1" Type="${ns}officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+      { name: 'xl/workbook.xml', data: hdr + `<workbook xmlns="${ns}spreadsheetml/2006/main" xmlns:r="${ns}officeDocument/2006/relationships"><sheets>` +
+        names.map((n, i) => `<sheet name="${xesc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') + '</sheets></workbook>' },
+      { name: 'xl/_rels/workbook.xml.rels', data: hdr + `<Relationships xmlns="${ns}package/2006/relationships">` +
+        sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="${ns}officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') +
+        `<Relationship Id="rId${sheets.length + 1}" Type="${ns}officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+      { name: 'xl/styles.xml', data: hdr + `<styleSheet xmlns="${ns}spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="0.0%"/></numFmts>` +
+        '<fonts count="2"><font><sz val="10"/><name val="맑은 고딕"/><family val="3"/></font><font><b/><sz val="10"/><name val="맑은 고딕"/><family val="3"/></font></fonts>' +
+        '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE3E9E6"/></patternFill></fill></fills>' +
+        '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+        '<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
+        '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>' +
+        '<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs></styleSheet>' },
+      ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: sheetXml(s) })),
+    ]);
+  }
+  // Analysis items: from the JSON, or for a plain reply the first paragraph is the summary
+  // and every other paragraph or numbered line is an item. Used by the 분석 tab and the Excel file.
+  function noteItems(note, extra) {
+    if (extra && extra.items) return { summary: extra.summary || '', items: extra.items };
+    const paras = (note || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+    const summary = (extra && extra.summary) || paras.shift() || '', items = [];
+    for (const p of paras) for (const part of p.split(/\n(?=\d+\.\s)/)) {
+      const lines = part.split('\n'), m = /^(\d+)\.\s*(.*)$/.exec(lines[0]);
+      if (m) items.push({ tag: m[1], title: m[2].split(/[.:]\s/)[0], body: part.replace(/^\d+\.\s*/, '') });
+      else items.push({ title: lines.length > 1 ? lines[0] : '', body: lines.length > 1 ? lines.slice(1).join('\n') : part });
+    }
+    return { summary, items };
+  }
+  async function downloadXlsx() {
+    if (!cur) return;
+    const c = cur, btn = $('xlsxBtn'); btn.disabled = true; btn.textContent = '엑셀 만드는 중…';
+    try {
+      const st = srcState;
+      if (st && st.stamp && !st.loaded) st.loading = loadSource();
+      if (st && st.loading) await st.loading;
+      if (c !== cur) return;
+      const sheets = [], x = c.extra || {}, a = noteItems(c.note, c.extra);
+      const sum = [['항목', '값', '설명'], ['제목', c.title, ''], ['답장 파일', c.name, '']];
+      if (st && st.stamp) sum.push(['올린 데이터 번호', st.stamp, '']);
+      if (a.summary) sum.push(['결론', a.summary, '']);
+      for (const k of x.kpis || []) sum.push([k.label, k.value, k.delta || '']);
+      sheets.push({ name: '요약', rows: sum, header: true, wrap: [1, 2], widths: [26, 60, 40] });
+      if (a.items.length) sheets.push({ name: '분석', rows: [['구분', '제목', '내용'], ...a.items.map(i => [i.tag || '', i.title || '', i.body || ''])], header: true, wrap: [1, 2], widths: [8, 30, 100] });
+      if (c.body) sheets.push({ name: '결과표', rows: parse(c.body).rows, header: true });
+      if ((x.charts || []).length) {
+        const rows = [];
+        for (const ch of x.charts) {
+          const labels = ch.type === 'bar' ? (ch.categories || []) : (ch.x || []), series = ch.series || [];
+          rows.push([ch.title || ''], ['', ...series.map(s => s.name)]);
+          labels.forEach((l, i) => rows.push([l, ...series.map(s => s.values[i] == null ? '' : (ch.unit === '%' ? s.values[i] + '%' : s.values[i]))]));
+          if (ch.note) rows.push(['※ ' + ch.note]);
+          rows.push([]);
+        }
+        sheets.push({ name: '그래프 데이터', rows, widths: [22, 14, 14, 14, 14, 14] });
+      }
+      if (st && st.table) sheets.push({ name: st.cut ? '올린 데이터(앞부분)' : '올린 데이터', rows: st.table.rows });
+      const blob = await buildXlsx(sheets);
+      const a2 = document.createElement('a'), url = URL.createObjectURL(blob);
+      a2.href = url; a2.download = (c.title.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'reply') + '.xlsx';
+      document.body.appendChild(a2); a2.click(); a2.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      btn.textContent = '내려받았습니다';
+    } catch (e) {
+      btn.textContent = '엑셀로 내려받기';
+      $('rErr').textContent = '엑셀 파일을 만들지 못했습니다. ' + (e.status ? explain(e) : (e.message || '')); $('rErr').hidden = false;
+    }
+    btn.disabled = false;
+  }
+  $('xlsxBtn').addEventListener('click', downloadXlsx);
 
   // ---------- dashboard ----------
   const SVGNS = 'http://www.w3.org/2000/svg';
