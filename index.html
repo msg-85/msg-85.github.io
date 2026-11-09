@@ -562,10 +562,7 @@ td.num { text-align: right; font-family: var(--mono); }
   $('copyBtn').addEventListener('click', () => reply && copyText(reply, $('copyBtn')));
 
   // ---------- uploaded data, shown exactly as it was sent ----------
-  const SRC_CHARS = 3000000;   // read at most this much text for the screen; big uploads show their start
-  const SRC_FULL_BYTES = 120e6;  // Excel gets the whole upload up to this size; bigger ones get the start (browser memory)
-  const XLSX_ROWS = 1048576;     // Excel's row limit per sheet
-  async function loadSource() {
+  const SRC_CHARS = 3000000;   // read at most this much text for the screen; big uploads show their start  async function loadSource() {
     const st = srcState; st.loaded = true;
     if (!st.stamp) { $('sInfo').textContent = '이 답장과 연결된 올린 데이터가 없습니다.'; return; }
     $('sInfo').textContent = '올린 데이터를 불러오는 중입니다.';
@@ -743,18 +740,7 @@ td.num { text-align: right; font-family: var(--mono); }
         }
         sheets.push({ name: '그래프 데이터', rows, widths: [22, 14, 14, 14, 14, 14] });
       }
-      if (st && st.table) {
-        let rows = st.table.rows, part = st.cut;
-        if (st.cut && st.file && st.file.size <= SRC_FULL_BYTES) {   // the screen read only the start: read the whole file for Excel
-          btn.textContent = '전체 올린 데이터 읽는 중…';
-          const { text } = await readSource(st.stamp, st.file, Infinity);
-          if (c !== cur) return;
-          rows = parse(clean(text)).rows; part = false;
-        }
-        if (rows.length > XLSX_ROWS) { rows = rows.slice(0, XLSX_ROWS); part = true; }
-        btn.textContent = '엑셀 만드는 중…';
-        sheets.push({ name: part ? '올린 데이터(앞부분)' : '올린 데이터', rows });
-      }
+      if (st && st.table) sheets.push({ name: st.cut ? '올린 데이터(앞부분)' : '올린 데이터', rows: st.table.rows });
       const blob = await buildXlsx(sheets);
       const a2 = document.createElement('a'), url = URL.createObjectURL(blob);
       a2.href = url; a2.download = (c.title.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'reply') + '.xlsx';
