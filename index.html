@@ -712,7 +712,7 @@ td.num { text-align: right; font-family: var(--mono); }
       if (a.summary) sum.push(['결론', a.summary, '']);
       for (const k of x.kpis || []) sum.push([k.label, k.value, k.delta || '']);
       sheets.push({ name: '요약', rows: sum, header: true, wrap: [1, 2], widths: [26, 60, 40] });
-      if (a.items.length) sheets.push({ name: '분석', rows: [['구분', '제목', '내용'], ...a.items.map(i => [i.tag || '', i.title || '', i.body || ''])], header: true, wrap: [1, 2], widths: [8, 30, 100] });
+      if (a.items.length) sheets.push({ name: '분석', rows: [['구분', '제목', '내용'], ...a.items.map(i => [i.tag || '', i.title || '', i.body || ''])], header: true, wrap: [1, 2], widths: [12, 30, 100] });
       if (c.body) sheets.push({ name: '결과표', rows: parse(c.body).rows, header: true });
       if ((x.charts || []).length) {
         const rows = [];
