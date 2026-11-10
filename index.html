@@ -191,7 +191,7 @@ td.num { text-align: right; font-family: var(--mono); }
       <button class="btn" id="refreshBtn" type="button">새로고침</button>
     </div>
     <div class="list" id="list"></div>
-    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button></div>
+    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button><button class="btn" id="linkedBtn" type="button" hidden>연동형 엑셀 받기</button><button class="btn" id="reportBtn" type="button" hidden>보고서 받기 (pptx)</button></div>
     <div class="sub" role="tablist" id="rTabs" hidden>
       <button type="button" role="tab" data-v="vDash">대시보드</button>
       <button type="button" role="tab" data-v="vNote">분석</button>
@@ -488,6 +488,7 @@ td.num { text-align: right; font-family: var(--mono); }
     $('listInfo').textContent = '불러오는 중입니다.'; $('rErr').hidden = true;
     try {
       const items = await (await api('/contents/outbox')).json();
+      outFiles = new Set(items.filter(i => i.type === 'file').map(i => i.name));
       const names = items.filter(i => i.type === 'file' && i.name.endsWith('.txt')).map(i => i.name).sort().reverse();
       $('list').replaceChildren(...names.map(name => {
         const b = document.createElement('button');
@@ -505,7 +506,7 @@ td.num { text-align: right; font-family: var(--mono); }
   // A reply is <name>.txt (title, note, result table) plus an optional <name>.json beside it:
   // { source, summary, kpis:[{label,value,delta}], charts:[{type:'line'|'bar',title,note,unit,x|categories,series:[{name,values}]}],
   //   items:[{title,tag,body}] }. Without the JSON, the note is split into items and there is no dashboard.
-  let openToken = 0, srcState = null, cur = null;
+  let openToken = 0, srcState = null, cur = null, outFiles = new Set();
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   async function openReply(name, button) {
     const my = ++openToken;
@@ -527,7 +528,8 @@ td.num { text-align: right; font-family: var(--mono); }
       drawDash(extra); drawNote(f.note, extra); drawTable(f.body);
       cur = { name, title: f.title || name.replace(/\.txt$/, ''), note: f.note, body: f.body, extra };
       $('xlsxBtn').textContent = '엑셀로 내려받기'; $('xlsxBtn').disabled = false;
-      const m = /^(\d{8}-\d{6})/.exec(name);
+      for (const [id, ext, label] of EXTRA_FILES) { const b = $(id), fn = name.replace(/\.txt$/, ext); b.hidden = !outFiles.has(fn); b.dataset.file = fn; b.textContent = label; b.disabled = false; }
+      const m =/^(\d{8}-\d{6})/.exec(name);
       srcState = { stamp: (extra && extra.source) || (m && m[1]) || '', loaded: false };
       $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
       view(extra && extra.kpis ? 'vDash' : 'vNote');
@@ -772,6 +774,28 @@ td.num { text-align: right; font-family: var(--mono); }
     }
     btn.disabled = false;
   }
+  // Extra files a reply can carry, uploaded beside <name>.txt: <name>.linked.xlsx (formula-driven Excel) and <name>.report.pptx.
+  const EXTRA_FILES = [['linkedBtn', '.linked.xlsx', '연동형 엑셀 받기'], ['reportBtn', '.report.pptx', '보고서 받기 (pptx)']];
+  async function downloadExtra(btn, label, outName) {
+    const fn = btn.dataset.file; if (!fn) return;
+    btn.disabled = true; btn.textContent = '받는 중…';
+    try {
+      const res = await api('/contents/outbox/' + encodeURIComponent(fn), { accept: 'application/vnd.github.raw+json' });
+      const blob = await res.blob();
+      const a = document.createElement('a'), url = URL.createObjectURL(blob);
+      a.href = url; a.download = outName(fn);
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      btn.textContent = '내려받았습니다';
+    } catch (e) {
+      btn.textContent = label;
+      $('rErr').textContent = '파일을 받지 못했습니다. ' + (e.status ? explain(e) : (e.message || '')); $('rErr').hidden = false;
+    }
+    btn.disabled = false;
+  }
+  const niceName = (fn, suffix) => ((cur && cur.title) || fn).replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 70) + suffix;
+  $('linkedBtn').addEventListener('click', () => downloadExtra($('linkedBtn'), '연동형 엑셀 받기', fn => niceName(fn, ' (연동형).xlsx')));
+  $('reportBtn').addEventListener('click', () => downloadExtra($('reportBtn'), '보고서 받기 (pptx)', fn => niceName(fn, ' (보고서).pptx')));
   $('xlsxBtn').addEventListener('click', downloadXlsx);
   $('printBtn').addEventListener('click', () => window.print());
 
