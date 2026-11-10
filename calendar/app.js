@@ -249,7 +249,8 @@
       isM ? mi('📋 기준정보 (채널 · 제품) 올리기', masterData) : null,
       isM ? mi('🕘 변경 이력', showLog) : null,
       el('div', { class: 'sec' }, '기타'),
-      mi('📱 휴대폰 홈 화면에 추가하는 법', installHelp),
+      isStandalone() ? null : mi('📱 홈 화면에 앱으로 설치', install),
+      mi('🌓 화면 색: ' + THEME_LABEL[getTheme()] + ' (누르면 바뀜)', () => { const order = ['auto', 'light', 'dark'], nx = order[(order.indexOf(getTheme()) + 1) % 3]; setTheme(nx); toast('화면 색: ' + THEME_LABEL[nx]); }),
       api.demo ? mi('🔄 시연 데이터 처음으로 되돌리기', () => { api.reset(); api.logout(); location.reload(); }) : null,
       mi('로그아웃', () => { api.logout(); S.user = null; showLogin(); }));
     close = sheet('메뉴', body);
@@ -391,12 +392,50 @@
         ch.length ? el('div', { style: 'font-size:13px;margin-top:4px' }, ch.join(' / ')) : null);
     }) : [el('div', { class: 'li' }, '변경 이력이 없습니다.')])));
   }
-  function installHelp() {
-    sheet('홈 화면에 추가하기', el('div', {},
-      el('h3', {}, '아이폰 (사파리)'), el('p', {}, '아래쪽 공유 버튼(□↑) → "홈 화면에 추가" → 추가'),
-      el('h3', {}, '안드로이드 (크롬·삼성 인터넷)'), el('p', {}, '오른쪽 위 ⋮ 메뉴 → "홈 화면에 추가" 또는 "앱 설치"'),
-      el('p', { class: 's', style: 'color:var(--muted)' }, '추가하면 앱 아이콘이 생기고, 누르면 전체 화면으로 열립니다. 로그인은 한 번 하면 유지됩니다.')));
+  // ---------------- theme: follow the phone (auto) or fixed light/dark ----------------
+  const THEME_LABEL = { auto: '휴대폰 설정 따라감', light: '밝게', dark: '어둡게' };
+  const getTheme = () => { try { return localStorage.getItem('evcal-theme') || 'auto'; } catch (e) { return 'auto'; } };
+  function setTheme(v) { try { if (v === 'auto') localStorage.removeItem('evcal-theme'); else localStorage.setItem('evcal-theme', v); } catch (e) {} if (v === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', v); }
+
+  // ---------------- install (PWA) ----------------
+  // Android Chrome / Samsung Internet / PC Edge·Chrome: the browser hands us an install prompt -> one-tap button.
+  // iPhone Safari has no install API, so the button shows the two taps to do by hand.
+  let installEvt = null;
+  const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const dismissed = () => { try { return localStorage.getItem('evcal-install-x') === '1'; } catch (e) { return false; } };
+  function refreshInstall() {
+    const can = !isStandalone() && (installEvt || isIOS());
+    $('installBar').hidden = !can || dismissed();
+    $('installBtn2').hidden = !can;
   }
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; refreshInstall(); });
+  window.addEventListener('appinstalled', () => { installEvt = null; refreshInstall(); toast('설치했습니다. 홈 화면의 아이콘으로 열어 보세요.'); });
+  async function install() {
+    if (installEvt) {
+      installEvt.prompt();
+      const r = await installEvt.userChoice.catch(() => null);
+      if (r && r.outcome === 'accepted') installEvt = null;
+      refreshInstall(); return;
+    }
+    const ios = isIOS(), inApp = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\//i.test(navigator.userAgent);
+    sheet('홈 화면에 설치하기', el('div', {},
+      inApp ? el('div', { class: 'err' }, '카카오톡·네이버 같은 앱 안에서 열린 화면에서는 설치가 안 됩니다. 오른쪽 위 메뉴에서 "다른 브라우저로 열기"(사파리/크롬)를 누른 뒤 다시 해 주세요.') : null,
+      ios ? el('div', {},
+        el('h3', {}, '아이폰은 두 번만 누르면 됩니다'),
+        el('p', {}, '1. 화면 아래쪽 가운데 공유 버튼 (네모에 위쪽 화살표 □↑)'),
+        el('p', {}, '2. 목록을 조금 내려서 "홈 화면에 추가" → 오른쪽 위 "추가"'),
+        el('p', { class: 's', style: 'color:var(--muted)' }, '※ 사파리에서만 됩니다. 크롬으로 열었다면 주소를 복사해 사파리에서 열어 주세요.'))
+      : el('div', {},
+        el('h3', {}, '안드로이드 (크롬·삼성 인터넷)'),
+        el('p', {}, '오른쪽 위 ⋮ (또는 아래쪽 ≡) 메뉴 → "앱 설치" 또는 "홈 화면에 추가"'),
+        el('p', { class: 's', style: 'color:var(--muted)' }, '※ 설치 버튼이 바로 안 뜨면 페이지를 한 번 새로고침한 뒤 다시 눌러 보세요.')),
+      el('p', { class: 's', style: 'color:var(--muted)' }, '설치하면 앱 아이콘이 생기고, 누르면 주소창 없이 전체 화면으로 열립니다. 로그인은 한 번 하면 유지됩니다.')));
+  }
+  $('installBtn').addEventListener('click', install);
+  $('installBtn2').addEventListener('click', install);
+  $('installX').addEventListener('click', () => { try { localStorage.setItem('evcal-install-x', '1'); } catch (e) {} $('installBar').hidden = true; toast('나중에 ☰ 메뉴에서 설치할 수 있어요.'); });
+  refreshInstall();
 
   // ---------------- boot ----------------
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
