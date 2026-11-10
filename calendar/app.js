@@ -1,13 +1,13 @@
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
-  const { AppError, lockAt, isLocked, canEdit, canCreate, todayKst, discount } = window.Cal;
+  const { AppError, lockAt, isLocked, canEdit, canCreate, canRequest, REQ_FIELDS, todayKst, discount } = window.Cal;
   const cfg = window.CAL_CONFIG || {};
   const params = new URLSearchParams(location.search);
   const useDemo = params.has('demo') || !cfg.url || !cfg.anonKey;
   const api = useDemo ? new Cal.DemoBackend() : new Cal.SupabaseBackend(cfg.url, cfg.anonKey);
 
-  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], fCh: '', fBr: '' };
+  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], requests: [], fCh: '', fBr: '' };
   const PALETTE = ['#2e7d6b', '#c2571a', '#3b62c4', '#a33ea1', '#b8860b', '#c0392b', '#00838f', '#6d4c41', '#5e35b1', '#558b2f'];
   const won = n => (n == null || n === '' ? '-' : Number(n).toLocaleString('ko-KR') + '원');
   const num = s => { if (s == null) return NaN; const t = String(s).replace(/[,\s원]/g, ''); return t === '' ? NaN : Number(t); };
@@ -58,7 +58,7 @@
     const t = todayKst().split('-').map(Number); S.y = t[0]; S.m = t[1] - 1;
     try { [S.channels, S.products, S.users] = await Promise.all([api.listChannels(), api.listProducts(), api.listUsers()]); }
     catch (x) { return fail(x); }
-    fillFilters(); await load();
+    fillFilters(); await load(); refreshRequests();
   }
   function fail(x) { if (x.code === 401) { api.logout(); showLogin(); } else toast(x.message); }
   function fillFilters() {
@@ -166,8 +166,88 @@
     if (mine) body.append(el('div', { class: 'acts' },
       el('button', { class: 'btn del', onclick: async () => { if (!confirm('이 일정을 삭제할까요?')) return; try { await api.deleteEvent(e.id); close(); toast('삭제했습니다.'); load(); } catch (x) { toast(x.message); } } }, '삭제'),
       el('button', { class: 'btn pri', onclick: () => { close(); openForm(e); } }, '수정')));
+    else if (canRequest(S.user, e)) {
+      const pend = S.requests.filter(r => r.event_id === e.id && r.status === 'pending');
+      body.append(pend.length
+        ? el('div', { class: 'ok', style: 'margin-top:14px' }, `⏳ 마스터 승인 대기 중인 요청이 ${pend.length}건 있습니다. (☰ 메뉴 → 수정 요청에서 확인)`)
+        : el('div', {}, el('div', { class: 'pick', style: 'margin-top:14px' }, '마감된 행사입니다. 고칠 내용이 있으면 마스터에게 요청해 주세요.'),
+          el('div', { class: 'acts' },
+            el('button', { class: 'btn del', onclick: () => { close(); requestDelete(e); } }, '삭제 요청'),
+            el('button', { class: 'btn pri', onclick: () => { close(); openForm(e, 'request'); } }, '수정 요청'))));
+    }
     else if (S.user.role === 'manager') body.append(el('div', { class: 'pick', style: 'margin-top:14px' }, locked ? '지난 행사는 마스터만 수정할 수 있습니다.' : '다른 담당자가 등록한 일정은 보기만 할 수 있습니다.'));
     close = sheet('행사 상세', body);
+  }
+  function requestDelete(e) {
+    const reason = el('textarea', { class: 'in', rows: 3, placeholder: '예: 행사 취소됨' }), err = el('div', { class: 'err' }); err.hidden = true;
+    const go = el('button', { class: 'btn del' }, '삭제 요청 보내기');
+    let close;
+    go.addEventListener('click', async () => {
+      err.hidden = true; go.disabled = true;
+      try { await api.createRequest({ event_id: e.id, kind: 'delete', reason: reason.value }); close(); toast('삭제 요청을 보냈습니다.'); await refreshRequests(); }
+      catch (x) { err.textContent = x.message; err.hidden = false; }
+      go.disabled = false;
+    });
+    close = sheet('삭제 요청', el('div', {},
+      el('p', {}, el('b', {}, `${chLabel(e.channel_code, e.channel)} · ${e.title}`), el('br'), `${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`),
+      el('div', { class: 'f' }, el('label', {}, '요청 사유 ', el('i', {}, '*')), reason), err, el('div', { class: 'acts' }, go)));
+  }
+
+  // ---------------- change requests ----------------
+  const FIELD_LABEL = { channel_code: '채널', title: '행사명', product_code: '제품', start_date: '시작일', end_date: '종료일', list_price: '정상가', sale_price: '판매단가', expected_qty: '예상수량', memo: '메모' };
+  const showVal = (k, v) => v == null || v === '' ? '-' : k === 'channel_code' ? chLabel(v) : k === 'product_code' ? `${v} · ${(S.products.find(p => p.code === v) || {}).name || ''}` : /price/.test(k) ? won(v) : k === 'expected_qty' ? Number(v).toLocaleString('ko-KR') + '개' : String(v);
+  const SEEN_KEY = () => 'evcal-req-seen-' + (S.user ? S.user.id : '');
+  function badgeCount() {
+    if (!S.user) return 0;
+    if (S.user.role === 'master') return S.requests.filter(r => r.status === 'pending').length;
+    let seen = 0; try { seen = +localStorage.getItem(SEEN_KEY()) || 0; } catch (e) {}
+    return S.requests.filter(r => r.status !== 'pending' && r.decided_at && Date.parse(r.decided_at) > seen).length;
+  }
+  function drawBadge() { const n = badgeCount(), b = $('menuBadge'); b.hidden = !n; b.textContent = n > 99 ? '99+' : n; }
+  async function refreshRequests() {
+    if (!S.user || S.user.role === 'viewer') { S.requests = []; return drawBadge(); }
+    try { S.requests = await api.listRequests(); } catch (x) { if (x.code === 401) return fail(x); }
+    drawBadge();
+  }
+  setInterval(() => { if (S.user && document.visibilityState === 'visible') refreshRequests(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (S.user && document.visibilityState === 'visible') refreshRequests(); });
+  function requestCard(r, isM, redraw) {
+    const b = r.before_row || {}, st = { pending: ['⏳ 대기', 'badge'], approved: ['✅ 승인', 'badge'], rejected: ['❌ 반려', 'badge locked'] }[r.status];
+    const rows = r.kind === 'delete' ? [el('div', { style: 'color:var(--danger);font-weight:600' }, '일정 삭제 요청')]
+      : Object.entries(r.changes || {}).map(([k, v]) => el('div', { style: 'font-size:14px' }, el('span', { style: 'color:var(--muted)' }, FIELD_LABEL[k] + ': '), showVal(k, b[k]), ' → ', el('b', {}, showVal(k, v))));
+    const box = el('div', { class: 'li', style: 'display:block' },
+      el('div', { class: 'row' }, el('span', { class: st[1] }, st[0]), el('b', { class: 'grow' }, `${chLabel(b.channel_code, b.channel)} · ${b.title || ''}`)),
+      el('div', { class: 's', style: 'color:var(--muted);font-size:12px;margin:2px 0 6px' }, `${b.start_date || ''} ~ ${b.end_date || ''} · 요청 ${userName(r.requested_by)} · ${new Date(r.requested_at).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}`),
+      ...rows,
+      el('div', { style: 'font-size:14px;margin-top:4px' }, el('span', { style: 'color:var(--muted)' }, '사유: '), r.reason),
+      r.status !== 'pending' ? el('div', { class: 's', style: 'font-size:13px;margin-top:4px;color:var(--muted)' }, `${userName(r.decided_by)} · ${new Date(r.decided_at).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}${r.comment ? ' · ' + r.comment : ''}`) : null);
+    if (isM && r.status === 'pending') {
+      const act = async approve => {
+        const comment = approve ? '' : prompt('반려 사유를 적어 주세요 (담당자에게 보입니다)', '');
+        if (!approve && comment === null) return;
+        try { await api.decideRequest(r.id, approve, comment); toast(approve ? '승인하고 일정에 반영했습니다.' : '반려했습니다.'); await refreshRequests(); load(); redraw(); }
+        catch (x) { toast(x.message); }
+      };
+      box.append(el('div', { class: 'acts' }, el('button', { class: 'btn del', onclick: () => act(false) }, '반려'), el('button', { class: 'btn pri', onclick: () => act(true) }, '승인')));
+    }
+    return box;
+  }
+  async function showRequests() {
+    await refreshRequests();
+    const isM = S.user.role === 'master', wrap = el('div');
+    const redraw = () => {
+      const pend = S.requests.filter(r => r.status === 'pending'), done = S.requests.filter(r => r.status !== 'pending');
+      wrap.replaceChildren(
+        el('h3', { style: 'margin:4px 0 8px' }, isM ? `승인 대기 (${pend.length})` : `대기 중 (${pend.length})`),
+        el('div', { class: 'list' }, ...(pend.length ? pend.map(r => requestCard(r, isM, redraw)) : [el('div', { class: 'li' }, '대기 중인 요청이 없습니다.')])),
+        el('h3', { style: 'margin:18px 0 8px' }, `처리 완료 (${done.length})`),
+        el('div', { class: 'list' }, ...(done.length ? done.slice(0, 100).map(r => requestCard(r, isM, redraw)) : [el('div', { class: 'li' }, '처리된 요청이 없습니다.')])));
+    };
+    redraw();
+    if (!isM) { try { localStorage.setItem(SEEN_KEY(), String(Date.now())); } catch (e) {} drawBadge(); }
+    sheet(isM ? '수정 요청 (승인 대기)' : '내 수정 요청', el('div', {},
+      el('p', { class: 's', style: 'color:var(--muted);margin-top:0;font-size:13px' }, isM ? '승인하면 일정에 바로 반영되고, 변경 이력에 "요청 #번호 승인"으로 남습니다.' : '마감된 본인 행사에 보낸 요청과 결과입니다.'),
+      wrap));
   }
 
   // product search box: type part of the product number or name -> suggestions below
@@ -192,8 +272,9 @@
     show(chosen);
     return { box, get: () => chosen };
   }
-  function openForm(e) {
-    const isNew = !e, v = e ? { ...e } : { start_date: S.sel, end_date: S.sel };
+  // mode 'request': same form, but it sends a change request (with a reason) instead of saving
+  function openForm(e, mode) {
+    const isReq = mode === 'request', isNew = !e, v = e ? { ...e } : { start_date: S.sel, end_date: S.sel };
     const f = id => document.getElementById(id);
     const chSel = el('select', { class: 'in', id: 'fe_ch' }, el('option', { value: '' }, '채널 선택'), ...S.channels.filter(c => c.active !== false || c.code === v.channel_code).map(c => el('option', { value: c.code }, chLabel(c.code))));
     chSel.value = v.channel_code || (S.channels.length === 1 ? S.channels[0].code : '');
@@ -205,7 +286,8 @@
     commas(lp); commas(sp);
     const pp = productPicker(v.product_code, p => { if (p && p.list_price && (!lp.value || isNew)) { lp.value = Number(p.list_price).toLocaleString('ko-KR'); upd(); } });
     const err = el('div', { class: 'err' }); err.hidden = true;
-    const saveBtn = el('button', { class: 'btn pri', type: 'submit' }, isNew ? '등록' : '저장');
+    const saveBtn = el('button', { class: 'btn pri', type: 'submit' }, isReq ? '마스터에게 요청 보내기' : isNew ? '등록' : '저장');
+    const reason = el('textarea', { class: 'in', id: 'fe_reason', rows: 2, placeholder: '예: 거래처 요청으로 판매단가 정정' });
     const form = el('form', {},
       el('div', { class: 'f' }, el('label', {}, '채널 ', el('i', {}, '*')), chSel),
       el('div', { class: 'f' }, el('label', {}, '행사명 ', el('i', {}, '*')), el('input', { class: 'in', id: 'fe_title', value: v.title || '', placeholder: '예: 월초 특가' })),
@@ -219,7 +301,8 @@
       calc,
       el('div', { class: 'f' }, el('label', {}, '예상수량 (선택)'), el('input', { class: 'in', id: 'fe_q', inputmode: 'numeric', value: v.expected_qty ?? '' })),
       el('div', { class: 'f' }, el('label', {}, '메모 (선택)'), el('textarea', { class: 'in', id: 'fe_memo', rows: 2 }, v.memo || '')),
-      el('div', { class: 'pick' }, S.user.role === 'master' ? '마스터는 지난 행사도 등록·수정할 수 있습니다.' : '종료일 다음 날 오전 9시부터는 마스터만 수정할 수 있습니다.'),
+      isReq ? el('div', { class: 'f' }, el('label', {}, '요청 사유 ', el('i', {}, '*')), reason) : null,
+      el('div', { class: 'pick' }, isReq ? '바꿀 값만 고친 뒤 사유를 적어 보내세요. 마스터가 승인하면 반영됩니다.' : S.user.role === 'master' ? '마스터는 지난 행사도 등록·수정할 수 있습니다.' : '종료일 다음 날 오전 9시부터는 마스터만 수정할 수 있습니다.'),
       err, el('div', { class: 'acts' }, saveBtn));
     upd();
     let close;
@@ -229,12 +312,19 @@
       const out = { id: v.id, channel_code: chSel.value, title: f('fe_title').value, product_code: p ? p.code : '', start_date: f('fe_s').value, end_date: f('fe_e').value,
         list_price: num(lp.value), sale_price: num(sp.value), expected_qty: q === '' ? null : num(q), memo: f('fe_memo').value.trim() };
       if (!p) { err.textContent = '제품을 목록에서 눌러 선택해 주세요.'; err.hidden = false; return; }
+      if (isReq) {
+        const changes = {}; for (const k of REQ_FIELDS) { const a = out[k] ?? null, b = v[k] ?? null; if (String(a ?? '') !== String(b ?? '')) changes[k] = a; }
+        saveBtn.disabled = true;
+        try { await api.createRequest({ event_id: v.id, kind: 'update', changes, reason: reason.value }); close(); toast('요청을 보냈습니다. 마스터가 승인하면 반영됩니다.'); await refreshRequests(); }
+        catch (x) { err.textContent = x.message; err.hidden = false; }
+        saveBtn.disabled = false; return;
+      }
       saveBtn.disabled = true;
       try { const r = await api.saveEvent(out); close(); toast(isNew ? '등록했습니다.' : '저장했습니다.'); S.sel = r.start_date <= S.sel && r.end_date >= S.sel ? S.sel : r.start_date; const [yy, mm] = S.sel.split('-').map(Number); S.y = yy; S.m = mm - 1; load(); }
       catch (x) { err.textContent = x.message; err.hidden = false; }
       saveBtn.disabled = false;
     });
-    close = sheet(isNew ? '행사 등록' : '행사 수정', form);
+    close = sheet(isReq ? '수정 요청' : isNew ? '행사 등록' : '행사 수정', form);
   }
   $('addBtn').addEventListener('click', () => openForm(null));
 
@@ -245,6 +335,8 @@
     const mi = (label, fn) => el('button', { class: 'mi', onclick: () => { close(); fn(); } }, label);
     const body = el('div', { class: 'menu' },
       el('div', { class: 'li', style: 'border:0;padding-left:4px' }, el('div', {}, el('b', {}, S.user.name), el('div', { class: 's', style: 'color:var(--muted);font-size:13px' }, `${S.user.login} · ${isM ? '마스터' : S.user.role === 'manager' ? '담당자' : '조회'}`))),
+      canWrite ? el('div', { class: 'sec' }, '요청') : null,
+      canWrite ? mi((isM ? '📨 수정 요청 승인' : '📨 내 수정 요청') + (badgeCount() ? ` (${badgeCount()})` : ''), showRequests) : null,
       el('div', { class: 'sec' }, '엑셀'),
       mi('📥 일정 엑셀로 내려받기', exportEvents),
       canWrite ? mi('📤 일정 엑셀로 한꺼번에 등록', () => importEvents()) : null,
@@ -407,7 +499,7 @@
     sheet('변경 이력 (최근 200건)', el('div', { class: 'list' }, ...(log.length ? log.map(l => {
       const r = l.new_row || l.old_row || {}, ch = l.old_row && l.new_row ? Object.keys(F).filter(k => String(l.old_row[k] ?? '') !== String(l.new_row[k] ?? '')).map(k => `${F[k]}: ${l.old_row[k] ?? '-'} → ${l.new_row[k] ?? '-'}`) : [];
       return el('div', { class: 'li', style: 'display:block' },
-        el('div', {}, el('b', {}, act[l.action] || l.action), ` · ${r.channel || ''} ${r.title || ''}`),
+        el('div', {}, el('b', {}, act[l.action] || l.action), ` · ${r.channel || ''} ${r.title || ''}`, l.note ? el('span', { class: 'badge', style: 'margin-left:6px' }, l.note) : null),
         el('div', { class: 's', style: 'color:var(--muted);font-size:12px' }, `${userName(l.actor)} · ${new Date(l.at).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}`),
         ch.length ? el('div', { style: 'font-size:13px;margin-top:4px' }, ch.join(' / ')) : null);
     }) : [el('div', { class: 'li' }, '변경 이력이 없습니다.')])));
