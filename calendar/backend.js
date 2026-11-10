@@ -126,7 +126,7 @@
 
   // ======================= Demo (this browser only) =======================
   class DemoBackend {
-    constructor() { this.demo = true; this.K = 'evcal-demo-v5'; this.user = null; this._load(); }
+    constructor() { this.demo = true; this.K = 'evcal-demo-v6'; this.user = null; this._load(); }
     _load() {
       let d = null; try { d = JSON.parse(localStorage.getItem(this.K) || 'null'); } catch (e) {}
       this.db = d || this._seed(); this._persist();
@@ -158,7 +158,9 @@
         mk(8, '쿠팡', '월말 특가', '2105905', D(25), D(30), 96000, 79900, 900, 'u-kim'),
         mk(9, '네이버', '다음달 예고 행사', '4104563', D(2, m + 1), D(8, m + 1), 27000, 22900, 600, 'u-lee'),
       ];
-      return { users, channels, products, events, invites: [{ code: 'DEMO-2026', role: 'manager', note: '시험용', created_by: 'u-master', created_at: new Date().toISOString(), used_by: null, used_at: null, revoked: false }], log: [], seq: 10 };
+      return { users, channels, products, events, invites: [{ code: 'DEMO-2026', role: 'manager', note: '시험용', created_by: 'u-master', created_at: new Date().toISOString(), used_by: null, used_at: null, revoked: false }], log: [], seq: 10,
+        // one waiting request so the master sees how approval works (only if that event is already locked)
+        requests: isLocked(events[0]) ? [{ id: 10, event_id: 1, kind: 'update', changes: { sale_price: 29900 }, before_row: { ...events[0] }, reason: '쿠팡 추가 할인 반영 (거래처 확정)', status: 'pending', requested_by: 'u-kim', requested_at: new Date().toISOString(), decided_by: null, decided_at: null, comment: null }] : [] };
     }
     _me(u) { this.user = { id: u.id, login: u.login, name: u.display_name, role: u.role }; try { sessionStorage.setItem(this.K + '-me', u.id); } catch (e) {} return this.user; }
     async restore() { let id = null; try { id = sessionStorage.getItem(this.K + '-me'); } catch (e) {} const u = this.db.users.find(x => x.id === id && x.active); return u ? this._me(u) : null; }
@@ -214,8 +216,56 @@
     async createInvite(role, note) { this._master(); const inv = { code: randomCode(), role, note: note || null, created_by: this.user.id, created_at: new Date().toISOString(), used_by: null, used_at: null, revoked: false }; this.db.invites.push(inv); this._persist(); return inv; }
     async revokeInvite(code) { this._master(); const i = this.db.invites.find(x => x.code === code); if (i) i.revoked = true; this._persist(); }
     async listLog() { this._master(); return this.db.log; }
+    // ---- change requests (plan A: after the lock a manager asks, the master approves) ----
+    async listRequests() {
+      this._guard(); const all = this.db.requests || [];
+      return (this.user.role === 'master' ? all : all.filter(r => r.requested_by === this.user.id)).slice().sort((a, b) => b.id - a.id);
+    }
+    async createRequest(req) {
+      this._guard(); const ev = this.db.events.find(x => x.id === req.event_id);
+      checkRequest(this.user, ev, req);
+      this.db.requests = this.db.requests || [];
+      const row = { id: ++this.db.seq, event_id: ev.id, kind: req.kind, changes: req.kind === 'update' ? req.changes : {}, before_row: { ...ev }, reason: req.reason.trim(),
+        status: 'pending', requested_by: this.user.id, requested_at: new Date().toISOString(), decided_by: null, decided_at: null, comment: null };
+      this.db.requests.push(row); this._persist(); return row;
+    }
+    async decideRequest(id, approve, comment) {
+      this._master(); const r = (this.db.requests || []).find(x => x.id === id);
+      if (!r || r.status !== 'pending') throw new AppError('이미 처리된 요청입니다.');
+      if (approve) {
+        const ev = this.db.events.find(x => x.id === r.event_id); if (!ev) throw new AppError('일정이 이미 삭제되어 반영할 수 없습니다. 반려해 주세요.');
+        if (r.kind === 'delete') { this.db.events = this.db.events.filter(x => x.id !== ev.id); this._log('delete', ev, null); this.db.log[0].note = `요청 #${r.id} 승인`; }
+        else { await this.saveEvent({ ...ev, ...r.changes }); this.db.log[0].note = `요청 #${r.id} 승인`; }
+      }
+      Object.assign(r, { status: approve ? 'approved' : 'rejected', decided_by: this.user.id, decided_at: new Date().toISOString(), comment: (comment || '').trim() || null });
+      this._persist(); return r;
+    }
     reset() { localStorage.removeItem(this.K); this._load(); }
   }
 
-  window.Cal = { SupabaseBackend, DemoBackend, AppError, lockAt, isLocked, canEdit, canCreate, todayKst, discount };
+  // fields a request may change, and the request rules shared by both backends
+  const REQ_FIELDS = ['channel_code', 'title', 'product_code', 'start_date', 'end_date', 'list_price', 'sale_price', 'expected_qty', 'memo'];
+  const canRequest = (user, ev) => !!user && !!ev && user.role === 'manager' && ev.created_by === user.id && isLocked(ev);
+  function checkRequest(user, ev, req) {
+    if (!ev) throw new AppError('일정을 찾지 못했습니다.');
+    if (!canRequest(user, ev)) throw new AppError('수정 요청은 본인이 등록한 마감된 행사에만 할 수 있습니다. 마감 전에는 직접 수정해 주세요.', 403);
+    if (!req.reason || !req.reason.trim()) throw new AppError('요청 사유를 적어 주세요.');
+    if (req.kind === 'update') {
+      const keys = Object.keys(req.changes || {}).filter(k => REQ_FIELDS.includes(k));
+      if (!keys.length) throw new AppError('바뀐 내용이 없습니다. 고칠 값을 바꿔 주세요.');
+      validate({ ...ev, ...req.changes });
+    } else if (req.kind !== 'delete') throw new AppError('요청 종류가 맞지 않습니다.');
+  }
+  // Supabase versions (table edit_requests + decide_request RPC, see setup.sql)
+  Object.assign(SupabaseBackend.prototype, {
+    listRequests() { return this._rest('edit_requests?select=*&order=id.desc&limit=300'); },
+    async createRequest(req) {
+      const evs = await this._rest('events?select=*&id=eq.' + req.event_id); checkRequest(this.user, evs && evs[0], req);
+      const r = await this._rest('edit_requests', { method: 'POST', body: { event_id: req.event_id, kind: req.kind, changes: req.kind === 'update' ? req.changes : {}, reason: req.reason.trim() } });
+      return r[0];
+    },
+    async decideRequest(id, approve, comment) { return this._rest('rpc/decide_request', { method: 'POST', body: { p_id: id, p_approve: !!approve, p_comment: comment || null } }); },
+  });
+
+  window.Cal = { SupabaseBackend, DemoBackend, AppError, lockAt, isLocked, canEdit, canCreate, canRequest, REQ_FIELDS, todayKst, discount };
 })();
