@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="행사 캘린더">
 <meta name="mobile-web-app-capable" content="yes">
+<script>try{var th=localStorage.getItem('evcal-theme');if(th==='light'||th==='dark')document.documentElement.setAttribute('data-theme',th);}catch(e){}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
@@ -24,6 +25,13 @@
     --today: #3fae8e; --sel: #1f3a31; --shadow: 0 8px 30px rgba(0,0,0,.5);
   }
 }
+:root[data-theme="dark"] {
+    --bg: #111614; --sheet: #1a201e; --ink: #e8eeeb; --muted: #94a19b; --line: #2c3532; --soft: #222a27;
+    --brand: #3fae8e; --brand-ink: #08130f; --danger: #ff7b6b; --warn-bg: #3a3014; --warn-ink: #ffd88a;
+    --today: #3fae8e; --sel: #1f3a31; --shadow: 0 8px 30px rgba(0,0,0,.5);
+}
+:root { color-scheme: light; } :root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif; -webkit-text-size-adjust: 100%; }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -127,6 +135,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
     <button class="btn pri" style="width:100%" id="lBtn">로그인</button>
   </form>
   <button class="lnk" id="toSignup" type="button">처음이신가요? 가입 코드로 등록하기</button>
+  <button class="btn" id="installBtn2" type="button" style="width:100%;margin-top:12px" hidden>📱 홈 화면에 앱으로 설치</button>
   <form id="signupForm" hidden>
     <div class="f"><label>가입 코드 (마스터에게 받은 코드)</label><input class="in" id="sCode" autocapitalize="characters" required></div>
     <div class="f"><label>아이디 (영문·숫자)</label><input class="in" id="sId" autocapitalize="none" pattern="[A-Za-z0-9._-]{3,30}" required></div>
@@ -153,6 +162,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
         <select id="fBrand" aria-label="브랜드"><option value="">전체 브랜드</option></select>
       </div>
       <div id="demoBar" class="demo" hidden></div>
+      <div id="installBar" class="ok row" style="margin:6px 0" hidden><span class="grow">📱 홈 화면에 앱으로 설치하면 아이콘으로 바로 열려요.</span><button class="btn pri" id="installBtn" style="padding:7px 12px">설치</button><button class="ib" id="installX" aria-label="닫기" style="width:32px;height:32px">✕</button></div>
     </div>
     <div class="cal">
       <div class="dow"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
