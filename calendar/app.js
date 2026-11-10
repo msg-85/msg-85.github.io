@@ -24,6 +24,10 @@
   };
   function toast(msg) { const t = el('div', { class: 'toast' }, msg); document.body.append(t); setTimeout(() => t.remove(), 2600); }
   const colorOf = code => { let h = 0; for (const c of String(code)) h = (h * 31 + c.charCodeAt(0)) >>> 0; const i = S.channels.findIndex(c => c.code === code); return PALETTE[(i >= 0 ? i : h) % PALETTE.length]; };
+  const chLabel = (code, fallback) => { const c = S.channels.find(x => x.code === code); return c ? (c.name === c.code || c.name.startsWith(c.code + '.') ? c.name : `${c.code}.${c.name}`) : (fallback || code); };
+  // categories come from the current product master (so a re-uploaded master fixes old events too), else from the event's own copy
+  const catOf = e => { const p = S.products.find(x => x.code === e.product_code); return { l: (p && p.cat_l) || e.cat_l || '', s: (p && p.cat_s) || e.cat_s || '' }; };
+  const shortCh = s => String(s).replace(/^[A-Za-z]\d+\./, '');   // calendar bars: 'F1.쿠팡' -> '쿠팡' to save space
   const userName = id => { const u = S.users.find(x => x.id === id); return u ? u.display_name : '-'; };
 
   // ---------------- login ----------------
@@ -59,9 +63,9 @@
   function fail(x) { if (x.code === 401) { api.logout(); showLogin(); } else toast(x.message); }
   function fillFilters() {
     const ch = $('fChannel'), br = $('fBrand');
-    ch.replaceChildren(el('option', { value: '' }, '전체 채널'), ...S.channels.map(c => el('option', { value: c.code }, c.name)));
-    const brands = [...new Set(S.products.map(p => p.brand))].sort();
-    br.replaceChildren(el('option', { value: '' }, '전체 브랜드'), ...brands.map(b => el('option', { value: b }, b)));
+    ch.replaceChildren(el('option', { value: '' }, '전체 채널'), ...S.channels.map(c => el('option', { value: c.code }, chLabel(c.code))));
+    const cats = [...new Set(S.products.map(p => p.cat_l).filter(Boolean))].sort();
+    br.replaceChildren(el('option', { value: '' }, '전체 카테고리'), ...cats.map(b => el('option', { value: b }, b)));
     ch.value = S.fCh; br.value = S.fBr;
   }
   $('fChannel').addEventListener('change', e => { S.fCh = e.target.value; draw(); });
@@ -75,7 +79,7 @@
     try { S.events = await api.listEvents(from, to); } catch (x) { return fail(x); }
     draw();
   }
-  const visible = () => S.events.filter(e => (!S.fCh || e.channel_code === S.fCh) && (!S.fBr || e.brand === S.fBr));
+  const visible = () => S.events.filter(e => (!S.fCh || e.channel_code === S.fCh) && (!S.fBr || catOf(e).l === S.fBr));
   function draw() {
     $('monthLabel').textContent = `${S.y}년 ${S.m + 1}월`;
     const { from, to } = gridRange(), evs = visible(), today = todayKst(), grid = $('grid');
@@ -100,7 +104,7 @@
         if (hidden[i]) { const m = el('div', { class: 'more' }, '+' + hidden[i]); m.style.left = (i / 7 * 100) + '%'; m.style.width = (100 / 7) + '%'; m.style.top = (TOP + used * LH) + 'px'; wk.append(m); }
       }
       for (const b of bars) {
-        const bar = el('div', { class: 'bar' + (b.e.start_date < ws ? ' cont-l' : '') + (b.e.end_date > we ? ' cont-r' : '') }, `${b.e.channel} ${b.e.title}`);
+        const bar = el('div', { class: 'bar' + (b.e.start_date < ws ? ' cont-l' : '') + (b.e.end_date > we ? ' cont-r' : '') }, `${shortCh(chLabel(b.e.channel_code, b.e.channel))} ${b.e.title}`);
         bar.style.left = `calc(${b.s / 7 * 100}% + 2px)`; bar.style.width = `calc(${(b.en - b.s + 1) / 7 * 100}% - 4px)`;
         bar.style.top = (TOP + b.li * LH) + 'px'; bar.style.background = colorOf(b.e.channel_code);
         wk.append(bar);
@@ -119,9 +123,9 @@
     return el('div', { class: 'card', onclick: () => openDetail(e) },
       el('div', { class: 'dot', style: 'background:' + colorOf(e.channel_code) }),
       el('div', { class: 'grow' },
-        el('div', { class: 's' }, `${e.channel} · ${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`),
+        el('div', { class: 's' }, `${chLabel(e.channel_code, e.channel)} · ${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`),
         el('div', { class: 't' }, e.title),
-        el('div', { class: 's' }, `${e.product_name} · ${e.brand}`),
+        el('div', { class: 's' }, `${e.product_code} · ${e.product_name}`),
         el('div', { class: 'price' }, el('b', {}, won(e.sale_price)), el('del', {}, won(e.list_price)), el('span', { class: 'off' }, `${discount(e.list_price, e.sale_price)}%↓`),
           e.expected_qty != null ? el('span', { class: 's' }, `예상 ${Number(e.expected_qty).toLocaleString('ko-KR')}개`) : null),
         locked ? el('div', { class: 'lock' }, '🔒 마감됨 (마스터만 수정)') : null));
@@ -148,9 +152,9 @@
     const body = el('div', {},
       el('div', { style: 'margin-bottom:10px' }, el('span', { class: 'badge' + (locked ? ' locked' : '') }, locked ? '🔒 마감됨 · 마스터만 수정' : `수정 가능 · ${fmtLock(e)}부터 마감`)),
       el('dl', { class: 'kv' },
-        el('dt', {}, '채널'), el('dd', {}, e.channel),
+        el('dt', {}, '채널'), el('dd', {}, chLabel(e.channel_code, e.channel)),
         el('dt', {}, '행사명'), el('dd', {}, e.title),
-        el('dt', {}, '제품'), el('dd', {}, `${e.product_name}`, el('br'), el('span', { class: 's', style: 'color:var(--muted);font-size:13px' }, `${e.brand} · ${e.product_code}`)),
+        el('dt', {}, '제품'), el('dd', {}, `${e.product_name}`, el('br'), el('span', { class: 's', style: 'color:var(--muted);font-size:13px' }, `${e.product_code} · ${[catOf(e).l, catOf(e).s].filter(Boolean).join(' / ')}`)),
         el('dt', {}, '기간'), el('dd', {}, `${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`),
         el('dt', {}, '정상가'), el('dd', {}, won(e.list_price)),
         el('dt', {}, '판매단가'), el('dd', {}, el('b', {}, won(e.sale_price)), ' ', el('span', { class: 'off' }, `${discount(e.list_price, e.sale_price)}% 할인`)),
@@ -166,19 +170,19 @@
     close = sheet('행사 상세', body);
   }
 
-  // product search box: type part of a name, brand or code -> suggestions below
+  // product search box: type part of the product number or name -> suggestions below
   function productPicker(initialCode, onPick) {
     const box = el('div', { class: 'f' }), input = el('input', { class: 'in', placeholder: '제품명·브랜드·코드 일부 입력', autocomplete: 'off' });
     const sug = el('div', { class: 'sug' }); sug.hidden = true;
     const info = el('div', { class: 'pick' });
     let chosen = S.products.find(p => p.code === initialCode) || null;
-    const show = p => { info.textContent = p ? `선택됨: ${p.name} · ${p.brand} · ${p.code}${p.list_price ? ' · 정상가 ' + won(p.list_price) : ''}` : '목록에서 제품을 눌러 선택해 주세요.'; info.style.color = p ? '' : 'var(--danger)'; };
-    if (chosen) input.value = chosen.name;
+    const show = p => { info.textContent = p ? `선택됨: ${p.code} · ${p.name}${p.list_price ? ' · 정상가 ' + won(p.list_price) : ''}` : '목록에서 제품을 눌러 선택해 주세요.'; info.style.color = p ? '' : 'var(--danger)'; };
+    if (chosen) input.value = chosen.code + ' · ' + chosen.name;
     const search = () => {
       const q = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-      const hits = S.products.filter(p => p.active !== false && q.every(w => (p.name + ' ' + p.brand + ' ' + p.code).toLowerCase().includes(w))).slice(0, 40);
-      sug.replaceChildren(...(hits.length ? hits.map(p => el('button', { type: 'button', onmousedown: ev => ev.preventDefault(), onclick: () => { chosen = p; input.value = p.name; sug.hidden = true; show(p); onPick(p); } },
-        p.name, el('small', {}, `${p.brand} · ${p.code}${p.list_price ? ' · ' + won(p.list_price) : ''}`))) : [el('div', { class: 'li' }, '맞는 제품이 없습니다.')]));
+      const hits = S.products.filter(p => p.active !== false && q.every(w => (p.code + ' ' + p.name).toLowerCase().includes(w))).slice(0, 40);
+      sug.replaceChildren(...(hits.length ? hits.map(p => el('button', { type: 'button', onmousedown: ev => ev.preventDefault(), onclick: () => { chosen = p; input.value = p.code + ' · ' + p.name; sug.hidden = true; show(p); onPick(p); } },
+        `${p.code} · ${p.name}`, el('small', {}, [p.cat_l, p.cat_s].filter(Boolean).join(' / ') + (p.list_price ? ' · ' + won(p.list_price) : '')))) : [el('div', { class: 'li' }, '맞는 제품이 없습니다.')]));
       sug.hidden = !q.length && !hits.length;
     };
     input.addEventListener('input', () => { chosen = null; show(null); onPick(null); search(); });
@@ -191,7 +195,7 @@
   function openForm(e) {
     const isNew = !e, v = e ? { ...e } : { start_date: S.sel, end_date: S.sel };
     const f = id => document.getElementById(id);
-    const chSel = el('select', { class: 'in', id: 'fe_ch' }, el('option', { value: '' }, '채널 선택'), ...S.channels.filter(c => c.active !== false || c.code === v.channel_code).map(c => el('option', { value: c.code }, c.name)));
+    const chSel = el('select', { class: 'in', id: 'fe_ch' }, el('option', { value: '' }, '채널 선택'), ...S.channels.filter(c => c.active !== false || c.code === v.channel_code).map(c => el('option', { value: c.code }, chLabel(c.code))));
     chSel.value = v.channel_code || (S.channels.length === 1 ? S.channels[0].code : '');
     const lp = el('input', { class: 'in', id: 'fe_lp', inputmode: 'numeric', value: v.list_price != null ? Number(v.list_price).toLocaleString('ko-KR') : '' });
     const sp = el('input', { class: 'in', id: 'fe_sp', inputmode: 'numeric', value: v.sale_price != null ? Number(v.sale_price).toLocaleString('ko-KR') : '' });
@@ -256,12 +260,12 @@
     close = sheet('메뉴', body);
   });
   function download(blob, name) { const a = el('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); }
-  const EV_HEAD = ['채널코드', '행사명', '제품코드', '시작일', '종료일', '정상가', '판매단가', '예상수량', '메모'];
+  const EV_HEAD = ['채널', '행사명', '제품번호', '시작일', '종료일', '정상가', '판매단가', '예상수량', '메모'];
   async function exportEvents() {
     try {
       const all = await api.listAllEvents();
-      const rows = [['채널코드', '채널', '행사명', '제품코드', '제품명', '브랜드', '시작일', '종료일', '정상가', '판매단가', '할인율(%)', '예상수량', '메모', '등록자', '마감'],
-        ...all.map(e => [e.channel_code, e.channel, e.title, e.product_code, e.product_name, e.brand, e.start_date, e.end_date, Number(e.list_price), Number(e.sale_price), discount(e.list_price, e.sale_price), e.expected_qty ?? '', e.memo || '', userName(e.created_by), isLocked(e) ? '마감' : ''])];
+      const rows = [['채널', '행사명', '제품번호', '제품명', '대카테고리', '소카테고리', '시작일', '종료일', '정상가', '판매단가', '할인율(%)', '예상수량', '메모', '등록자', '마감'],
+        ...all.map(e => [chLabel(e.channel_code, e.channel), e.title, e.product_code, e.product_name, catOf(e).l, catOf(e).s, e.start_date, e.end_date, Number(e.list_price), Number(e.sale_price), discount(e.list_price, e.sale_price), e.expected_qty ?? '', e.memo || '', userName(e.created_by), isLocked(e) ? '마감' : ''])];
       download(await buildXlsx([{ name: '행사일정', rows, header: true }]), `행사일정_${todayKst()}.xlsx`);
     } catch (x) { toast(x.message); }
   }
@@ -282,12 +286,12 @@
         if (miss.length) throw new AppError('양식의 머리글이 다릅니다. 없는 열: ' + miss.join(', '));
         const errs = [];
         rows.forEach((r, i) => {
-          const g = n => r[ix(n)] ?? '', pcode = String(g('제품코드')).trim(), p = S.products.find(x => x.code === pcode), ccode = String(g('채널코드')).trim();
+          const g = n => r[ix(n)] ?? '', pcode = String(g('제품번호') !== '' ? g('제품번호') : (r[ix('제품코드')] ?? '')).trim(), p = S.products.find(x => x.code === pcode), craw = String(g('채널')).trim(), chm = S.channels.find(c => c.code === craw || c.name === craw), ccode = chm ? chm.code : craw;
           const e = { channel_code: ccode, title: String(g('행사명')).trim(), product_code: pcode, start_date: excelDate(g('시작일')), end_date: excelDate(g('종료일')),
             list_price: g('정상가') === '' && p ? Number(p.list_price) : num(g('정상가')), sale_price: num(g('판매단가')), expected_qty: ix('예상수량') >= 0 && g('예상수량') !== '' ? num(g('예상수량')) : null, memo: ix('메모') >= 0 ? String(g('메모')).trim() : '' };
           const why = [];
-          if (!S.channels.some(c => c.code === ccode)) why.push('채널코드 없음(' + ccode + ')');
-          if (!p) why.push('제품코드 없음(' + pcode + ')');
+          if (!chm) why.push('채널 없음(' + craw + ')');
+          if (!p) why.push('제품번호 없음(' + pcode + ')');
           if (!e.title) why.push('행사명 없음');
           if (!e.start_date || !e.end_date) why.push('날짜 확인'); else if (e.end_date < e.start_date) why.push('종료일이 시작일보다 빠름');
           if (!(e.list_price > 0)) why.push('정상가 확인'); if (!(e.sale_price >= 0)) why.push('판매단가 확인');
@@ -307,30 +311,46 @@
     });
     close = sheet('일정 엑셀로 등록', el('div', {},
       el('p', { class: 's', style: 'color:var(--muted);margin-top:0' }, '양식을 받아서 채운 뒤 올려 주세요. 정상가를 비우면 제품 기준정보의 정상가가 들어갑니다. 날짜는 2026-11-01 형식이나 엑셀 날짜 모두 됩니다.'),
-      el('button', { class: 'btn', style: 'margin-bottom:12px', onclick: async () => download(await buildXlsx([{ name: '일정등록', rows: [EV_HEAD, ['(채널코드)', '월초 특가', '(제품코드)', todayKst(), addDays(todayKst(), 6), '', 27900, 1000, '']], header: true },
-        { name: '채널코드', rows: [['채널코드', '채널명'], ...S.channels.map(c => [c.code, c.name])], header: true },
-        { name: '제품코드', rows: [['제품코드', '제품명', '브랜드', '정상가'], ...S.products.map(p => [p.code, p.name, p.brand, p.list_price ?? ''])], header: true }]), '일정등록_양식.xlsx') }, '📄 양식 내려받기'),
+      el('button', { class: 'btn', style: 'margin-bottom:12px', onclick: async () => download(await buildXlsx([{ name: '일정등록', rows: [EV_HEAD, ['(채널 예: F1.쿠팡)', '월초 특가', '(제품번호)', todayKst(), addDays(todayKst(), 6), '', 27900, 1000, '']], header: true },
+        { name: '채널목록', rows: [['채널'], ...S.channels.map(c => [chLabel(c.code)])], header: true },
+        { name: '제품번호', rows: [['제품번호', '제품번호 Name', '대카테고리', '소카테고리'], ...S.products.map(p => [p.code, p.name, p.cat_l || '', p.cat_s || ''])], header: true }]), '일정등록_양식.xlsx') }, '📄 양식 내려받기'),
       file, msg, el('div', { class: 'acts' }, go)));
   }
   function masterData() {
     const part = (kind) => {
-      const isP = kind === 'products', head = isP ? ['제품코드', '제품명', '브랜드', '정상가'] : ['채널코드', '채널명'];
+      const isP = kind === 'products', head = isP ? ['대카테고리', '소카테고리', '제품번호', '제품번호 Name', '정상가'] : ['경로세부'];
       const file = el('input', { type: 'file', accept: '.xlsx,.csv', class: 'in' }), msg = el('div');
       file.addEventListener('change', async () => {
         msg.replaceChildren();
         try {
           const rows = (await readTable(file.files[0])).filter(r => r.some(c => c !== ''));
-          const h = rows.shift().map(x => String(x).trim()), ix = n => h.indexOf(n);
-          const miss = head.slice(0, isP ? 3 : 2).filter(x => ix(x) < 0);
-          if (miss.length) throw new AppError('머리글이 다릅니다. 없는 열: ' + miss.join(', '));
+          // find the header row (first row that has the key column) and match columns loosely:
+          // "대카테고리(기획실)" counts as 대카테고리, "제품번호 Name"/"제품명" as the name, etc.
+          const norm = s => String(s).replace(/\s+/g, '').toLowerCase();
+          const find = (h, ...names) => h.findIndex(x => names.some(n => norm(x) === norm(n) || norm(x).startsWith(norm(n) + '(')));
+          let hi = rows.findIndex(r => find(r, ...(isP ? ['제품번호', '제품코드'] : ['경로세부', '채널', '채널코드'])) >= 0);
+          if (hi < 0) throw new AppError(isP ? '"제품번호" 열을 찾지 못했습니다.' : '"경로세부" (또는 채널코드·채널명) 열을 찾지 못했습니다.');
+          const h = rows[hi]; const body = rows.slice(hi + 1);
           const seen = new Set(), list = [];
-          for (const r of rows) {
-            const code = String(r[ix(head[0])] ?? '').trim(); if (!code || seen.has(code)) continue; seen.add(code);
-            if (isP) list.push({ code, name: String(r[ix('제품명')] ?? '').trim(), brand: String(r[ix('브랜드')] ?? '').trim(), list_price: ix('정상가') >= 0 && r[ix('정상가')] !== '' ? num(r[ix('정상가')]) : null, active: true });
-            else list.push({ code, name: String(r[ix('채널명')] ?? '').trim(), active: true });
+          if (isP) {
+            const iCode = find(h, '제품번호', '제품코드'), iName = find(h, '제품번호Name', '제품명', 'Name'), iL = find(h, '대카테고리'), iS = find(h, '소카테고리'), iP = find(h, '정상가');
+            if (iName < 0) throw new AppError('"제품번호 Name" (또는 제품명) 열을 찾지 못했습니다.');
+            for (const r of body) {
+              const code = String(r[iCode] ?? '').trim(); if (!code || seen.has(code)) continue; seen.add(code);
+              list.push({ code, name: String(r[iName] ?? '').trim(), cat_l: iL >= 0 ? String(r[iL] ?? '').trim() : '', cat_s: iS >= 0 ? String(r[iS] ?? '').trim() : '', list_price: iP >= 0 && r[iP] !== '' ? num(r[iP]) : null, active: true });
+            }
+          } else {
+            const iC = find(h, '채널코드'), iN = find(h, '채널명'), iR = find(h, '경로세부', '채널');
+            for (const r of body) {
+              let code, name;
+              if (iC >= 0 && iN >= 0) { code = String(r[iC] ?? '').trim(); name = String(r[iN] ?? '').trim(); }
+              else { code = name = String(r[iR] ?? '').trim(); }   // "A1.상온" kept whole as the channel name
+              if (!code || seen.has(code)) continue; seen.add(code); list.push({ code, name, sort_no: list.length + 1, active: true });
+            }
           }
-          const bad = list.filter(x => !x.name || (isP && !x.brand));
-          if (bad.length) throw new AppError(`이름${isP ? '·브랜드' : ''}가 비어 있는 행이 ${bad.length}개 있습니다: ${bad.slice(0, 5).map(x => x.code).join(', ')}`);
+          if (!list.length) throw new AppError('올릴 내용이 없습니다.');
+          const bad = list.filter(x => !x.name);
+          if (bad.length) throw new AppError(`이름이 비어 있는 행이 ${bad.length}개 있습니다: ${bad.slice(0, 5).map(x => x.code).join(', ')}`);
           if (isP) await api.upsertProducts(list); else await api.upsertChannels(list);
           if (isP) S.products = await api.listProducts(); else S.channels = await api.listChannels();
           fillFilters(); draw();
@@ -338,7 +358,7 @@
         } catch (x) { msg.append(el('div', { class: 'err' }, x.message)); }
         file.value = '';
       });
-      const cur = isP ? S.products.map(p => [p.code, p.name, p.brand, p.list_price ?? '']) : S.channels.map(c => [c.code, c.name]);
+      const cur = isP ? S.products.map(p => [p.cat_l || '', p.cat_s || '', p.code, p.name, p.list_price ?? '']) : S.channels.map(c => [chLabel(c.code)]);
       return el('div', { style: 'margin-bottom:22px' },
         el('h3', { style: 'margin:6px 0' }, isP ? `제품 (${S.products.length}개)` : `채널 (${S.channels.length}개)`),
         el('button', { class: 'btn', style: 'margin-bottom:8px', onclick: async () => download(await buildXlsx([{ name: isP ? '제품' : '채널', rows: [head, ...cur], header: true }]), (isP ? '제품' : '채널') + '_기준정보.xlsx') }, '📄 현재 목록을 양식으로 받기'),
