@@ -112,8 +112,8 @@
     }
     async importEvents(list) { for (const e of list) validate(e); return this._rest('events', { method: 'POST', body: list }); }
     async deleteEvent(id) { const r = await this._rest('events?id=eq.' + id, { method: 'DELETE' }); if (!r || !r.length) throw new AppError('삭제 권한이 없습니다. 담당자는 본인이 등록한 일정만, 종료일 다음 날 오전 9시 전까지 삭제할 수 있습니다.', 403); }
-    listProducts() { return this._rest('products?select=*&order=brand.asc,name.asc'); }
-    listChannels() { return this._rest('channels?select=*&order=name.asc'); }
+    listProducts() { return this._rest('products?select=*&order=code.asc'); }
+    listChannels() { return this._rest('channels?select=*&order=sort_no.asc,code.asc'); }
     upsertChannels(rows) { return this._rest('channels?on_conflict=code', { method: 'POST', body: rows, prefer: 'resolution=merge-duplicates,return=representation' }); }
     upsertProducts(rows) { return this._rest('products?on_conflict=code', { method: 'POST', body: rows, prefer: 'resolution=merge-duplicates,return=representation' }); }
     listUsers() { return this._rest('profiles?select=*&order=created_at.asc'); }
@@ -126,7 +126,7 @@
 
   // ======================= Demo (this browser only) =======================
   class DemoBackend {
-    constructor() { this.demo = true; this.K = 'evcal-demo-v2'; this.user = null; this._load(); }
+    constructor() { this.demo = true; this.K = 'evcal-demo-v4'; this.user = null; this._load(); }
     _load() {
       let d = null; try { d = JSON.parse(localStorage.getItem(this.K) || 'null'); } catch (e) {}
       this.db = d || this._seed(); this._persist();
@@ -138,31 +138,30 @@
         { id: 'u-kim', login: 'kim', display_name: '김담당 (쿠팡)', role: 'manager', active: true, pw: '1234', created_at: new Date().toISOString() },
         { id: 'u-lee', login: 'lee', display_name: '이담당 (네이버)', role: 'manager', active: true, pw: '1234', created_at: new Date().toISOString() },
       ];
-      const channels = [{ code: 'CP', name: '쿠팡', active: true }, { code: 'NV', name: '네이버', active: true }, { code: 'EM', name: '이마트', active: true }, { code: 'ST', name: '11번가', active: true }, { code: 'OWN', name: '자사몰', active: true }];
+      const channels = ['A1.상온', 'B1.시판', 'B2.방판', 'C1.이마트', 'C2.롯데마트', 'C3.홈플러스', 'C4.H기타', 'D1.농협', 'D2.GS슈퍼', 'D3.롯데슈퍼', 'D4.이마트에브리', 'D5.익스프레스', 'D6.코스트코', 'D7.트레이더스', 'D8.VIC', 'D9.서원유통', 'D10.백화점', 'D11.바다마트', 'D12.다이소', 'D13.S기타', 'E1.CU', 'E2.GS', 'E3.세븐', 'E4.이마트24', 'E5.코레일', 'E6.C-Space', 'E7.C기타', 'F1.쿠팡', 'F2.벤더', 'F3.E1기타', 'G1.네이버', 'G2.마켓컬리', 'G3.B마트', 'G4.직영몰', 'G5.올리브영', 'G6.생협', 'G7.병조리원', 'G9.E2기타', 'G8.오픈마켓', 'H1.단체급식', 'H2.F기획기타', 'I1.군납', 'I2.미군납', 'I3.커피빵', 'I4.분식', 'I5.교정협회', 'I6.F1기타', 'J1.스타벅스', 'J2.분식', 'J3.커피빵', 'J4.F2기타', '글로벌', '외주', '기타'].map((n, i) => ({ code: n, name: n, sort_no: i + 1, active: true }));
       const products = [
-        { code: 'A1001', name: '예시분유 1단계 800g', brand: '브랜드A', list_price: 32000, active: true },
-        { code: 'A1002', name: '예시분유 2단계 800g', brand: '브랜드A', list_price: 33000, active: true },
-        { code: 'A1003', name: '예시분유 3단계 800g', brand: '브랜드A', list_price: 34000, active: true },
-        { code: 'B2001', name: '샘플분유 1단계 750g', brand: '브랜드B', list_price: 24000, active: true },
-        { code: 'B2002', name: '샘플분유 2단계 750g', brand: '브랜드B', list_price: 25000, active: true },
-        { code: 'C3001', name: '테스트 산양분유 1단계', brand: '브랜드C', list_price: 41000, active: true },
-      ];
-      const t = new Date(Date.now() + KST); const y = t.getUTCFullYear(), m = t.getUTCMonth();
+        { code: '1000101', name: '예시분유 1단계 800g', cat_l: 'A.분유', cat_s: 'A01. 분유 (1단계)', list_price: 32000, active: true },
+        { code: '1000102', name: '예시분유 2단계 800g', cat_l: 'A.분유', cat_s: 'A02. 분유 (2단계)', list_price: 33000, active: true },
+        { code: '1000103', name: '예시분유 3단계 800g', cat_l: 'A.분유', cat_s: 'A03. 분유 (3단계)', list_price: 34000, active: true },
+        { code: '2000201', name: '샘플우유 190ml 24입', cat_l: 'B.우유', cat_s: 'B01. 우유 (멸균)', list_price: 24000, active: true },
+        { code: '2000202', name: '샘플우유 저지방 190ml 24입', cat_l: 'B.우유', cat_s: 'B02. 우유 (저지방)', list_price: 25000, active: true },
+        { code: '3000301', name: '테스트 단백질 음료 250ml 18입', cat_l: 'C.단백질', cat_s: 'C01. 단백질 (음료)', list_price: 41000, active: true },
+      ];      const t = new Date(Date.now() + KST); const y = t.getUTCFullYear(), m = t.getUTCMonth();
       const D = (dd, mm = m) => new Date(Date.UTC(y, mm, dd)).toISOString().slice(0, 10);
       const P = c => products.find(p => p.code === c);
-      const CH = n => channels.find(c => c.name === n).code;
-      const mk = (id, channel, title, code, s, e, sp, qty, by, memo) => ({ id, channel_code: CH(channel), channel, title, product_code: code, product_name: P(code).name, brand: P(code).brand,
+      const CH = n => channels.find(c => c.name.endsWith('.' + n)).code;
+      const mk = (id, channel, title, code, s, e, sp, qty, by, memo) => ({ id, channel_code: CH(channel), channel: CH(channel), title, product_code: code, product_name: P(code).name, cat_l: P(code).cat_l, cat_s: P(code).cat_s,
         start_date: s, end_date: e, list_price: P(code).list_price, sale_price: sp, expected_qty: qty, memo: memo || '', created_by: by, created_at: new Date().toISOString(), updated_by: by, updated_at: new Date().toISOString() });
       const events = [
-        mk(1, '쿠팡', '월초 특가', 'A1001', D(1), D(5), 27900, 1200, 'u-kim'),
-        mk(2, '네이버', '브랜드데이', 'A1002', D(3), D(9), 28500, 800, 'u-lee', '쿠폰 10% 별도'),
-        mk(3, '이마트', '행사 매대', 'B2001', D(7), D(20), 21000, 500, 'u-master'),
-        mk(4, '쿠팡', '타임딜', 'C3001', D(12), D(13), 34900, 300, 'u-kim'),
-        mk(5, '11번가', '십일절', 'B2002', D(11), D(11), 19900, 1500, 'u-master'),
-        mk(6, '네이버', '라이브 방송', 'A1003', D(18), D(18), 29000, 400, 'u-lee'),
-        mk(7, '자사몰', '정기구독 할인', 'A1001', D(15), D(28), 28800, null, 'u-master', '정기구독 고객 한정'),
-        mk(8, '쿠팡', '월말 특가', 'A1002', D(25), D(30), 29500, 900, 'u-kim'),
-        mk(9, '네이버', '다음달 예고 행사', 'B2001', D(2, m + 1), D(8, m + 1), 21500, 600, 'u-lee'),
+        mk(1, '쿠팡', '월초 특가', '1000101', D(1), D(5), 27900, 1200, 'u-kim'),
+        mk(2, '네이버', '브랜드데이', '1000102', D(3), D(9), 28500, 800, 'u-lee', '쿠폰 10% 별도'),
+        mk(3, '이마트', '행사 매대', '2000201', D(7), D(20), 21000, 500, 'u-master'),
+        mk(4, '쿠팡', '타임딜', '3000301', D(12), D(13), 34900, 300, 'u-kim'),
+        mk(5, 'CU', '십일절', '2000202', D(11), D(11), 19900, 1500, 'u-master'),
+        mk(6, '네이버', '라이브 방송', '1000103', D(18), D(18), 29000, 400, 'u-lee'),
+        mk(7, '직영몰', '정기구독 할인', '1000101', D(15), D(28), 28800, null, 'u-master', '정기구독 고객 한정'),
+        mk(8, '쿠팡', '월말 특가', '1000102', D(25), D(30), 29500, 900, 'u-kim'),
+        mk(9, '네이버', '다음달 예고 행사', '2000201', D(2, m + 1), D(8, m + 1), 21500, 600, 'u-lee'),
       ];
       return { users, channels, products, events, invites: [{ code: 'DEMO-2026', role: 'manager', note: '시험용', created_by: 'u-master', created_at: new Date().toISOString(), used_by: null, used_at: null, revoked: false }], log: [], seq: 10 };
     }
@@ -192,7 +191,7 @@
       this._guard(); validate(ev);
       const p = this.db.products.find(x => x.code === ev.product_code); if (!p) throw new AppError('등록되지 않은 제품 코드입니다: ' + ev.product_code);
       const c = this.db.channels.find(x => x.code === ev.channel_code); if (!c) throw new AppError('등록되지 않은 채널 코드입니다: ' + ev.channel_code);
-      const base = { channel_code: c.code, channel: c.name, title: ev.title.trim(), product_code: p.code, product_name: p.name, brand: p.brand, start_date: ev.start_date, end_date: ev.end_date,
+      const base = { channel_code: c.code, channel: c.name, title: ev.title.trim(), product_code: p.code, product_name: p.name, cat_l: p.cat_l || '', cat_s: p.cat_s || '', start_date: ev.start_date, end_date: ev.end_date,
         list_price: ev.list_price, sale_price: ev.sale_price, expected_qty: ev.expected_qty ?? null, memo: ev.memo || '', updated_by: this.user.id, updated_at: new Date().toISOString() };
       if (ev.id) {
         const cur = this.db.events.find(x => x.id === ev.id); if (!cur) throw new AppError('일정을 찾지 못했습니다.');
@@ -209,8 +208,8 @@
       if (!canEdit(this.user, cur)) throw new AppError('삭제 권한이 없습니다. 담당자는 본인이 등록한 일정만, 종료일 다음 날 오전 9시 전까지 삭제할 수 있습니다.', 403);
       this.db.events = this.db.events.filter(x => x.id !== id); this._log('delete', cur, null); this._persist();
     }
-    async listProducts() { this._guard(); return [...this.db.products].sort((a, b) => a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name)); }
-    async listChannels() { this._guard(); return [...this.db.channels].sort((a, b) => a.name.localeCompare(b.name)); }
+    async listProducts() { this._guard(); return [...this.db.products].sort((a, b) => a.code.localeCompare(b.code)); }
+    async listChannels() { this._guard(); return [...this.db.channels].sort((a, b) => (a.sort_no || 0) - (b.sort_no || 0)); }
     async upsertChannels(rows) { this._master(); for (const r of rows) { const i = this.db.channels.findIndex(p => p.code === r.code); if (i >= 0) this.db.channels[i] = { ...this.db.channels[i], ...r }; else this.db.channels.push({ active: true, ...r }); } this._persist(); return rows; }
     async upsertProducts(rows) { this._master(); for (const r of rows) { const i = this.db.products.findIndex(p => p.code === r.code); if (i >= 0) this.db.products[i] = { ...this.db.products[i], ...r }; else this.db.products.push({ active: true, ...r }); } this._persist(); return rows; }
     _master() { this._guard(); if (this.user.role !== 'master') throw new AppError('마스터만 할 수 있습니다.', 403); }
