@@ -126,7 +126,7 @@
 
   // ======================= Demo (this browser only) =======================
   class DemoBackend {
-    constructor() { this.demo = true; this.K = 'evcal-demo-v4'; this.user = null; this._load(); }
+    constructor() { this.demo = true; this.K = 'evcal-demo-v5'; this.user = null; this._load(); }
     _load() {
       let d = null; try { d = JSON.parse(localStorage.getItem(this.K) || 'null'); } catch (e) {}
       this.db = d || this._seed(); this._persist();
@@ -139,29 +139,24 @@
         { id: 'u-lee', login: 'lee', display_name: '이담당 (네이버)', role: 'manager', active: true, pw: '1234', created_at: new Date().toISOString() },
       ];
       const channels = ['A1.상온', 'B1.시판', 'B2.방판', 'C1.이마트', 'C2.롯데마트', 'C3.홈플러스', 'C4.H기타', 'D1.농협', 'D2.GS슈퍼', 'D3.롯데슈퍼', 'D4.이마트에브리', 'D5.익스프레스', 'D6.코스트코', 'D7.트레이더스', 'D8.VIC', 'D9.서원유통', 'D10.백화점', 'D11.바다마트', 'D12.다이소', 'D13.S기타', 'E1.CU', 'E2.GS', 'E3.세븐', 'E4.이마트24', 'E5.코레일', 'E6.C-Space', 'E7.C기타', 'F1.쿠팡', 'F2.벤더', 'F3.E1기타', 'G1.네이버', 'G2.마켓컬리', 'G3.B마트', 'G4.직영몰', 'G5.올리브영', 'G6.생협', 'G7.병조리원', 'G9.E2기타', 'G8.오픈마켓', 'H1.단체급식', 'H2.F기획기타', 'I1.군납', 'I2.미군납', 'I3.커피빵', 'I4.분식', 'I5.교정협회', 'I6.F1기타', 'J1.스타벅스', 'J2.분식', 'J3.커피빵', 'J4.F2기타', '글로벌', '외주', '기타'].map((n, i) => ({ code: n, name: n, sort_no: i + 1, active: true }));
-      const products = [
-        { code: '1000101', name: '예시분유 1단계 800g', cat_l: 'A.분유', cat_s: 'A01. 분유 (1단계)', list_price: 32000, active: true },
-        { code: '1000102', name: '예시분유 2단계 800g', cat_l: 'A.분유', cat_s: 'A02. 분유 (2단계)', list_price: 33000, active: true },
-        { code: '1000103', name: '예시분유 3단계 800g', cat_l: 'A.분유', cat_s: 'A03. 분유 (3단계)', list_price: 34000, active: true },
-        { code: '2000201', name: '샘플우유 190ml 24입', cat_l: 'B.우유', cat_s: 'B01. 우유 (멸균)', list_price: 24000, active: true },
-        { code: '2000202', name: '샘플우유 저지방 190ml 24입', cat_l: 'B.우유', cat_s: 'B02. 우유 (저지방)', list_price: 25000, active: true },
-        { code: '3000301', name: '테스트 단백질 음료 250ml 18입', cat_l: 'C.단백질', cat_s: 'C01. 단백질 (음료)', list_price: 41000, active: true },
-      ];      const t = new Date(Date.now() + KST); const y = t.getUTCFullYear(), m = t.getUTCMonth();
+      const products = (window.DEMO_PRODUCTS || []).map(p => ({ ...p }));
+      const t = new Date(Date.now() + KST); const y = t.getUTCFullYear(), m = t.getUTCMonth();
       const D = (dd, mm = m) => new Date(Date.UTC(y, mm, dd)).toISOString().slice(0, 10);
-      const P = c => products.find(p => p.code === c);
+      const P = c => products.find(p => p.code === c) || { name: c, cat_l: '', cat_s: '' };
       const CH = n => channels.find(c => c.name.endsWith('.' + n)).code;
-      const mk = (id, channel, title, code, s, e, sp, qty, by, memo) => ({ id, channel_code: CH(channel), channel: CH(channel), title, product_code: code, product_name: P(code).name, cat_l: P(code).cat_l, cat_s: P(code).cat_s,
-        start_date: s, end_date: e, list_price: P(code).list_price, sale_price: sp, expected_qty: qty, memo: memo || '', created_by: by, created_at: new Date().toISOString(), updated_by: by, updated_at: new Date().toISOString() });
+      // demo prices are made up (the product list has no 정상가)
+      const mk = (id, channel, title, code, s, e, lp, sp, qty, by, memo) => ({ id, channel_code: CH(channel), channel: CH(channel), title, product_code: code, product_name: P(code).name, cat_l: P(code).cat_l, cat_s: P(code).cat_s,
+        start_date: s, end_date: e, list_price: lp, sale_price: sp, expected_qty: qty, memo: memo || '', created_by: by, created_at: new Date().toISOString(), updated_by: by, updated_at: new Date().toISOString() });
       const events = [
-        mk(1, '쿠팡', '월초 특가', '1000101', D(1), D(5), 27900, 1200, 'u-kim'),
-        mk(2, '네이버', '브랜드데이', '1000102', D(3), D(9), 28500, 800, 'u-lee', '쿠폰 10% 별도'),
-        mk(3, '이마트', '행사 매대', '2000201', D(7), D(20), 21000, 500, 'u-master'),
-        mk(4, '쿠팡', '타임딜', '3000301', D(12), D(13), 34900, 300, 'u-kim'),
-        mk(5, 'CU', '십일절', '2000202', D(11), D(11), 19900, 1500, 'u-master'),
-        mk(6, '네이버', '라이브 방송', '1000103', D(18), D(18), 29000, 400, 'u-lee'),
-        mk(7, '직영몰', '정기구독 할인', '1000101', D(15), D(28), 28800, null, 'u-master', '정기구독 고객 한정'),
-        mk(8, '쿠팡', '월말 특가', '1000102', D(25), D(30), 29500, 900, 'u-kim'),
-        mk(9, '네이버', '다음달 예고 행사', '2000201', D(2, m + 1), D(8, m + 1), 21500, 600, 'u-lee'),
+        mk(1, '쿠팡', '월초 특가', '2106411', D(1), D(5), 38000, 31900, 1200, 'u-kim'),
+        mk(2, '네이버', '브랜드데이', '2106420', D(3), D(9), 62000, 52900, 800, 'u-lee', '쿠폰 10% 별도'),
+        mk(3, '이마트', '행사 매대', '2105753', D(7), D(20), 24000, 19900, 500, 'u-master'),
+        mk(4, '쿠팡', '타임딜', '2106236', D(12), D(13), 21000, 16900, 300, 'u-kim'),
+        mk(5, 'CU', '1+1 행사', '2105360', D(11), D(11), 15000, 12000, 1500, 'u-master'),
+        mk(6, '네이버', '라이브 방송', '2105127', D(18), D(18), 18000, 14900, 400, 'u-lee'),
+        mk(7, '직영몰', '정기구독 할인', '2106374', D(15), D(28), 36000, 30600, null, 'u-master', '정기구독 고객 한정'),
+        mk(8, '쿠팡', '월말 특가', '2105905', D(25), D(30), 96000, 79900, 900, 'u-kim'),
+        mk(9, '네이버', '다음달 예고 행사', '4104563', D(2, m + 1), D(8, m + 1), 27000, 22900, 600, 'u-lee'),
       ];
       return { users, channels, products, events, invites: [{ code: 'DEMO-2026', role: 'manager', note: '시험용', created_by: 'u-master', created_at: new Date().toISOString(), used_by: null, used_at: null, revoked: false }], log: [], seq: 10 };
     }
