@@ -32,20 +32,25 @@
   const userName = id => { const u = S.users.find(x => x.id === id); return u ? u.display_name : '-'; };
 
   // ---------------- login ----------------
+  // "아이디 저장": remember the login id on this device (never the password)
+  const ID_KEY = 'evcal-saved-id' + (api.demo ? '-demo' : '');
+  const savedId = () => { try { return localStorage.getItem(ID_KEY) || ''; } catch (e) { return ''; } };
+  const rememberId = id => { try { if ($('lSave').checked && id) localStorage.setItem(ID_KEY, id.trim().toLowerCase()); else localStorage.removeItem(ID_KEY); } catch (e) {} };
   function showLogin() {
     $('mainView').hidden = true; $('loginView').hidden = false;
+    const sid = savedId(); if (sid) { $('lId').value = sid; $('lSave').checked = true; setTimeout(() => $('lPw').focus(), 50); }
     if (api.demo) { $('demoLogin').hidden = false; $('demoLogin').textContent = '시연용 화면입니다 (데이터는 이 기기에만 저장). 마스터: master / 1234, 담당자: kim / 1234, 가입 코드: DEMO-2026'; }
   }
   $('toSignup').addEventListener('click', () => { const s = $('signupForm').hidden; $('signupForm').hidden = !s; $('loginForm').hidden = s; $('toSignup').textContent = s ? '이미 계정이 있으면 로그인하기' : '처음이신가요? 가입 코드로 등록하기'; });
   $('loginForm').addEventListener('submit', async e => {
     e.preventDefault(); $('lErr').hidden = true; $('lBtn').disabled = true;
-    try { S.user = await api.login($('lId').value, $('lPw').value); $('lPw').value = ''; await start(); }
+    try { S.user = await api.login($('lId').value, $('lPw').value); $('lPw').value = ''; rememberId($('lId').value); await start(); }
     catch (x) { $('lErr').textContent = x.message; $('lErr').hidden = false; }
     $('lBtn').disabled = false;
   });
   $('signupForm').addEventListener('submit', async e => {
     e.preventDefault(); $('sErr').hidden = true; $('sBtn').disabled = true;
-    try { S.user = await api.signup($('sCode').value, $('sId').value, $('sName').value, $('sPw').value); $('sPw').value = ''; await start(); toast('등록되었습니다. 환영합니다!'); }
+    try { S.user = await api.signup($('sCode').value, $('sId').value, $('sName').value, $('sPw').value); $('sPw').value = ''; rememberId($('sId').value); await start(); toast('등록되었습니다. 환영합니다!'); }
     catch (x) { $('sErr').textContent = x.message; $('sErr').hidden = false; }
     $('sBtn').disabled = false;
   });
