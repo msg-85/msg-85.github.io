@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>행사 일정 캘린더</title>
 <meta name="theme-color" content="#1f6f5c">
+<meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="행사 캘린더">
 <meta name="mobile-web-app-capable" content="yes">
@@ -30,7 +31,8 @@
     --brand: #3fae8e; --brand-ink: #08130f; --danger: #ff7b6b; --warn-bg: #3a3014; --warn-ink: #ffd88a;
     --today: #3fae8e; --sel: #1f3a31; --shadow: 0 8px 30px rgba(0,0,0,.5);
 }
-:root { color-scheme: light; } :root[data-theme="dark"] { color-scheme: dark; }
+/* "only" stops Android Chrome's automatic dark mode from re-darkening the page when 밝게 is chosen */
+:root { color-scheme: light dark; } :root[data-theme="light"] { color-scheme: only light; } :root[data-theme="dark"] { color-scheme: only dark; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif; -webkit-text-size-adjust: 100%; }
