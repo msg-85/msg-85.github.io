@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>행사 일정 캘린더</title>
+<meta name="theme-color" content="#1f6f5c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="행사 캘린더">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root {
+  --bg: #f4f6f5; --sheet: #ffffff; --ink: #18211e; --muted: #66726d; --line: #dfe5e2; --soft: #eef2f0;
+  --brand: #1f6f5c; --brand-ink: #ffffff; --danger: #c0392b; --warn-bg: #fff4d6; --warn-ink: #7a5600;
+  --today: #1f6f5c; --sel: #e2f0eb; --shadow: 0 8px 30px rgba(0,0,0,.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111614; --sheet: #1a201e; --ink: #e8eeeb; --muted: #94a19b; --line: #2c3532; --soft: #222a27;
+    --brand: #3fae8e; --brand-ink: #08130f; --danger: #ff7b6b; --warn-bg: #3a3014; --warn-ink: #ffd88a;
+    --today: #3fae8e; --sel: #1f3a31; --shadow: 0 8px 30px rgba(0,0,0,.5);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif; -webkit-text-size-adjust: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 12px calc(90px + env(safe-area-inset-bottom)); }
+/* top bar */
+.top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: calc(8px + env(safe-area-inset-top)) 0 6px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.grow { flex: 1; min-width: 0; }
+.month { font-size: 21px; font-weight: 700; letter-spacing: -.3px; }
+.ib { border: 0; background: transparent; width: 40px; height: 40px; border-radius: 20px; cursor: pointer; font-size: 18px; display: inline-grid; place-items: center; }
+.ib:active { background: var(--soft); }
+.chip { border: 1px solid var(--line); background: var(--sheet); border-radius: 18px; padding: 6px 12px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+.filters { display: flex; gap: 8px; margin-top: 6px; overflow-x: auto; scrollbar-width: none; }
+.filters::-webkit-scrollbar { display: none; }
+.filters select { border: 1px solid var(--line); background: var(--sheet); border-radius: 18px; padding: 6px 10px; font-size: 14px; max-width: 48%; }
+.demo { background: var(--warn-bg); color: var(--warn-ink); border-radius: 10px; padding: 8px 12px; font-size: 13px; margin: 6px 0; }
+/* calendar */
+.cal { background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.dow { display: grid; grid-template-columns: repeat(7, 1fr); font-size: 12px; color: var(--muted); text-align: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.dow span:first-child, .sun { color: #d0453a; } .dow span:last-child, .sat { color: #2f6fd0; }
+.week { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--line); }
+.week:last-child { border-bottom: 0; }
+.day { border-right: 1px solid var(--line); padding: 3px 3px 0; cursor: pointer; min-width: 0; }
+.day:last-child { border-right: 0; }
+.day .n { font-size: 13px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 12px; margin: 0 auto; }
+.day.out .n { opacity: .35; }
+.day.today .n { background: var(--today); color: var(--brand-ink); font-weight: 700; }
+.day.sel { background: var(--sel); }
+.more { position: absolute; font-size: 10px; color: var(--muted); text-align: center; pointer-events: none; }
+.bar { position: absolute; height: 16px; border-radius: 4px; font-size: 11px; line-height: 16px; padding: 0 4px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.bar.cont-l { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.bar.cont-r { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+/* day list */
+.dhead { margin: 16px 2px 8px; font-weight: 700; font-size: 16px; display: flex; align-items: baseline; gap: 8px; }
+.dhead small { color: var(--muted); font-weight: 400; font-size: 13px; }
+.card { background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; display: flex; gap: 12px; }
+.card .dot { width: 6px; border-radius: 3px; flex: none; }
+.card .t { font-weight: 600; }
+.card .s { color: var(--muted); font-size: 13px; }
+.price { display: flex; gap: 10px; align-items: baseline; margin-top: 4px; flex-wrap: wrap; }
+.price b { font-size: 16px; } .price del { color: var(--muted); font-size: 13px; }
+.off { color: var(--danger); font-weight: 700; font-size: 13px; }
+.lock { font-size: 12px; color: var(--muted); }
+.empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: 14px; }
+.fab { position: fixed; right: max(18px, calc(50% - 362px)); bottom: calc(22px + env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 29px; border: 0; background: var(--brand); color: var(--brand-ink); font-size: 30px; box-shadow: var(--shadow); cursor: pointer; z-index: 6; }
+/* sheets */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { background: var(--sheet); width: 100%; max-width: 760px; max-height: 92vh; overflow: auto; border-radius: 18px 18px 0 0; padding: 8px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow: var(--shadow); }
+.grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 4px auto 8px; }
+.sh { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: -8px; background: var(--sheet); padding: 6px 0; z-index: 1; }
+.sh h2 { font-size: 18px; margin: 0; flex: 1; }
+.f { margin-bottom: 12px; position: relative; }
+.f label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.f label i { color: var(--danger); font-style: normal; }
+.in { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 11px 12px; font-size: 16px; }
+.in:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sug { position: absolute; left: 0; right: 0; top: 100%; z-index: 3; background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); max-height: 260px; overflow: auto; margin-top: 4px; }
+.sug button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.sug button:last-child { border-bottom: 0; }
+.sug button:active, .sug button:hover { background: var(--soft); }
+.sug small { color: var(--muted); display: block; font-size: 12px; }
+.pick { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.calc { background: var(--soft); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-bottom: 12px; }
+.btn { border: 1px solid var(--line); background: var(--sheet); border-radius: 10px; padding: 11px 16px; cursor: pointer; font-weight: 600; }
+.btn.pri { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.del { color: var(--danger); }
+.btn:disabled { opacity: .5; cursor: default; }
+.acts { display: flex; gap: 8px; margin-top: 14px; }
+.acts .btn { flex: 1; }
+.err { background: rgba(192,57,43,.1); color: var(--danger); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin: 8px 0; white-space: pre-wrap; }
+.ok { background: var(--sel); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin: 8px 0; white-space: pre-wrap; }
+.kv { display: grid; grid-template-columns: 92px 1fr; gap: 8px 10px; font-size: 15px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; word-break: break-word; }
+.badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--soft); color: var(--muted); }
+.badge.locked { background: var(--warn-bg); color: var(--warn-ink); }
+.menu button.mi { display: flex; width: 100%; align-items: center; gap: 10px; border: 0; background: transparent; padding: 13px 4px; border-bottom: 1px solid var(--line); cursor: pointer; text-align: left; font-size: 16px; }
+.menu .sec { font-size: 12px; color: var(--muted); margin: 14px 4px 2px; }
+.list { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.li { padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.li:last-child { border-bottom: 0; }
+.code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 16px; font-weight: 700; letter-spacing: 1px; }
+/* login */
+.login { max-width: 420px; margin: 10vh auto 0; padding: 0 16px; }
+.login h1 { font-size: 24px; margin: 0 0 4px; }
+.login p { color: var(--muted); margin: 0 0 20px; }
+.lnk { border: 0; background: transparent; color: var(--brand); cursor: pointer; padding: 8px 0; font-weight: 600; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom)); background: #222; color: #fff; padding: 10px 16px; border-radius: 20px; font-size: 14px; z-index: 40; max-width: 90%; }
+</style>
+</head>
+<body>
+<div id="loginView" class="login" hidden>
+  <h1>행사 일정 캘린더</h1>
+  <p id="loginSub">로그인한 사람만 볼 수 있습니다.</p>
+  <div id="demoLogin" class="demo" hidden></div>
+  <form id="loginForm">
+    <div class="f"><label>아이디</label><input class="in" id="lId" autocomplete="username" autocapitalize="none" required></div>
+    <div class="f"><label>비밀번호</label><input class="in" id="lPw" type="password" autocomplete="current-password" required></div>
+    <div id="lErr" class="err" hidden></div>
+    <button class="btn pri" style="width:100%" id="lBtn">로그인</button>
+  </form>
+  <button class="lnk" id="toSignup" type="button">처음이신가요? 가입 코드로 등록하기</button>
+  <form id="signupForm" hidden>
+    <div class="f"><label>가입 코드 (마스터에게 받은 코드)</label><input class="in" id="sCode" autocapitalize="characters" required></div>
+    <div class="f"><label>아이디 (영문·숫자)</label><input class="in" id="sId" autocapitalize="none" pattern="[A-Za-z0-9._-]{3,30}" required></div>
+    <div class="f"><label>이름 (예: 홍길동 / 쿠팡)</label><input class="in" id="sName" required></div>
+    <div class="f"><label>비밀번호 (6자 이상)</label><input class="in" id="sPw" type="password" minlength="6" autocomplete="new-password" required></div>
+    <div id="sErr" class="err" hidden></div>
+    <button class="btn pri" style="width:100%" id="sBtn">등록하고 시작하기</button>
+  </form>
+</div>
+
+<div id="mainView" hidden>
+  <div class="wrap">
+    <div class="top">
+      <div class="row">
+        <button class="ib" id="prevBtn" aria-label="이전 달">‹</button>
+        <div class="month" id="monthLabel"></div>
+        <button class="ib" id="nextBtn" aria-label="다음 달">›</button>
+        <div class="grow"></div>
+        <button class="chip" id="todayBtn">오늘</button>
+        <button class="ib" id="menuBtn" aria-label="메뉴">☰</button>
+      </div>
+      <div class="filters">
+        <select id="fChannel" aria-label="채널"><option value="">전체 채널</option></select>
+        <select id="fBrand" aria-label="브랜드"><option value="">전체 브랜드</option></select>
+      </div>
+      <div id="demoBar" class="demo" hidden></div>
+    </div>
+    <div class="cal">
+      <div class="dow"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+      <div id="grid"></div>
+    </div>
+    <div class="dhead" id="dayHead"></div>
+    <div id="dayList"></div>
+  </div>
+  <button class="fab" id="addBtn" aria-label="일정 등록" hidden>+</button>
+</div>
+
+<script src="config.js"></script>
+<script src="xlsx-write.js"></script>
+<script src="xlsx-read.js"></script>
+<script src="backend.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
