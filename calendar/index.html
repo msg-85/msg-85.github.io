@@ -134,6 +134,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   <form id="loginForm">
     <div class="f"><label>아이디</label><input class="in" id="lId" autocomplete="username" autocapitalize="none" required></div>
     <div class="f"><label>비밀번호</label><input class="in" id="lPw" type="password" autocomplete="current-password" required></div>
+    <label style="display:flex;align-items:center;gap:8px;margin:-4px 0 12px;font-size:14px"><input type="checkbox" id="lSave" checked> 아이디 저장</label>
     <div id="lErr" class="err" hidden></div>
     <button class="btn pri" style="width:100%" id="lBtn">로그인</button>
   </form>
