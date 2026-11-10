@@ -247,8 +247,8 @@
   const REQ_FIELDS = ['channel_code', 'channel_detail', 'title', 'product_code', 'start_date', 'end_date', 'list_price', 'sale_price', 'pack_qty', 'expected_qty', 'memo'];
   // channels whose name ends with 기타 (기타, C4.H기타, G9.E2기타 …) need a free-text detail name
   const isEtc = name => /기타$/.test(String(name || '').trim());
-  // managers: new-event requests any time; change/delete requests on events they own (registered by them)
-  const canRequest = (user, ev) => !!user && user.role === 'manager' && (!ev || ev.created_by === user.id);
+  // managers: new-event requests any time; change/delete requests on events in their assigned channels, or events they registered
+  const canRequest = (user, ev) => !!user && user.role === 'manager' && (!ev || ev.created_by === user.id || (user.channels || []).includes(ev.channel_code));
   function checkRequest(user, ev, req) {
     if (!user || user.role !== 'manager') throw new AppError('요청은 담당자만 보낼 수 있습니다. 마스터는 직접 등록·수정하면 됩니다.', 403);
     if (req.kind === 'create') {
@@ -258,7 +258,7 @@
       return;
     }
     if (!ev) throw new AppError('일정을 찾지 못했습니다.');
-    if (!canRequest(user, ev)) throw new AppError('수정·삭제 요청은 본인이 등록한 행사에만 할 수 있습니다.', 403);
+    if (!canRequest(user, ev)) throw new AppError('수정·삭제 요청은 본인 담당 채널의 행사(또는 본인이 등록한 행사)에만 할 수 있습니다.', 403);
     if (!req.reason || !req.reason.trim()) throw new AppError('요청 사유를 적어 주세요.');
     if (req.kind === 'update') {
       const keys = Object.keys(req.changes || {}).filter(k => REQ_FIELDS.includes(k));
