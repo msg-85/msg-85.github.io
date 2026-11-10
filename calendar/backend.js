@@ -126,7 +126,7 @@
 
   // ======================= Demo (this browser only) =======================
   class DemoBackend {
-    constructor() { this.demo = true; this.K = 'evcal-demo-v6'; this.user = null; this._load(); }
+    constructor() { this.demo = true; this.K = 'evcal-demo-v7'; this.user = null; this._load(); }
     _load() {
       let d = null; try { d = JSON.parse(localStorage.getItem(this.K) || 'null'); } catch (e) {}
       this.db = d || this._seed(); this._persist();
