@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
-  const { AppError, lockAt, isLocked, canEdit, canCreate, canRequest, REQ_FIELDS, todayKst, discount } = window.Cal;
+  const { AppError, lockAt, isLocked, canEdit, canCreate, canRequest, REQ_FIELDS, isEtc, todayKst, discount } = window.Cal;
   const cfg = window.CAL_CONFIG || {};
   const params = new URLSearchParams(location.search);
   const useDemo = params.has('demo') || !cfg.url || !cfg.anonKey;
@@ -24,6 +24,7 @@
   };
   function toast(msg) { const t = el('div', { class: 'toast' }, msg); document.body.append(t); setTimeout(() => t.remove(), 2600); }
   const colorOf = code => { let h = 0; for (const c of String(code)) h = (h * 31 + c.charCodeAt(0)) >>> 0; const i = S.channels.findIndex(c => c.code === code); return PALETTE[(i >= 0 ? i : h) % PALETTE.length]; };
+  const chDisp = e => chLabel(e.channel_code, e.channel) + (e.channel_detail ? `(${e.channel_detail})` : '');
   const chLabel = (code, fallback) => { const c = S.channels.find(x => x.code === code); return c ? (c.name === c.code || c.name.startsWith(c.code + '.') ? c.name : `${c.code}.${c.name}`) : (fallback || code); };
   // categories come from the current product master (so a re-uploaded master fixes old events too), else from the event's own copy
   const catOf = e => { const p = S.products.find(x => x.code === e.product_code); return { l: (p && p.cat_l) || e.cat_l || '', s: (p && p.cat_s) || e.cat_s || '' }; };
@@ -59,6 +60,8 @@
     try { [S.channels, S.products, S.users] = await Promise.all([api.listChannels(), api.listProducts(), api.listUsers()]); }
     catch (x) { return fail(x); }
     fillFilters(); await load(); refreshRequests();
+    // first login on this device (per role): show the short guide once
+    try { const k = 'evcal-help-seen-' + S.user.role; if (!localStorage.getItem(k)) { localStorage.setItem(k, '1'); showHelp(); } } catch (e) {}
   }
   function fail(x) { if (x.code === 401) { api.logout(); showLogin(); } else toast(x.message); }
   function fillFilters() {
@@ -119,16 +122,15 @@
     $('dayList').replaceChildren(...(list.length ? list.map(card) : [el('div', { class: 'empty' }, '이 날 행사가 없습니다.')]));
   }
   function card(e) {
-    const locked = isLocked(e);
     return el('div', { class: 'card', onclick: () => openDetail(e) },
       el('div', { class: 'dot', style: 'background:' + colorOf(e.channel_code) }),
       el('div', { class: 'grow' },
-        el('div', { class: 's' }, `${chLabel(e.channel_code, e.channel)} · ${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`),
+        el('div', { class: 's' }, `${chDisp(e)} · ${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`),
         el('div', { class: 't' }, e.title),
         el('div', { class: 's' }, `${e.product_code} · ${e.product_name}`),
         el('div', { class: 'price' }, el('b', {}, won(e.sale_price)), el('del', {}, won(e.list_price)), el('span', { class: 'off' }, `${discount(e.list_price, e.sale_price)}%↓`),
           e.expected_qty != null ? el('span', { class: 's' }, `예상 ${Number(e.expected_qty).toLocaleString('ko-KR')}개`) : null),
-        locked ? el('div', { class: 'lock' }, '🔒 마감됨 (마스터만 수정)') : null));
+        S.requests.some(r => r.event_id === e.id && r.status === 'pending') ? el('div', { class: 'lock' }, '⏳ 수정 요청 승인 대기') : null));
   }
   $('prevBtn').addEventListener('click', () => { S.m--; if (S.m < 0) { S.m = 11; S.y--; } S.sel = ymd(S.y, S.m, 1); load(); });
   $('nextBtn').addEventListener('click', () => { S.m++; if (S.m > 11) { S.m = 0; S.y++; } S.sel = ymd(S.y, S.m, 1); load(); });
@@ -148,16 +150,17 @@
     return close;
   }
   function openDetail(e) {
-    const locked = isLocked(e), mine = canEdit(S.user, e);
+    const mine = canEdit(S.user, e), past = e.end_date < todayKst();
     const body = el('div', {},
-      el('div', { style: 'margin-bottom:10px' }, el('span', { class: 'badge' + (locked ? ' locked' : '') }, locked ? '🔒 마감됨 · 마스터만 수정' : `수정 가능 · ${fmtLock(e)}부터 마감`)),
+      el('div', { style: 'margin-bottom:10px' }, el('span', { class: 'badge' + (past ? ' locked' : '') }, past ? '지난 행사' : e.start_date > todayKst() ? '예정 행사' : '진행 중')),
       el('dl', { class: 'kv' },
-        el('dt', {}, '채널'), el('dd', {}, chLabel(e.channel_code, e.channel)),
+        el('dt', {}, '채널'), el('dd', {}, chDisp(e)),
         el('dt', {}, '행사명'), el('dd', {}, e.title),
         el('dt', {}, '제품'), el('dd', {}, `${e.product_name}`, el('br'), el('span', { class: 's', style: 'color:var(--muted);font-size:13px' }, `${e.product_code} · ${[catOf(e).l, catOf(e).s].filter(Boolean).join(' / ')}`)),
         el('dt', {}, '기간'), el('dd', {}, `${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`),
-        el('dt', {}, '정상가'), el('dd', {}, won(e.list_price)),
-        el('dt', {}, '판매단가'), el('dd', {}, el('b', {}, won(e.sale_price)), ' ', el('span', { class: 'off' }, `${discount(e.list_price, e.sale_price)}% 할인`)),
+        el('dt', {}, '단위당 정상가'), el('dd', {}, won(e.list_price)),
+        el('dt', {}, '단위당 입수량'), el('dd', {}, e.pack_qty != null ? Number(e.pack_qty).toLocaleString('ko-KR') + '개' : '-'),
+        el('dt', {}, '단위당 판매가'), el('dd', {}, el('b', {}, won(e.sale_price)), ' ', el('span', { class: 'off' }, `${discount(e.list_price, e.sale_price)}% 할인`)),
         el('dt', {}, '예상수량'), el('dd', {}, e.expected_qty != null ? Number(e.expected_qty).toLocaleString('ko-KR') + '개' : '-'),
         el('dt', {}, '메모'), el('dd', {}, e.memo || '-'),
         el('dt', {}, '등록'), el('dd', {}, userName(e.created_by)),
@@ -169,13 +172,13 @@
     else if (canRequest(S.user, e)) {
       const pend = S.requests.filter(r => r.event_id === e.id && r.status === 'pending');
       body.append(pend.length
-        ? el('div', { class: 'ok', style: 'margin-top:14px' }, `⏳ 마스터 승인 대기 중인 요청이 ${pend.length}건 있습니다. (☰ 메뉴 → 수정 요청에서 확인)`)
-        : el('div', {}, el('div', { class: 'pick', style: 'margin-top:14px' }, '마감된 행사입니다. 고칠 내용이 있으면 마스터에게 요청해 주세요.'),
+        ? el('div', { class: 'ok', style: 'margin-top:14px' }, `⏳ 마스터 승인 대기 중인 요청이 ${pend.length}건 있습니다. (☰ 메뉴 → 내 요청에서 확인)`)
+        : el('div', {}, el('div', { class: 'pick', style: 'margin-top:14px' }, '고칠 내용이 있으면 수정 요청을 보내 주세요. 마스터가 승인하면 반영됩니다.'),
           el('div', { class: 'acts' },
             el('button', { class: 'btn del', onclick: () => { close(); requestDelete(e); } }, '삭제 요청'),
             el('button', { class: 'btn pri', onclick: () => { close(); openForm(e, 'request'); } }, '수정 요청'))));
     }
-    else if (S.user.role === 'manager') body.append(el('div', { class: 'pick', style: 'margin-top:14px' }, locked ? '지난 행사는 마스터만 수정할 수 있습니다.' : '다른 담당자가 등록한 일정은 보기만 할 수 있습니다.'));
+    else if (S.user.role === 'manager') body.append(el('div', { class: 'pick', style: 'margin-top:14px' }, '다른 사람이 등록한 행사는 보기만 할 수 있습니다. (수정·삭제 요청은 본인이 등록한 행사만)'));
     close = sheet('행사 상세', body);
   }
   function requestDelete(e) {
@@ -194,8 +197,8 @@
   }
 
   // ---------------- change requests ----------------
-  const FIELD_LABEL = { channel_code: '채널', title: '행사명', product_code: '제품', start_date: '시작일', end_date: '종료일', list_price: '정상가', sale_price: '판매단가', expected_qty: '예상수량', memo: '메모' };
-  const showVal = (k, v) => v == null || v === '' ? '-' : k === 'channel_code' ? chLabel(v) : k === 'product_code' ? `${v} · ${(S.products.find(p => p.code === v) || {}).name || ''}` : /price/.test(k) ? won(v) : k === 'expected_qty' ? Number(v).toLocaleString('ko-KR') + '개' : String(v);
+  const FIELD_LABEL = { channel_code: '채널', channel_detail: '세부 채널명', title: '행사명', product_code: '제품', start_date: '시작일', end_date: '종료일', list_price: '단위당 정상가', sale_price: '단위당 판매가', pack_qty: '단위당 입수량', expected_qty: '예상수량', memo: '메모' };
+  const showVal = (k, v) => v == null || v === '' ? '-' : k === 'channel_code' ? chLabel(v) : k === 'product_code' ? `${v} · ${(S.products.find(p => p.code === v) || {}).name || ''}` : /price/.test(k) ? won(v) : k === 'expected_qty' || k === 'pack_qty' ? Number(v).toLocaleString('ko-KR') + '개' : String(v);
   const SEEN_KEY = () => 'evcal-req-seen-' + (S.user ? S.user.id : '');
   function badgeCount() {
     if (!S.user) return 0;
@@ -212,11 +215,12 @@
   setInterval(() => { if (S.user && document.visibilityState === 'visible') refreshRequests(); }, 60000);
   document.addEventListener('visibilitychange', () => { if (S.user && document.visibilityState === 'visible') refreshRequests(); });
   function requestCard(r, isM, redraw) {
-    const b = r.before_row || {}, st = { pending: ['⏳ 대기', 'badge'], approved: ['✅ 승인', 'badge'], rejected: ['❌ 반려', 'badge locked'] }[r.status];
+    const b = r.kind === 'create' ? (r.changes || {}) : (r.before_row || {}), st = { pending: ['⏳ 대기', 'badge'], approved: ['✅ 승인', 'badge'], rejected: ['❌ 반려', 'badge locked'] }[r.status];
     const rows = r.kind === 'delete' ? [el('div', { style: 'color:var(--danger);font-weight:600' }, '일정 삭제 요청')]
+      : r.kind === 'create' ? [el('div', { style: 'color:var(--brand);font-weight:600' }, '🆕 신규 행사 등록 요청'), ...['product_code', 'list_price', 'sale_price', 'pack_qty', 'expected_qty', 'memo'].filter(k => b[k] != null && b[k] !== '').map(k => el('div', { style: 'font-size:14px' }, el('span', { style: 'color:var(--muted)' }, FIELD_LABEL[k] + ': '), showVal(k, b[k])))]
       : Object.entries(r.changes || {}).map(([k, v]) => el('div', { style: 'font-size:14px' }, el('span', { style: 'color:var(--muted)' }, FIELD_LABEL[k] + ': '), showVal(k, b[k]), ' → ', el('b', {}, showVal(k, v))));
     const box = el('div', { class: 'li', style: 'display:block' },
-      el('div', { class: 'row' }, el('span', { class: st[1] }, st[0]), el('b', { class: 'grow' }, `${chLabel(b.channel_code, b.channel)} · ${b.title || ''}`)),
+      el('div', { class: 'row' }, el('span', { class: st[1] }, st[0]), el('b', { class: 'grow' }, `${chDisp(b)} · ${b.title || ''}`)),
       el('div', { class: 's', style: 'color:var(--muted);font-size:12px;margin:2px 0 6px' }, `${b.start_date || ''} ~ ${b.end_date || ''} · 요청 ${userName(r.requested_by)} · ${new Date(r.requested_at).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}`),
       ...rows,
       el('div', { style: 'font-size:14px;margin-top:4px' }, el('span', { style: 'color:var(--muted)' }, '사유: '), r.reason),
@@ -245,14 +249,14 @@
     };
     redraw();
     if (!isM) { try { localStorage.setItem(SEEN_KEY(), String(Date.now())); } catch (e) {} drawBadge(); }
-    sheet(isM ? '수정 요청 (승인 대기)' : '내 수정 요청', el('div', {},
-      el('p', { class: 's', style: 'color:var(--muted);margin-top:0;font-size:13px' }, isM ? '승인하면 일정에 바로 반영되고, 변경 이력에 "요청 #번호 승인"으로 남습니다.' : '마감된 본인 행사에 보낸 요청과 결과입니다.'),
+    sheet(isM ? '요청 승인' : '내 요청', el('div', {},
+      el('p', { class: 's', style: 'color:var(--muted);margin-top:0;font-size:13px' }, isM ? '승인하면 일정에 바로 반영되고, 변경 이력에 "요청 #번호 승인"으로 남습니다.' : '내가 보낸 등록·수정·삭제 요청과 결과입니다.'),
       wrap));
   }
 
   // product search box: type part of the product number or name -> suggestions below
   function productPicker(initialCode, onPick) {
-    const box = el('div', { class: 'f' }), input = el('input', { class: 'in', placeholder: '제품명·브랜드·코드 일부 입력', autocomplete: 'off' });
+    const box = el('div', { class: 'f' }), input = el('input', { class: 'in', placeholder: '제품번호·제품명 일부 입력', autocomplete: 'off' });
     const sug = el('div', { class: 'sug' }); sug.hidden = true;
     const info = el('div', { class: 'pick' });
     let chosen = S.products.find(p => p.code === initialCode) || null;
@@ -274,10 +278,16 @@
   }
   // mode 'request': same form, but it sends a change request (with a reason) instead of saving
   function openForm(e, mode) {
-    const isReq = mode === 'request', isNew = !e, v = e ? { ...e } : { start_date: S.sel, end_date: S.sel };
+    const isNewReq = mode === 'create-request', isReq = mode === 'request' || isNewReq, isNew = !e, v = e ? { ...e } : { start_date: S.sel, end_date: S.sel };
     const f = id => document.getElementById(id);
-    const chSel = el('select', { class: 'in', id: 'fe_ch' }, el('option', { value: '' }, '채널 선택'), ...S.channels.filter(c => c.active !== false || c.code === v.channel_code).map(c => el('option', { value: c.code }, chLabel(c.code))));
-    chSel.value = v.channel_code || (S.channels.length === 1 ? S.channels[0].code : '');
+    const myCh = S.user.role === 'manager' && (S.user.channels || []).length ? S.user.channels : null;
+    const chList = S.channels.filter(c => (c.active !== false && (!myCh || myCh.includes(c.code))) || c.code === v.channel_code);
+    const chSel = el('select', { class: 'in', id: 'fe_ch' }, el('option', { value: '' }, '채널 선택'), ...chList.map(c => el('option', { value: c.code }, chLabel(c.code))));
+    chSel.value = v.channel_code || (chList.length === 1 ? chList[0].code : '');
+    const chDet = el('input', { class: 'in', id: 'fe_chd', value: v.channel_detail || '', placeholder: '예: 지역 할인점명', style: 'margin-top:8px' });
+    const chDetBox = el('div', {}, el('label', { style: 'display:block;font-size:13px;color:var(--muted);margin:8px 0 0' }, '세부 채널명 ', el('i', { style: 'color:var(--danger);font-style:normal' }, '*')), chDet);
+    const syncEtc = () => { const c = S.channels.find(x => x.code === chSel.value); chDetBox.hidden = !(c && isEtc(c.name)); };
+    chSel.addEventListener('change', syncEtc);
     const lp = el('input', { class: 'in', id: 'fe_lp', inputmode: 'numeric', value: v.list_price != null ? Number(v.list_price).toLocaleString('ko-KR') : '' });
     const sp = el('input', { class: 'in', id: 'fe_sp', inputmode: 'numeric', value: v.sale_price != null ? Number(v.sale_price).toLocaleString('ko-KR') : '' });
     const calc = el('div', { class: 'calc' });
@@ -287,31 +297,41 @@
     const pp = productPicker(v.product_code, p => { if (p && p.list_price && (!lp.value || isNew)) { lp.value = Number(p.list_price).toLocaleString('ko-KR'); upd(); } });
     const err = el('div', { class: 'err' }); err.hidden = true;
     const saveBtn = el('button', { class: 'btn pri', type: 'submit' }, isReq ? '마스터에게 요청 보내기' : isNew ? '등록' : '저장');
-    const reason = el('textarea', { class: 'in', id: 'fe_reason', rows: 2, placeholder: '예: 거래처 요청으로 판매단가 정정' });
+    const reason = el('textarea', { class: 'in', id: 'fe_reason', rows: 2, placeholder: isNewReq ? '(선택) 마스터에게 남길 말' : '예: 거래처 요청으로 판매단가 정정' });
     const form = el('form', {},
-      el('div', { class: 'f' }, el('label', {}, '채널 ', el('i', {}, '*')), chSel),
+      el('div', { class: 'f' }, el('label', {}, '채널 ', el('i', {}, '*')), chSel, chDetBox, myCh ? el('div', { class: 'pick' }, '본인 담당 채널만 보입니다.') : null),
       el('div', { class: 'f' }, el('label', {}, '행사명 ', el('i', {}, '*')), el('input', { class: 'in', id: 'fe_title', value: v.title || '', placeholder: '예: 월초 특가' })),
       pp.box,
       el('div', { class: 'two' },
         el('div', { class: 'f' }, el('label', {}, '시작일 ', el('i', {}, '*')), el('input', { class: 'in', type: 'date', id: 'fe_s', value: v.start_date })),
         el('div', { class: 'f' }, el('label', {}, '종료일 ', el('i', {}, '*')), el('input', { class: 'in', type: 'date', id: 'fe_e', value: v.end_date }))),
       el('div', { class: 'two' },
-        el('div', { class: 'f' }, el('label', {}, '정상가 (원) ', el('i', {}, '*')), lp),
-        el('div', { class: 'f' }, el('label', {}, '판매단가 (원) ', el('i', {}, '*')), sp)),
+        el('div', { class: 'f' }, el('label', {}, '단위당 정상가 (원) ', el('i', {}, '*')), lp),
+        el('div', { class: 'f' }, el('label', {}, '단위당 판매가 (원) ', el('i', {}, '*')), sp)),
       calc,
+      el('div', { class: 'f' }, el('label', {}, '단위당 입수량 ', el('i', {}, '*')), el('input', { class: 'in', id: 'fe_pk', inputmode: 'numeric', value: v.pack_qty ?? '', placeholder: '예: 24' })),
       el('div', { class: 'f' }, el('label', {}, '예상수량 (선택)'), el('input', { class: 'in', id: 'fe_q', inputmode: 'numeric', value: v.expected_qty ?? '' })),
       el('div', { class: 'f' }, el('label', {}, '메모 (선택)'), el('textarea', { class: 'in', id: 'fe_memo', rows: 2 }, v.memo || '')),
-      isReq ? el('div', { class: 'f' }, el('label', {}, '요청 사유 ', el('i', {}, '*')), reason) : null,
-      el('div', { class: 'pick' }, isReq ? '바꿀 값만 고친 뒤 사유를 적어 보내세요. 마스터가 승인하면 반영됩니다.' : S.user.role === 'master' ? '마스터는 지난 행사도 등록·수정할 수 있습니다.' : '종료일 다음 날 오전 9시부터는 마스터만 수정할 수 있습니다.'),
+      isReq ? el('div', { class: 'f' }, el('label', {}, isNewReq ? '전달 메모 (선택)' : '요청 사유 ', isNewReq ? null : el('i', {}, '*')), reason) : null,
+      el('div', { class: 'pick' }, isNewReq ? '등록 요청을 보내면 마스터가 승인한 뒤 달력에 올라갑니다.' : isReq ? '바꿀 값만 고친 뒤 사유를 적어 보내세요. 마스터가 승인하면 반영됩니다.' : '마스터가 직접 저장하면 바로 반영됩니다.'),
       err, el('div', { class: 'acts' }, saveBtn));
-    upd();
+    upd(); syncEtc();
     let close;
     form.addEventListener('submit', async ev => {
       ev.preventDefault(); err.hidden = true;
       const p = pp.get(); const q = f('fe_q').value.trim();
-      const out = { id: v.id, channel_code: chSel.value, title: f('fe_title').value, product_code: p ? p.code : '', start_date: f('fe_s').value, end_date: f('fe_e').value,
-        list_price: num(lp.value), sale_price: num(sp.value), expected_qty: q === '' ? null : num(q), memo: f('fe_memo').value.trim() };
+      const pk = f('fe_pk').value.trim(), chObj = S.channels.find(x => x.code === chSel.value);
+      if (chObj && isEtc(chObj.name) && !chDet.value.trim()) { err.textContent = '"기타" 채널은 세부 채널명을 적어 주세요.'; err.hidden = false; return; }
+      const out = { id: v.id, channel_code: chSel.value, channel_detail: chObj && isEtc(chObj.name) ? chDet.value.trim() : '', title: f('fe_title').value, product_code: p ? p.code : '', start_date: f('fe_s').value, end_date: f('fe_e').value,
+        list_price: num(lp.value), sale_price: num(sp.value), pack_qty: pk === '' ? null : num(pk), expected_qty: q === '' ? null : num(q), memo: f('fe_memo').value.trim() };
       if (!p) { err.textContent = '제품을 목록에서 눌러 선택해 주세요.'; err.hidden = false; return; }
+      if (isNewReq) {
+        const changes = {}; for (const k of REQ_FIELDS) changes[k] = out[k] ?? null;
+        saveBtn.disabled = true;
+        try { await api.createRequest({ kind: 'create', changes, reason: reason.value }); close(); toast('등록 요청을 보냈습니다. 마스터가 승인하면 달력에 올라갑니다.'); await refreshRequests(); }
+        catch (x) { err.textContent = x.message; err.hidden = false; }
+        saveBtn.disabled = false; return;
+      }
       if (isReq) {
         const changes = {}; for (const k of REQ_FIELDS) { const a = out[k] ?? null, b = v[k] ?? null; if (String(a ?? '') !== String(b ?? '')) changes[k] = a; }
         saveBtn.disabled = true;
@@ -324,9 +344,9 @@
       catch (x) { err.textContent = x.message; err.hidden = false; }
       saveBtn.disabled = false;
     });
-    close = sheet(isReq ? '수정 요청' : isNew ? '행사 등록' : '행사 수정', form);
+    close = sheet(isNewReq ? '신규 행사 등록 요청' : isReq ? '수정 요청' : isNew ? '행사 등록' : '행사 수정', form);
   }
-  $('addBtn').addEventListener('click', () => openForm(null));
+  $('addBtn').addEventListener('click', () => openForm(null, S.user.role === 'master' ? null : 'create-request'));
 
   // ---------------- menu ----------------
   $('menuBtn').addEventListener('click', () => {
@@ -336,15 +356,16 @@
     const body = el('div', { class: 'menu' },
       el('div', { class: 'li', style: 'border:0;padding-left:4px' }, el('div', {}, el('b', {}, S.user.name), el('div', { class: 's', style: 'color:var(--muted);font-size:13px' }, `${S.user.login} · ${isM ? '마스터' : S.user.role === 'manager' ? '담당자' : '조회'}`))),
       canWrite ? el('div', { class: 'sec' }, '요청') : null,
-      canWrite ? mi((isM ? '📨 수정 요청 승인' : '📨 내 수정 요청') + (badgeCount() ? ` (${badgeCount()})` : ''), showRequests) : null,
+      canWrite ? mi((isM ? '📨 요청 승인 (등록·수정·삭제)' : '📨 내 요청 (등록·수정·삭제)') + (badgeCount() ? ` (${badgeCount()})` : ''), showRequests) : null,
       el('div', { class: 'sec' }, '엑셀'),
       mi('📥 일정 엑셀로 내려받기', exportEvents),
-      canWrite ? mi('📤 일정 엑셀로 한꺼번에 등록', () => importEvents()) : null,
+      canWrite ? mi(isM ? '📤 일정 엑셀로 한꺼번에 등록' : '📤 일정 엑셀로 한꺼번에 등록 요청', () => importEvents()) : null,
       isM ? el('div', { class: 'sec' }, '마스터') : null,
       isM ? mi('🔑 가입 코드 · 사용자 관리', manageUsers) : null,
       isM ? mi('📋 기준정보 (채널 · 제품) 올리기', masterData) : null,
       isM ? mi('🕘 변경 이력', showLog) : null,
       el('div', { class: 'sec' }, '기타'),
+      mi('❓ 사용 안내', showHelp),
       isStandalone() ? null : mi('📱 홈 화면에 앱으로 설치', install),
       mi('🌓 화면 색: ' + THEME_LABEL[getTheme()] + ' (누르면 바뀜)', () => { const order = ['auto', 'light', 'dark'], nx = order[(order.indexOf(getTheme()) + 1) % 3]; setTheme(nx); toast('화면 색: ' + THEME_LABEL[nx]); }),
       api.demo ? mi('🔄 시연 데이터 처음으로 되돌리기', () => { api.reset(); api.logout(); location.reload(); }) : null,
@@ -352,12 +373,15 @@
     close = sheet('메뉴', body);
   });
   function download(blob, name) { const a = el('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); }
-  const EV_HEAD = ['채널', '행사명', '제품번호', '시작일', '종료일', '정상가', '판매단가', '예상수량', '메모'];
+  // upload form = download form: the first 9 columns are read back; '(자동)' columns are filled on download and ignored on upload
+  const EV_HEAD = ['채널', '세부채널명', '행사명', '제품번호', '시작일', '종료일', '단위당 정상가', '단위당 판매가', '단위당 입수량', '예상수량', '메모'];
+  const EV_AUTO = ['제품명(자동)', '대카테고리(자동)', '소카테고리(자동)', '할인율%(자동)', '등록자(자동)'];
+  const evRow = e => [chLabel(e.channel_code, e.channel), e.channel_detail || '', e.title, e.product_code, e.start_date, e.end_date, Number(e.list_price), Number(e.sale_price), e.pack_qty ?? '', e.expected_qty ?? '', e.memo || '',
+    e.product_name || '', catOf(e).l, catOf(e).s, discount(e.list_price, e.sale_price) ?? '', e.created_by ? userName(e.created_by) : ''];
   async function exportEvents() {
     try {
       const all = await api.listAllEvents();
-      const rows = [['채널', '행사명', '제품번호', '제품명', '대카테고리', '소카테고리', '시작일', '종료일', '정상가', '판매단가', '할인율(%)', '예상수량', '메모', '등록자', '마감'],
-        ...all.map(e => [chLabel(e.channel_code, e.channel), e.title, e.product_code, e.product_name, catOf(e).l, catOf(e).s, e.start_date, e.end_date, Number(e.list_price), Number(e.sale_price), discount(e.list_price, e.sale_price), e.expected_qty ?? '', e.memo || '', userName(e.created_by), isLocked(e) ? '마감' : ''])];
+      const rows = [[...EV_HEAD, ...EV_AUTO], ...all.map(evRow)];
       download(await buildXlsx([{ name: '행사일정', rows, header: true }]), `행사일정_${todayKst()}.xlsx`);
     } catch (x) { toast(x.message); }
   }
@@ -367,30 +391,35 @@
     return m ? ymd(+m[1], +m[2] - 1, +m[3]) : '';
   }
   function importEvents() {
-    const file = el('input', { type: 'file', accept: '.xlsx,.csv', class: 'in' }), msg = el('div'), go = el('button', { class: 'btn pri', disabled: true }, '등록하기');
+    const isM = S.user.role === 'master';
+    const file = el('input', { type: 'file', accept: '.xlsx,.csv', class: 'in' }), msg = el('div'), go = el('button', { class: 'btn pri', disabled: true }, isM ? '등록하기' : '등록 요청 보내기');
     let ready = [];
     file.addEventListener('change', async () => {
       msg.replaceChildren(); go.disabled = true; ready = [];
       try {
         const rows = (await readTable(file.files[0])).filter(r => r.some(c => c !== ''));
-        const head = rows.shift().map(h => String(h).trim()), ix = n => head.indexOf(n);
-        const miss = EV_HEAD.slice(0, 7).filter(h => ix(h) < 0);
+        const head = rows.shift().map(h => String(h).trim());
+        const ALIAS = { '단위당 정상가': ['정상가'], '단위당 판매가': ['판매단가', '판매가'], '제품번호': ['제품코드'] };
+        const ix = n => { let i = head.indexOf(n); for (const a of ALIAS[n] || []) if (i < 0) i = head.indexOf(a); return i; };
+        const miss = ['채널', '행사명', '제품번호', '시작일', '종료일', '단위당 정상가', '단위당 판매가', '단위당 입수량'].filter(h => ix(h) < 0);
         if (miss.length) throw new AppError('양식의 머리글이 다릅니다. 없는 열: ' + miss.join(', '));
         const errs = [];
         rows.forEach((r, i) => {
-          const g = n => r[ix(n)] ?? '', pcode = String(g('제품번호') !== '' ? g('제품번호') : (r[ix('제품코드')] ?? '')).trim(), p = S.products.find(x => x.code === pcode), craw = String(g('채널')).trim(), chm = S.channels.find(c => c.code === craw || c.name === craw), ccode = chm ? chm.code : craw;
-          const e = { channel_code: ccode, title: String(g('행사명')).trim(), product_code: pcode, start_date: excelDate(g('시작일')), end_date: excelDate(g('종료일')),
-            list_price: g('정상가') === '' && p ? Number(p.list_price) : num(g('정상가')), sale_price: num(g('판매단가')), expected_qty: ix('예상수량') >= 0 && g('예상수량') !== '' ? num(g('예상수량')) : null, memo: ix('메모') >= 0 ? String(g('메모')).trim() : '' };
+          const g = n => (ix(n) >= 0 ? r[ix(n)] ?? '' : ''), pcode = String(g('제품번호')).trim(), p = S.products.find(x => x.code === pcode), craw = String(g('채널')).trim(), chm = S.channels.find(c => c.code === craw || c.name === craw), ccode = chm ? chm.code : craw;
+          const e = { channel_code: ccode, channel_detail: String(g('세부채널명')).trim(), pack_qty: g('단위당 입수량') === '' ? null : num(g('단위당 입수량')), title: String(g('행사명')).trim(), product_code: pcode, start_date: excelDate(g('시작일')), end_date: excelDate(g('종료일')),
+            list_price: g('단위당 정상가') === '' && p ? Number(p.list_price) : num(g('단위당 정상가')), sale_price: num(g('단위당 판매가')), expected_qty: g('예상수량') !== '' ? num(g('예상수량')) : null, memo: String(g('메모')).trim() };
           const why = [];
           if (!chm) why.push('채널 없음(' + craw + ')');
           if (!p) why.push('제품번호 없음(' + pcode + ')');
           if (!e.title) why.push('행사명 없음');
           if (!e.start_date || !e.end_date) why.push('날짜 확인'); else if (e.end_date < e.start_date) why.push('종료일이 시작일보다 빠름');
-          if (!(e.list_price > 0)) why.push('정상가 확인'); if (!(e.sale_price >= 0)) why.push('판매단가 확인');
-          if (!why.length && !canCreate(S.user, e)) why.push('이미 마감된 기간 (마스터만 등록 가능)');
+          if (!(e.list_price > 0)) why.push('단위당 정상가 확인'); if (!(e.sale_price >= 0)) why.push('단위당 판매가 확인');
+          if (!(Number.isInteger(e.pack_qty) && e.pack_qty > 0)) why.push('단위당 입수량 확인');
+          if (chm && isEtc(chm.name) && !e.channel_detail) why.push('기타 채널은 세부채널명 필요');
+          if (chm && !isM && (S.user.channels || []).length && !S.user.channels.includes(chm.code)) why.push('담당 채널 아님');
           if (why.length) errs.push(`${i + 2}행: ${why.join(', ')}`); else ready.push(e);
         });
-        msg.append(el('div', { class: 'ok' }, `등록할 수 있는 행 ${ready.length}개`));
+        msg.append(el('div', { class: 'ok' }, `${isM ? '등록할 수 있는 행' : '등록 요청할 수 있는 행'} ${ready.length}개`));
         if (errs.length) msg.append(el('div', { class: 'err' }, `확인이 필요한 행 ${errs.length}개 (이 행들은 빼고 등록됩니다)\n` + errs.slice(0, 30).join('\n') + (errs.length > 30 ? `\n… 외 ${errs.length - 30}개` : '')));
         go.disabled = !ready.length;
       } catch (x) { msg.append(el('div', { class: 'err' }, x.message)); }
@@ -398,12 +427,15 @@
     let close;
     go.addEventListener('click', async () => {
       go.disabled = true;
-      try { await api.importEvents(ready); close(); toast(`${ready.length}건 등록했습니다.`); load(); }
+      try {
+        if (isM) { await api.importEvents(ready); close(); toast(`${ready.length}건 등록했습니다.`); load(); }
+        else { for (const e of ready) await api.createRequest({ kind: 'create', changes: e, reason: '엑셀 일괄 등록' }); close(); toast(`${ready.length}건 등록 요청을 보냈습니다. 마스터가 승인하면 달력에 올라갑니다.`); refreshRequests(); }
+      }
       catch (x) { msg.append(el('div', { class: 'err' }, x.message)); go.disabled = false; }
     });
-    close = sheet('일정 엑셀로 등록', el('div', {},
-      el('p', { class: 's', style: 'color:var(--muted);margin-top:0' }, '양식을 받아서 채운 뒤 올려 주세요. 정상가를 비우면 제품 기준정보의 정상가가 들어갑니다. 날짜는 2026-11-01 형식이나 엑셀 날짜 모두 됩니다.'),
-      el('button', { class: 'btn', style: 'margin-bottom:12px', onclick: async () => download(await buildXlsx([{ name: '일정등록', rows: [EV_HEAD, ['(채널 예: F1.쿠팡)', '월초 특가', '(제품번호)', todayKst(), addDays(todayKst(), 6), '', 27900, 1000, '']], header: true },
+    close = sheet(isM ? '일정 엑셀로 등록' : '일정 엑셀로 등록 요청', el('div', {},
+      el('p', { class: 's', style: 'color:var(--muted);margin-top:0' }, '양식은 "엑셀로 내려받기" 파일과 같습니다. 앞의 11개 열(채널~메모)만 읽고, (자동) 열은 비워도 됩니다. 세부채널명은 "기타" 채널일 때만 씁니다. 단위당 정상가를 비우면 제품 기준정보의 정상가가 들어갑니다. 날짜는 2026-11-01 형식이나 엑셀 날짜 모두 됩니다.' + (isM ? '' : ' 담당자가 올리면 한 줄씩 등록 요청으로 마스터에게 갑니다.')),
+      el('button', { class: 'btn', style: 'margin-bottom:12px', onclick: async () => download(await buildXlsx([{ name: '일정등록', rows: [[...EV_HEAD, ...EV_AUTO], ['F1.쿠팡', '', '월초 특가 (예시 줄, 지우고 쓰세요)', '2105345', todayKst(), addDays(todayKst(), 6), 1500, 1250, 24, 1000, '']], header: true },
         { name: '채널목록', rows: [['채널'], ...S.channels.map(c => [chLabel(c.code)])], header: true },
         { name: '제품번호', rows: [['제품번호', '제품번호 Name', '대카테고리', '소카테고리'], ...S.products.map(p => [p.code, p.name, p.cat_l || '', p.cat_s || ''])], header: true }]), '일정등록_양식.xlsx') }, '📄 양식 내려받기'),
       file, msg, el('div', { class: 'acts' }, go)));
@@ -460,17 +492,34 @@
       el('p', { class: 's', style: 'color:var(--muted);margin-top:0' }, '엑셀 첫 줄에 머리글을 그대로 두고 올려 주세요. 같은 코드가 있으면 내용이 바뀌고, 없는 코드는 추가됩니다 (지워지지는 않음).'),
       part('channels'), part('products')));
   }
+  // checkbox list of channels with a search box; get() returns the chosen channel codes
+  function channelPicker(selected) {
+    const chosen = new Set(selected || []), q = el('input', { class: 'in', placeholder: '채널 검색 (예: 쿠팡, G1)', style: 'margin-bottom:6px' });
+    const info = el('div', { class: 'pick' }), list = el('div', { style: 'max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px 8px' });
+    const draw = () => {
+      const w = q.value.trim().toLowerCase();
+      list.replaceChildren(...S.channels.filter(c => !w || chLabel(c.code).toLowerCase().includes(w)).map(c => {
+        const cb = el('input', { type: 'checkbox' }); cb.checked = chosen.has(c.code);
+        cb.addEventListener('change', () => { cb.checked ? chosen.add(c.code) : chosen.delete(c.code); show(); });
+        return el('label', { style: 'display:flex;gap:8px;align-items:center;padding:6px 0;font-size:15px' }, cb, chLabel(c.code));
+      }));
+    };
+    const show = () => { info.textContent = chosen.size ? '담당 채널: ' + [...chosen].map(c => chLabel(c)).join(', ') : '담당 채널 미지정 (모든 채널 가능)'; };
+    q.addEventListener('input', draw); draw(); show();
+    return { box: el('div', {}, q, list, info), get: () => [...chosen] };
+  }
   async function manageUsers() {
     let invites = [], users = [];
     try { [invites, users] = await Promise.all([api.listInvites(), api.listUsers()]); } catch (x) { return toast(x.message); }
     S.users = users;
     const role = el('select', { class: 'in', style: 'flex:1' }, el('option', { value: 'manager' }, '담당자 (등록 가능)'), el('option', { value: 'viewer' }, '조회만'), el('option', { value: 'master' }, '마스터'));
     const note = el('input', { class: 'in', placeholder: '누구에게 줄 코드인지 (예: 쿠팡 김OO)', style: 'margin-top:8px' });
+    const invCh = channelPicker([]);
     const out = el('div');
     const invList = el('div', { class: 'list' });
     const roleK = r => (r === 'master' ? '마스터' : r === 'manager' ? '담당자' : '조회');
     const drawInv = () => invList.replaceChildren(...(invites.length ? invites.map(i => el('div', { class: 'li' },
-      el('div', { class: 'grow' }, el('span', { class: 'code' }, i.code), el('div', { class: 's', style: 'color:var(--muted);font-size:12px' }, `${roleK(i.role)} · ${i.note || ''} · ${i.used_by ? '사용됨: ' + (users.find(u => u.id === i.used_by) || {}).display_name : i.revoked ? '회수됨' : '미사용'}`)),
+      el('div', { class: 'grow' }, el('span', { class: 'code' }, i.code), el('div', { class: 's', style: 'color:var(--muted);font-size:12px' }, `${roleK(i.role)} · ${i.note || ''}${(i.channels || []).length ? ' · ' + i.channels.map(c => chLabel(c)).join(', ') : ''} · ${i.used_by ? '사용됨: ' + (users.find(u => u.id === i.used_by) || {}).display_name : i.revoked ? '회수됨' : '미사용'}`)),
       !i.used_by && !i.revoked ? el('button', { class: 'btn del', onclick: async () => { if (!confirm('이 코드를 회수할까요?')) return; await api.revokeInvite(i.code); i.revoked = true; drawInv(); } }, '회수') : null)) : [el('div', { class: 'li' }, '발급한 코드가 없습니다.')]));
     drawInv();
     const userList = el('div', { class: 'list' }, ...users.map(u => {
@@ -479,16 +528,24 @@
       sel.addEventListener('change', async () => { try { await api.setUser(u.id, { role: sel.value }); toast('권한을 바꿨습니다.'); } catch (x) { toast(x.message); } });
       const act = el('button', { class: 'btn' + (u.active ? ' del' : ''), disabled: u.id === S.user.id }, u.active ? '중지' : '다시 사용');
       act.addEventListener('click', async () => { try { await api.setUser(u.id, { active: !u.active }); u.active = !u.active; act.textContent = u.active ? '중지' : '다시 사용'; act.className = 'btn' + (u.active ? ' del' : ''); } catch (x) { toast(x.message); } });
-      return el('div', { class: 'li' }, el('div', { class: 'grow' }, el('b', {}, u.display_name), el('div', { class: 's', style: 'color:var(--muted);font-size:12px' }, u.login)), sel, act);
+      const chInfo = el('div', { class: 's', style: 'color:var(--muted);font-size:12px' }, (u.channels || []).length ? '담당: ' + u.channels.map(c => chLabel(c)).join(', ') : (u.role === 'manager' ? '담당 채널 미지정' : ''));
+      const chBtn = el('button', { class: 'btn', style: 'padding:6px 10px' }, '채널');
+      chBtn.addEventListener('click', () => {
+        const pk = channelPicker(u.channels || []); let close2;
+        const save = el('button', { class: 'btn pri' }, '저장');
+        save.addEventListener('click', async () => { try { const v = pk.get(); await api.setUser(u.id, { channels: v }); u.channels = v; chInfo.textContent = v.length ? '담당: ' + v.map(c => chLabel(c)).join(', ') : '담당 채널 미지정'; close2(); toast('담당 채널을 바꿨습니다.'); } catch (x) { toast(x.message); } });
+        close2 = sheet(u.display_name + ' 담당 채널', el('div', {}, pk.box, el('div', { class: 'acts' }, save)));
+      });
+      return el('div', { class: 'li' }, el('div', { class: 'grow' }, el('b', {}, u.display_name), el('div', { class: 's', style: 'color:var(--muted);font-size:12px' }, u.login), chInfo), u.role === 'manager' ? chBtn : null, sel, act);
     }));
     sheet('가입 코드 · 사용자', el('div', {},
       el('h3', { style: 'margin:4px 0 8px' }, '새 가입 코드 만들기'),
       el('div', { class: 'row' }, role, el('button', { class: 'btn pri', onclick: async () => {
-        try { const inv = await api.createInvite(role.value, note.value.trim()); invites.unshift(inv); drawInv(); note.value = '';
+        try { const inv = await api.createInvite(role.value, note.value.trim(), invCh.get()); invites.unshift(inv); drawInv(); note.value = '';
           out.replaceChildren(el('div', { class: 'ok' }, '코드가 만들어졌습니다. 아래 안내를 복사해 전달하세요.\n\n', el('span', { class: 'code' }, inv.code)),
             el('button', { class: 'btn', onclick: () => navigator.clipboard.writeText(`[행사 일정 캘린더] ${location.origin + location.pathname}\n가입 코드: ${inv.code}\n처음 들어가서 "가입 코드로 등록하기"를 누르고 코드·아이디·이름·비밀번호를 넣어 주세요.`).then(() => toast('복사했습니다.')) }, '안내 문구 복사'));
         } catch (x) { toast(x.message); } } }, '만들기')),
-      note, out,
+      note, el('div', { style: 'margin-top:10px;font-size:13px;color:var(--muted)' }, '담당 채널 (여러 개 선택 가능, 담당자만 해당)'), invCh.box, out,
       el('h3', { style: 'margin:18px 0 8px' }, '발급한 코드'), invList,
       el('h3', { style: 'margin:18px 0 8px' }, `사용자 (${users.length}명)`), userList,
       el('p', { class: 's', style: 'color:var(--muted);font-size:13px' }, '중지하면 그 사람은 바로 로그인해도 아무것도 볼 수 없습니다. 등록했던 일정은 그대로 남습니다.')));
@@ -504,6 +561,39 @@
         ch.length ? el('div', { style: 'font-size:13px;margin-top:4px' }, ch.join(' / ')) : null);
     }) : [el('div', { class: 'li' }, '변경 이력이 없습니다.')])));
   }
+  // ---------------- in-app guide ----------------
+  function showHelp() {
+    const role = S.user ? S.user.role : 'manager', isM = role === 'master';
+    const sec = (title, ...lines) => el('div', { style: 'margin-bottom:14px' }, el('h3', { style: 'margin:0 0 6px;font-size:16px' }, title),
+      el('ul', { style: 'margin:0;padding-left:20px;line-height:1.6' }, ...lines.map(l => el('li', {}, l))));
+    const body = el('div', {},
+      el('p', { style: 'margin-top:0;color:var(--muted)' }, '행사 일정은 마스터가 확정해서 올리고, 담당자는 요청을 보내는 방식입니다. 그래서 등록된 행사는 마스터 승인 없이 바뀌지 않습니다.'),
+      sec('📅 보기',
+        '달력을 좌우로 밀면 달이 바뀌고, 날짜를 누르면 아래에 그날 행사가 나옵니다.',
+        '위쪽에서 채널·대카테고리로 골라 볼 수 있습니다.',
+        '행사를 누르면 제품·기간·정상가·판매단가·할인율이 나옵니다. 할인율은 자동 계산입니다.'),
+      isM ? sec('👑 마스터',
+        '＋ 버튼이나 행사 상세의 [수정]·[삭제]로 직접 등록·수정합니다. 바로 반영됩니다.',
+        '☰ 옆 빨간 숫자 = 승인 대기 요청 수. ☰ → 요청 승인에서 기존 값과 요청 값을 비교한 뒤 [승인] 또는 [반려]를 누릅니다.',
+        '승인하면 바로 반영되고, 변경 이력에 "요청 #번호 승인"으로 남습니다. 반려 사유는 담당자에게 보입니다.',
+        '☰ → 가입 코드 관리에서 담당자 코드를 만들어 전달합니다. 그만둔 사람은 [중지]합니다.',
+        '☰ → 기준정보 올리기에서 채널·제품 목록을 엑셀로 바꿉니다.')
+      : sec('✍️ 담당자: 모든 변경은 요청으로',
+        '신규 행사: 오른쪽 아래 ＋ → 내용 입력 → [마스터에게 요청 보내기]. 승인되면 달력에 올라갑니다.',
+        '기존 행사 수정: 행사 누르기 → [수정 요청] → 기존 내용이 채워진 화면에서 바꿀 값만 고치고 사유를 적어 보냅니다.',
+        '삭제: 행사 누르기 → [삭제 요청] → 사유 입력.',
+        '수정·삭제 요청은 본인이 등록한 행사에만 할 수 있습니다.',
+        '결과(승인·반려)가 나오면 ☰ 옆에 빨간 숫자가 뜹니다. ☰ → 내 요청에서 확인합니다.'),
+      sec('📊 엑셀',
+        '☰ → 엑셀로 내려받기: 전체 행사를 엑셀로 받습니다.',
+        '☰ → 엑셀로 한꺼번에 등록' + (isM ? '' : ' 요청') + ': 내려받은 파일과 같은 양식입니다. 앞의 11개 열(채널~메모)만 읽고 (자동) 열은 비워도 됩니다.' + (isM ? '' : ' 한 줄이 등록 요청 1건이 됩니다.')),
+      sec('📱 기타',
+        '☰ → 홈 화면에 앱으로 설치하면 아이콘으로 바로 열립니다.',
+        '☰ → 화면 색에서 밝게·어둡게를 고를 수 있습니다.',
+        '이 안내는 ☰ → 사용 안내에서 언제든 다시 볼 수 있습니다.'));
+    sheet('사용 안내', body);
+  }
+
   // ---------------- theme: follow the phone (auto) or fixed light/dark ----------------
   const THEME_LABEL = { auto: '휴대폰 설정 따라감', light: '밝게', dark: '어둡게' };
   const getTheme = () => { try { return localStorage.getItem('evcal-theme') || 'auto'; } catch (e) { return 'auto'; } };
