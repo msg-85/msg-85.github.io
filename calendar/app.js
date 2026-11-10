@@ -183,7 +183,7 @@
             el('button', { class: 'btn del', onclick: () => { close(); requestDelete(e); } }, '삭제 요청'),
             el('button', { class: 'btn pri', onclick: () => { close(); openForm(e, 'request'); } }, '수정 요청'))));
     }
-    else if (S.user.role === 'manager') body.append(el('div', { class: 'pick', style: 'margin-top:14px' }, '다른 사람이 등록한 행사는 보기만 할 수 있습니다. (수정·삭제 요청은 본인이 등록한 행사만)'));
+    else if (S.user.role === 'manager') body.append(el('div', { class: 'pick', style: 'margin-top:14px' }, '담당 채널이 아닌 행사는 보기만 할 수 있습니다.'));
     close = sheet('행사 상세', body);
   }
   function requestDelete(e) {
@@ -587,7 +587,7 @@
         '신규 행사: 오른쪽 아래 ＋ → 내용 입력 → [마스터에게 요청 보내기]. 승인되면 달력에 올라갑니다.',
         '기존 행사 수정: 행사 누르기 → [수정 요청] → 기존 내용이 채워진 화면에서 바꿀 값만 고치고 사유를 적어 보냅니다.',
         '삭제: 행사 누르기 → [삭제 요청] → 사유 입력.',
-        '수정·삭제 요청은 본인이 등록한 행사에만 할 수 있습니다.',
+        '수정·삭제 요청은 본인 담당 채널의 행사(또는 본인이 등록한 행사)에만 할 수 있습니다.',
         '결과(승인·반려)가 나오면 ☰ 옆에 빨간 숫자가 뜹니다. ☰ → 내 요청에서 확인합니다.'),
       sec('📊 엑셀',
         '☰ → 엑셀로 내려받기: 전체 행사를 엑셀로 받습니다.',
