@@ -120,7 +120,7 @@
 
   // ======================= Demo (this browser only) =======================
   class DemoBackend {
-    constructor() { this.demo = true; this.K = 'evcal-demo-v10'; this.user = null; this._load(); }
+    constructor() { this.demo = true; this.K = 'evcal-demo-v11'; this.user = null; this._load(); }
     _load() {
       let d = null; try { d = JSON.parse(localStorage.getItem(this.K) || 'null'); } catch (e) {}
       this.db = d || this._seed(); this._persist();
@@ -142,21 +142,21 @@
       const mk = (id, channel, title, code, s, e, lp, sp, qty, by, memo) => ({ id, channel_code: CH(channel), channel: CH(channel), title, product_code: code, product_name: P(code).name, cat_l: P(code).cat_l, cat_s: P(code).cat_s,
         start_date: s, end_date: e, list_price: lp, sale_price: sp, pack_qty: P(code).name.match(/\((\d+)입\)/) ? +P(code).name.match(/\((\d+)입\)/)[1] : 1, expected_qty: qty, memo: memo || '', channel_detail: '', created_by: by, created_at: new Date().toISOString(), updated_by: by, updated_at: new Date().toISOString() });
       const events = [
-        mk(1, '쿠팡', '월초 특가', '2106411', D(1), D(5), 38000, 31900, 1200, 'u-kim'),
-        mk(2, '네이버', '브랜드데이', '2106420', D(3), D(9), 62000, 52900, 800, 'u-lee', '쿠폰 10% 별도'),
-        mk(3, '이마트', '행사 매대', '2105753', D(7), D(20), 24000, 19900, 500, 'u-master'),
-        mk(4, '쿠팡', '타임딜', '2106236', D(12), D(13), 21000, 16900, 300, 'u-kim'),
-        mk(5, 'CU', '1+1 행사', '2105360', D(11), D(11), 15000, 12000, 1500, 'u-master'),
-        mk(6, '네이버', '라이브 방송', '2105127', D(18), D(18), 18000, 14900, 400, 'u-lee'),
-        mk(7, '직영몰', '정기구독 할인', '2106374', D(15), D(28), 36000, 30600, null, 'u-master', '정기구독 고객 한정'),
-        mk(8, '쿠팡', '월말 특가', '2105905', D(25), D(30), 96000, 79900, 900, 'u-kim'),
-        mk(9, '네이버', '다음달 예고 행사', '4104563', D(2, m + 1), D(8, m + 1), 27000, 22900, 600, 'u-lee'),
+        mk(1, '쿠팡', '월초 특가', '9000101', D(1), D(5), 38000, 31900, 1200, 'u-kim'),
+        mk(2, '네이버', '브랜드데이', '9000102', D(3), D(9), 62000, 52900, 800, 'u-lee', '쿠폰 10% 별도'),
+        mk(3, '이마트', '행사 매대', '9002001', D(7), D(20), 24000, 19900, 500, 'u-master'),
+        mk(4, '쿠팡', '타임딜', '9000201', D(12), D(13), 21000, 16900, 300, 'u-kim'),
+        mk(5, 'CU', '1+1 행사', '9000501', D(11), D(11), 15000, 12000, 1500, 'u-master'),
+        mk(6, '네이버', '라이브 방송', '9002002', D(18), D(18), 18000, 14900, 400, 'u-lee'),
+        mk(7, '직영몰', '정기구독 할인', '9001301', D(15), D(28), 36000, 30600, null, 'u-master', '정기구독 고객 한정'),
+        mk(8, '쿠팡', '월말 특가', '9001901', D(25), D(30), 96000, 79900, 900, 'u-kim'),
+        mk(9, '네이버', '다음달 예고 행사', '9000202', D(2, m + 1), D(8, m + 1), 27000, 22900, 600, 'u-lee'),
       ];
       return { users, channels, products, events, invites: [{ code: 'DEMO-2026', role: 'manager', note: '시험용', created_by: 'u-master', created_at: new Date().toISOString(), used_by: null, used_at: null, revoked: false }], log: [], seq: 20,
         // two waiting requests so the master sees how approval works
         requests: [
           { id: 10, event_id: 1, kind: 'update', changes: { sale_price: 29900 }, before_row: { ...events[0] }, reason: '쿠팡 추가 할인 반영 (거래처 확정)', status: 'pending', requested_by: 'u-kim', requested_at: new Date().toISOString(), decided_by: null, decided_at: null, comment: null },
-          { id: 11, event_id: null, kind: 'create', changes: { channel_code: CH('네이버'), title: '주말 특가', product_code: '2105345', start_date: D(21), end_date: D(23), list_price: 36000, sale_price: 29900, pack_qty: 24, expected_qty: 700, memo: '' }, before_row: null, reason: '신규 등록', status: 'pending', requested_by: 'u-lee', requested_at: new Date().toISOString(), decided_by: null, decided_at: null, comment: null },
+          { id: 11, event_id: null, kind: 'create', changes: { channel_code: CH('네이버'), title: '주말 특가', product_code: '9000101', start_date: D(21), end_date: D(23), list_price: 36000, sale_price: 29900, pack_qty: 24, expected_qty: 700, memo: '' }, before_row: null, reason: '신규 등록', status: 'pending', requested_by: 'u-lee', requested_at: new Date().toISOString(), decided_by: null, decided_at: null, comment: null },
         ] };
     }
     _me(u) { this.user = { id: u.id, login: u.login, name: u.display_name, role: u.role, channels: u.channels || [] }; try { sessionStorage.setItem(this.K + '-me', u.id); } catch (e) {} return this.user; }
