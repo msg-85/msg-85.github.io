@@ -58,7 +58,7 @@
   // ---------------- main ----------------
   async function start() {
     $('loginView').hidden = true; $('mainView').hidden = false;
-    $('addBtn').hidden = !(S.user.role === 'master' || S.user.role === 'manager');
+    $('addBtn').hidden = $('delBtn').hidden = !(S.user.role === 'master' || S.user.role === 'manager');
     $('demoBar').hidden = !api.demo;
     if (api.demo) $('demoBar').textContent = `시연용 · ${S.user.name}(${S.user.role === 'master' ? '마스터' : S.user.role === 'manager' ? '담당자' : '조회'})로 보는 중 · 데이터는 이 기기에만 저장`;
     const t = todayKst().split('-').map(Number); S.y = t[0]; S.m = t[1] - 1;
@@ -376,6 +376,53 @@
     close = sheet(isNewReq ? '신규 행사 등록 요청' : isReq ? '수정 요청' : isNew ? '행사 등록' : '행사 수정', form);
   }
   $('addBtn').addEventListener('click', () => openForm(null, S.user.role === 'master' ? null : 'create-request'));
+  $('delBtn').addEventListener('click', pickDelete);
+  // − button: pick several events of the month shown; master deletes them, managers send delete requests
+  function pickDelete() {
+    const isM = S.user.role === 'master', m0 = ymd(S.y, S.m, 1), m1 = ymd(S.y, S.m + 1, 0);
+    const pend = new Set(S.requests.filter(r => r.status === 'pending' && r.event_id).map(r => r.event_id));
+    const all = visible().filter(e => e.start_date <= m1 && e.end_date >= m0).sort((a, b) => a.start_date.localeCompare(b.start_date) || chDisp(a).localeCompare(chDisp(b)));
+    const ok = all.filter(e => isM || (canRequest(S.user, e) && !pend.has(e.id)));
+    const skipped = all.length - ok.length;
+    const q = el('input', { class: 'in', type: 'search', placeholder: '찾기: 채널·행사명·제품' }), list = el('div', { class: 'dlist' }), cnt = el('span', {});
+    const reason = el('textarea', { class: 'in', rows: 2, placeholder: '예: 행사 취소됨' }), err = el('div', { class: 'err' }); err.hidden = true;
+    const go = el('button', { class: 'btn del' }, isM ? '삭제하기' : '삭제 요청 보내기');
+    const picked = new Set();
+    const upd = () => { cnt.textContent = picked.size ? `${picked.size}건 선택` : ''; go.disabled = !picked.size; };
+    const rows = ok.map(e => {
+      const cb = el('input', { type: 'checkbox' });
+      cb.addEventListener('change', () => { cb.checked ? picked.add(e.id) : picked.delete(e.id); upd(); });
+      const r = el('label', { class: 'dpick' }, cb, el('div', {},
+        el('div', { class: 's' }, `${chDisp(e)} · ${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`), el('div', {}, el('b', {}, e.title)), el('div', { class: 's' }, `${e.product_code} · ${e.product_name}`)));
+      r.dataset.q = [chDisp(e), e.title, e.product_code, e.product_name].join(' ').toLowerCase();
+      return r;
+    });
+    list.append(...(rows.length ? rows : [el('div', { class: 'empty' }, isM ? '이번 달 행사가 없습니다.' : '이번 달에 삭제 요청할 수 있는 행사가 없습니다.')]));
+    q.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); for (const r of rows) r.hidden = !!t && !r.dataset.q.includes(t); });
+    let close;
+    go.addEventListener('click', async () => {
+      err.hidden = true;
+      if (!isM && !reason.value.trim()) { err.textContent = '요청 사유를 적어 주세요.'; err.hidden = false; return; }
+      if (isM && !confirm(`고른 행사 ${picked.size}건을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+      go.disabled = true; let done = 0; const fails = [];
+      for (const id of picked) {
+        const e = ok.find(x => x.id === id);
+        try { if (isM) await api.deleteEvent(id); else await api.createRequest({ event_id: id, kind: 'delete', reason: reason.value }); done++; }
+        catch (x) { fails.push(`${e ? e.title : id}: ${x.message}`); }
+        go.textContent = `처리 중 ${done + fails.length}/${picked.size}`;
+      }
+      if (fails.length) { err.textContent = `${done}건 완료, ${fails.length}건 실패 · ` + fails.join(' / '); err.hidden = false; go.textContent = isM ? '삭제하기' : '삭제 요청 보내기'; }
+      else close();
+      toast(isM ? `${done}건 삭제했습니다.` : `삭제 요청 ${done}건을 보냈습니다.`);
+      if (isM) load(); else await refreshRequests();
+    });
+    upd();
+    close = sheet(isM ? `행사 골라서 삭제 (${S.m + 1}월)` : `삭제 요청 (${S.m + 1}월)`, el('div', {},
+      el('p', { class: 'pick', style: 'margin-top:0' }, (isM ? '지우려는 행사를 체크하세요. 바로 삭제됩니다.' : '삭제할 행사를 체크하세요. 마스터가 승인하면 삭제됩니다.') + (skipped ? ` (담당 채널이 아니거나 승인 대기 중인 ${skipped}건은 빠졌습니다)` : '') + ' 다른 달은 달력을 넘긴 뒤 − 를 누르세요.'),
+      q, list, el('div', { class: 'pick' }, cnt),
+      isM ? null : el('div', { class: 'f' }, el('label', {}, '요청 사유 ', el('i', {}, '*')), reason),
+      err, el('div', { class: 'acts' }, go)));
+  }
 
   // ---------------- menu ----------------
   $('menuBtn').addEventListener('click', () => {
@@ -636,12 +683,14 @@
         '행사를 누르면 제품·기간·정상가·판매단가·할인율이 나옵니다. 할인율은 자동 계산입니다.'),
       isM ? sec('👑 마스터',
         '＋ 버튼이나 행사 상세의 [수정]·[삭제]로 직접 등록·수정합니다. 바로 반영됩니다.',
+        '여러 개를 지울 때: 오른쪽 아래 − → 그 달 행사를 체크 → [삭제하기].',
         '☰ 옆 빨간 숫자 = 승인 대기 요청 수. ☰ → 요청 승인에서 기존 값과 요청 값을 비교한 뒤 [승인] 또는 [반려]를 누릅니다.',
         '승인하면 바로 반영되고, 변경 이력에 "요청 #번호 승인"으로 남습니다. 반려 사유는 담당자에게 보입니다.',
         '☰ → 가입 코드 관리에서 담당자 코드를 만들어 전달합니다. 그만둔 사람은 [중지]합니다.',
         '☰ → 기준정보 올리기에서 채널·제품 목록을 엑셀로 바꿉니다.')
       : sec('✍️ 담당자: 모든 변경은 요청으로',
         '신규 행사: 오른쪽 아래 ＋ → 내용 입력 → [마스터에게 요청 보내기]. 승인되면 달력에 올라갑니다.',
+        '삭제 요청: 오른쪽 아래 − → 그 달 행사 중 지울 것을 체크 → 사유 적고 [삭제 요청 보내기]. 여러 건을 한 번에 보낼 수 있습니다.',
         '기존 행사 수정: 행사 누르기 → [수정 요청] → 기존 내용이 채워진 화면에서 바꿀 값만 고치고 사유를 적어 보냅니다.',
         '삭제: 행사 누르기 → [삭제 요청] → 사유 입력.',
         '수정·삭제 요청은 본인 담당 채널의 행사(또는 본인이 등록한 행사)에만 할 수 있습니다.',
