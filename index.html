@@ -67,6 +67,13 @@ progress { width: 100%; height: 10px; accent-color: var(--in); }
 .item { text-align: left; font: 13px var(--mono); }
 .item[aria-current="true"] { border-color: var(--out); }
 .dh h2 { font-size: 17px; margin: 0; overflow-wrap: anywhere; flex: 1; min-width: 0; }
+#anaSel { flex: 1; min-width: 0; max-width: 640px; margin-right: auto; font: inherit; font-size: 16px; font-weight: 700; padding: 5px 8px; background: var(--sheet); color: var(--fg); border: 1px solid var(--s3); }
+.tfw { position: relative; display: inline-block; font-weight: 400; }
+.tfw .msp { left: 0; }
+.tfw .btn.on { border-color: var(--out); color: var(--out); font-weight: 600; }
+.at th .ar { font-size: 11px; color: var(--out); }
+.at thead th.c { cursor: pointer; user-select: none; }
+.at thead th.c:hover { text-decoration: underline; }
 .note { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--sheet); border: 1px solid var(--line); padding: 10px 12px; max-height: 38%; overflow-y: auto; flex-shrink: 0; }
 
 .grid { flex: 1; min-height: 120px; overflow: auto; border: 1px solid var(--line); background: var(--sheet); }
@@ -200,6 +207,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   @page { size: A4; margin: 10mm; }
   html, body, .app { height: auto; }
   body { padding: 0; background: #fff; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #anaSel { display: none !important; } #rTitle { display: block !important; }
   .top, #readPane > .bar:not(#rHead), #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles, #aBar, .crumb .x, .req textarea, .req .bar { display: none !important; }
   .tw { overflow: visible; }
   .icard, .tile { break-inside: avoid; }
@@ -260,12 +268,12 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   </section>
 
   <section class="pane" id="readPane" hidden>
-    <div class="bar">
+    <div class="bar" id="listBar">
       <span class="grow" id="listInfo"></span>
       <button class="btn" id="refreshBtn" type="button">새로고침</button>
     </div>
     <div class="list" id="list"></div>
-    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button><button class="btn" id="linkedBtn" type="button" hidden>연동형 엑셀 받기</button><button class="btn" id="reportBtn" type="button" hidden>보고서 받기 (pptx)</button></div>
+    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><select id="anaSel" aria-label="분석표 고르기" hidden></select><button class="btn" id="anaRefresh" type="button" hidden>새로고침</button><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button><button class="btn" id="linkedBtn" type="button" hidden>연동형 엑셀 받기</button><button class="btn" id="reportBtn" type="button" hidden>보고서 받기 (pptx)</button></div>
     <div class="sub" role="tablist" id="rTabs" hidden>
       <button type="button" role="tab" data-v="vNote" data-m="reply">답장</button>
       <button type="button" role="tab" data-v="vSum" data-m="ana">요약표</button>
@@ -579,20 +587,21 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   async function loadList() {
     $('listInfo').textContent = '불러오는 중입니다.'; $('rErr').hidden = true;
     const ana = mode === 'ana', none = ana ? '아직 분석표가 없습니다. 디스코드에 "번호 ○○ 분석표로 분석해줘"라고 보내주세요.' : '아직 답장이 없습니다.';
+    listMode(ana);
     try {
       const items = await (await api(ana ? '/contents/analysis' : '/contents/outbox')).json();
       if (ana !== (mode === 'ana')) return;
       const names = items.filter(i => i.type === 'file' && i.name.endsWith(ana ? '.json' : '.txt')).map(i => i.name).sort().reverse();
-      if (!ana) outFiles = new Set(items.filter(i => i.type === 'file').map(i => i.name));
+      if (ana) { if (names.length) { fillAnaSel(names); return; } $('list').replaceChildren(); $('listInfo').textContent = none; return; }
+      outFiles = new Set(items.filter(i => i.type === 'file').map(i => i.name));
       $('list').replaceChildren(...names.map(name => {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'btn item'; b.dataset.name = name; b.textContent = ana ? name.replace(/\.json$/, '') : name;
         if (cur && cur.name === name) b.setAttribute('aria-current', 'true');
-        b.addEventListener('click', () => (ana ? openAna : openReply)(name, b));
+        b.addEventListener('click', () => openReply(name, b));
         return b;
       }));
-      $('listInfo').textContent = names.length ? (ana ? `분석표 ${names.length}개` : `답장 ${names.length}개`) : none;
-      if (ana) for (const b of $('list').children) loadAnaTitle(b);
+      $('listInfo').textContent = names.length ? `답장 ${names.length}개` : none;
     } catch (e) {
       $('list').replaceChildren();
       if (e.status === 404) { $('listInfo').textContent = none; return; }
@@ -641,20 +650,33 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     }
     return anaCache.get(name);
   }
-  function loadAnaTitle(b) {
-    const name = b.dataset.name;
-    anaEntry(name).then(j => { if (j.title) b.textContent = `${j.title} · ${name.replace(/\.json$/, '')}`; }, () => {});
+  function loadAnaTitle(o) {
+    const name = o.value;
+    anaEntry(name).then(j => { if (j.title) o.textContent = `${j.title} · ${name.replace(/\.json$/, '')}`; }, () => {});
   }
-  async function openAna(name, button) {
+  // 분석표 mode: one line, a dropdown in the header instead of the list
+  function listMode(ana) {
+    $('list').hidden = ana; $('rTitle').hidden = ana; $('anaSel').hidden = !ana; $('anaRefresh').hidden = !ana;
+    $('listBar').hidden = false;
+  }
+  function fillAnaSel(names) {
+    const sel = $('anaSel'), keep = cur && cur.ana ? cur.name : (() => { try { return localStorage.getItem('data-window-ana'); } catch (e) { return null; } })();
+    sel.replaceChildren(...names.map(n => { const o = document.createElement('option'); o.value = n; o.textContent = n.replace(/\.json$/, ''); return o; }));
+    for (const o of sel.options) loadAnaTitle(o);
+    const pick = names.includes(keep) ? keep : names[0];
+    sel.value = pick; $('listBar').hidden = true;
+    if (!cur || cur.name !== pick) openAna(pick); else $('rHead').hidden = false;
+  }
+  $('anaSel').addEventListener('change', () => openAna($('anaSel').value));
+  $('anaRefresh').addEventListener('click', () => { anaCache.clear(); loadList(); });
+  async function openAna(name) {
     const my = ++openToken;
-    $('rErr').hidden = true; $('listInfo').textContent = '여는 중입니다.';
-    for (const b of $('list').children) b.removeAttribute('aria-current');
-    button.setAttribute('aria-current', 'true');
+    $('rErr').hidden = true;
+    try { localStorage.setItem('data-window-ana', name); } catch (e) {}
     try {
       const j = await anaEntry(name);
       if (my !== openToken) return;
       const stamp = j.source || (/^(\d{8}-\d{6})/.exec(name) || [])[1] || '';
-      $('listInfo').textContent = '';
       $('rHead').hidden = false; $('rTitle').textContent = j.title || name.replace(/\.json$/, '');
       drawTable('');
       cur = { name, title: j.title || name.replace(/\.json$/, ''), note: j.note || '', body: '', extra: j, ana: true };
@@ -664,7 +686,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
       reqState = null; showTabs('ana'); startAnalysis(cur, srcState);
       view(AVIEWS.includes(curView) || curView === 'vReq' ? curView : 'vSum');
-    } catch (e) { $('listInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false; }
+    } catch (e) { $('rErr').textContent = explain(e); $('rErr').hidden = false; }
   }
   function showTabs(m) {
     $('rTabs').hidden = false;
@@ -1603,31 +1625,84 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   // rows → <tr>s, children rendered hidden under their parent; expand/collapse is done in place
   function treeRowsHtml(rows, depth, parentId, kidsOf, cells, nameOf) {
     let h = '';
-    for (const r of rows) {
+    rows.forEach((r, i) => {
       const id = 't' + (++treeSeq), ch = r.other ? null : kidsOf(r);
-      h += `<tr data-t="${id}"${parentId ? ` data-tp="${parentId}" hidden` : ''} class="lv${depth}"><td class="l"><span style="padding-left:${depth * 16}px"></span>${twisty(ch && ch.rows.length)}${nameOf(r, depth)}</td>${cells(r)}</tr>`;
+      h += `<tr data-t="${id}" data-o="${i}" data-n="${esc(r.name)}"${r.other ? ' data-fix="1"' : ''}${parentId ? ` data-tp="${parentId}" hidden` : ''} class="lv${depth}"><td class="l"><span style="padding-left:${depth * 16}px"></span>${twisty(ch && ch.rows.length)}${nameOf(r, depth)}</td>${cells(r)}</tr>`;
       if (ch && ch.rows.length) h += treeRowsHtml(ch.rows, depth + 1, id, kidsOf, cells, nameOf);
-    }
+    });
     return h;
   }
-  function puzzleHtml(C, p, nm, dn, dim) {
+  // ---------- INSIGHT tables: sort by a column (header click) and choose which items to show ----------
+  // Works on the rendered tree rows: siblings sort among themselves, children stay under their parent; 기타/조정 rows stay last.
+  const nv = v => fin2(v) ? +(+v).toPrecision(12) : '';
+  const TF_BTN = '<span class="tfw"><button type="button" class="btn small" data-tf="1">항목 고르기</button></span>';
+  const thc = cols => cols.map(([n, tip], i) => `<th class="c${i ? '' : ' l'}" data-c="${i}" title="누를 때마다 ${i ? '큰 순 ▼ → 작은 순 ▲' : '가나다순 ▲ → 역순 ▼'} → 처음 순서${tip ? ' · ' + esc(tip) : ''}">${esc(n)}<span class="ar"></span></th>`).join('');
+  const tblState = new Map();
+  function tblApply(table) {
+    const st = tblState.get(table.dataset.tk) || {}, tb = table.tBodies[0], tot = tb.querySelector('tr.tot'), kids = new Map();
+    for (const tr of tb.querySelectorAll('tr[data-t]')) { const p = tr.dataset.tp || ''; if (!kids.has(p)) kids.set(p, []); kids.get(p).push(tr); }
+    const val = tr => { const td = tr.children[st.c]; if (!td) return null; if (!st.c) return tr.dataset.n; const v = td.dataset.v; return v === '' || v == null ? null : +v; };
+    const order = list => {
+      const fix = list.filter(t => t.dataset.fix), rest = list.filter(t => !t.dataset.fix), byO = (a, b) => a.dataset.o - b.dataset.o;
+      if (st.dir) rest.sort((a, b) => { const x = val(a), y = val(b); if (x == null) return y == null ? 0 : 1; if (y == null) return -1; return (typeof x === 'string' ? x.localeCompare(y, 'ko', { numeric: true }) : x - y) * st.dir; });
+      else rest.sort(byO);
+      return rest.concat(fix.sort(byO));
+    };
+    const walk = p => { for (const tr of order(kids.get(p) || [])) { tb.insertBefore(tr, tot); walk(tr.dataset.t); } };
+    walk('');
+    let off = 0; const tops = kids.get('') || [];
+    for (const tr of tops) {
+      const o = !!(st.hide && st.hide.has(tr.dataset.n));
+      if (o) { off++; setOpen(tb, tr.dataset.t, false); }
+      tr.hidden = o;
+    }
+    for (const th of table.tHead.rows[0].cells) { const a = th.querySelector('.ar'); if (a) a.textContent = +th.dataset.c === st.c && st.dir ? (st.dir < 0 ? ' ▼' : ' ▲') : ''; }
+    if (tot) tot.cells[0].textContent = off ? '합계 (고른 항목과 무관한 전체)' : '합계';
+    const h4 = table.closest('.tw').previousElementSibling, hb = h4 && (h4.matches('h4') ? h4 : h4.previousElementSibling), b = hb && hb.querySelector('[data-tf]');
+    if (b) { b.textContent = off ? `항목 고르기 (${tops.length - off}/${tops.length})` : '항목 고르기'; b.classList.toggle('on', !!off); }
+  }
+  function tblOf(h4) { const n = h4.nextElementSibling; return (n.matches('.tw') ? n : n.nextElementSibling).querySelector('table'); }
+  function tblPicker(btn) {
+    const wrap = btn.parentNode, old = wrap.querySelector('.msp');
+    for (const p of document.querySelectorAll('.tfw .msp')) p.remove();
+    if (old) return;
+    const table = tblOf(btn.closest('h4')), st = tblState.get(table.dataset.tk) || {};
+    const tops = [...table.tBodies[0].querySelectorAll('tr[data-t]:not([data-tp])')].map(tr => tr.dataset.n);
+    const pop = el('div', 'msp');
+    pop.innerHTML = `<input type="search" placeholder="찾기 (${tops.length}개)"><div class="msl">${tops.map(n => `<label><input type="checkbox" value="${esc(n)}"${st.hide && st.hide.has(n) ? '' : ' checked'}> ${esc(n)}</label>`).join('')}</div><div class="msa"><button type="button" class="btn small" data-tfa="clear">전체 해제</button><button type="button" class="btn small" data-tfa="all">전체 선택</button><button type="button" class="btn small primary" data-tfa="ok">적용</button></div>`;
+    wrap.appendChild(pop);
+    const q = pop.querySelector('input[type=search]');
+    q.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); for (const lb of pop.querySelectorAll('.msl label')) lb.hidden = t && !lb.textContent.toLowerCase().includes(t); });
+    pop.addEventListener('click', e => {
+      const b = e.target.closest('[data-tfa]'); if (!b) return;
+      const boxes = [...pop.querySelectorAll('.msl input')];
+      if (b.dataset.tfa === 'clear') { for (const c of boxes) c.checked = false; return; }
+      if (b.dataset.tfa === 'all') { for (const lb of pop.querySelectorAll('.msl label')) if (!lb.hidden) lb.querySelector('input').checked = true; return; }
+      const hide = new Set(boxes.filter(c => !c.checked).map(c => c.value));
+      st.hide = hide.size && hide.size < boxes.length ? hide : null;
+      tblState.set(table.dataset.tk, st); pop.remove(); tblApply(table);
+    });
+    q.focus();
+  }
+  document.addEventListener('click', e => { for (const p of document.querySelectorAll('.tfw .msp')) if (!p.parentNode.contains(e.target)) p.remove(); });
+  function puzzleHtml(C, p, nm, dn, dim, tk) {
     const dl = belowDims(dim), T = puzzleTree(C, p, nm === '비용율' ? 'c' : 'v', dl);
     const kidsOf = r => T.kids(r, r._dl || dl);
     // children carry the rest of the dimension list
     const kidsWrap = r => { const k = kidsOf(r); if (k) for (const c of k.rows) c._dl = k.rest; return k; };
-    const cells = r => `<td class="n">${fN(r.S0)}→${fN(r.S1)}</td><td class="n">${fP(r.w0)}→${fP(r.w1)}</td><td class="n">${r.other ? '' : `${fP(r.r0)}→${fP(r.r1)}`}</td><td class="n ${sgc(r.rate)}">${fPP(r.rate, 2)}</td><td class="n ${sgc(r.mix)}">${fPP(r.mix, 2)}</td><td class="n ${sgc(r.ne)}">${r.ne ? fPP(r.ne, 2) : ''}</td><td class="n ${sgc(r.tot)}${isBad(r.tot) ? ' bad' : ''}"><b>${fPP(r.tot, 2)}</b></td>`;
+    const cells = r => `<td class="n" data-v="${nv(r.S1)}">${fN(r.S0)}→${fN(r.S1)}</td><td class="n" data-v="${nv(r.w1 - r.w0)}">${fP(r.w0)}→${fP(r.w1)}</td><td class="n" data-v="${r.other ? '' : nv(r.r1 - r.r0)}">${r.other ? '' : `${fP(r.r0)}→${fP(r.r1)}`}</td><td class="n ${sgc(r.rate)}" data-v="${nv(r.rate)}">${fPP(r.rate, 2)}</td><td class="n ${sgc(r.mix)}" data-v="${nv(r.mix)}">${fPP(r.mix, 2)}</td><td class="n ${sgc(r.ne)}" data-v="${nv(r.ne)}">${r.ne ? fPP(r.ne, 2) : ''}</td><td class="n ${sgc(r.tot)}${isBad(r.tot) ? ' bad' : ''}" data-v="${nv(r.tot)}"><b>${fPP(r.tot, 2)}</b></td>`;
     const nameOf = (r, depth) => `${depth ? `<small class="muted">${esc(AS.model.dims[r.g ? (r._dlv ?? 0) : 0] || '')}</small> ` : ''}${esc(r.name)}`;
     const levels = dl.length ? `${esc(dn)} → ${dl.map(d => esc(AS.model.dims[d])).join(' → ')}` : esc(dn);
-    let h = `<h4>${nm} 증감 퍼즐 <small class="muted">${levels} · 합계가 위 증감과 맞습니다</small>${dl.length ? ' <button type="button" class="btn small" data-tall="1">모두 펼치기</button> <button type="button" class="btn small" data-tall="0">모두 접기</button>' : ''}</h4>
+    let h = `<h4>${nm} 증감 퍼즐 <small class="muted">${levels} · 합계가 위 증감과 맞습니다</small>${dl.length ? ' <button type="button" class="btn small" data-tall="1">모두 펼치기</button> <button type="button" class="btn small" data-tall="0">모두 접기</button>' : ''} ${TF_BTN}</h4>
       <p class="muted">${fP(p.R0)} → ${fP(p.R1)} (${fPP(p.dR, 2)}) = ① 율 변화 ${fPP(p.rate, 2)} + ② 구성비 변화 ${fPP(p.mix, 2)} + ③ 종료·신규 ${fPP(p.ne, 2)}${dl.length ? ' · ▸를 누르면 아래 단계가 펼쳐집니다. 펼친 줄들의 합 = 위 줄의 ① 율 (신규·종료 줄은 ③)' : ''}</p>
-      <div class="tw"><table class="at"><thead><tr><th class="l">${esc(dn)}</th><th>매출</th><th>구성비</th><th>${nm}</th><th>① 율</th><th>② 구성비</th><th>③ 종료·신규</th><th>기여 합계</th></tr></thead><tbody>`;
+      <div class="tw"><table class="at" data-tk="${esc(tk || '')}"><thead><tr>${thc([[dn, '이름순'], ['매출', `${yrs()[1]} 매출 큰 순`], ['구성비', '구성비 증감 순'], [nm, `${nm} 증감 순`], ['① 율', ''], ['② 구성비', ''], ['③ 종료·신규', ''], ['기여 합계', '']])}</tr></thead><tbody>`;
     h += treeRowsHtml(T.rows, 0, null, kidsWrap, cells, (r, depth) => depth ? esc(r.name) : esc(r.name));
     h += `<tr class="tot"><td class="l">합계</td><td class="n">${fN(p.S0)}→${fN(p.S1)}</td><td class="n">100%</td><td class="n">${fP(p.R0)}→${fP(p.R1)}</td><td class="n">${fPP(p.rate, 2)}</td><td class="n">${fPP(p.mix, 2)}</td><td class="n">${fPP(p.ne, 2)}</td><td class="n">${fPP(p.dR, 2)}</td></tr></tbody></table></div>`;
     void nameOf;
     return h;
   }
   // 매출 · CM 기여 as a tree: each row opens into its 대분류 / 소분류 … with the same columns
-  function contribHtml(C, I) {
+  function contribHtml(C, I, tk) {
     const M = AS.model, dl = belowDims(I.dim);
     const fold = (o, g) => { o.leaves.push(...g.leaves); };
     const lim = gs => {
@@ -1637,11 +1712,12 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       return shown;
     };
     const kidsOf = r => { const rest = r._dl || dl; if (!rest.length || r.other) return null; const d = rest[0], gs = lim(groupsOf(C, r.leaves, d)); for (const g of gs) { g._dl = rest.slice(1); g._path = (r._path || [[I.dim, r.code]]).concat(g.other ? [] : [[d, g.code]]); } return { rows: gs }; };
-    const cells = g => { const t = g.s, dc = M.has.C ? t.dc : t.dv; return `<td>${g.other ? '' : chip(t.k)}</td><td class="n">${fN(t.S0)}→${fN(t.S1)} <span class="${sg(t.gS)}">(${fG(t.gS)})</span></td><td class="n${isBad(dc) ? ' bad' : ''}">${fP(M.has.C ? t.c0 : t.v0)}→${fP(M.has.C ? t.c1 : t.v1)}</td><td class="n">${fN(t.M0)}→${fN(t.M1)} <span class="${sg(t.dM)}">(${fD(t.dM)})</span></td><td class="n ${sg(t.eS)}">${fD(t.eS)}</td>${M.has.C ? `<td class="n ${sg(t.eC)}">${fD(t.eC)}</td>` : ''}${M.has.V ? `<td class="n ${sg(t.eV)}">${fD(t.eV)}</td>` : ''}`; };
+    const SEV = { red: 6, warn: 5, up: 4, new: 3, end: 2, ok: 1, na: 0 };
+    const cells = g => { const t = g.s, dc = M.has.C ? t.dc : t.dv; return `<td data-v="${g.other ? '' : SEV[t.k] ?? ''}">${g.other ? '' : chip(t.k)}</td><td class="n" data-v="${nv(t.S1)}">${fN(t.S0)}→${fN(t.S1)} <span class="${sg(t.gS)}">(${fG(t.gS)})</span></td><td class="n${isBad(dc) ? ' bad' : ''}" data-v="${nv(dc)}">${fP(M.has.C ? t.c0 : t.v0)}→${fP(M.has.C ? t.c1 : t.v1)}</td><td class="n" data-v="${nv(t.dM)}">${fN(t.M0)}→${fN(t.M1)} <span class="${sg(t.dM)}">(${fD(t.dM)})</span></td><td class="n ${sg(t.eS)}" data-v="${nv(t.eS)}">${fD(t.eS)}</td>${M.has.C ? `<td class="n ${sg(t.eC)}" data-v="${nv(t.eC)}">${fD(t.eC)}</td>` : ''}${M.has.V ? `<td class="n ${sg(t.eV)}" data-v="${nv(t.eV)}">${fD(t.eV)}</td>` : ''}`; };
     const nameOf = g => g.other ? esc(g.name) : `<a href="#" data-drill="${(g._path || [[I.dim, g.code]]).map(x => x.join(':')).join(';')}">${esc(g.name)}</a>`;
     const tops = lim(I.subs);
     const levels = dl.length ? `${esc(I.dn)} → ${dl.map(d => esc(M.dims[d])).join(' → ')}` : esc(I.dn);
-    let h = `<h4>${esc(I.dn)}별 매출 · CM 기여 <small class="muted">${levels} · CM 변화 큰 순 · 이름 클릭 = 그 항목만 보기</small>${dl.length ? ' <button type="button" class="btn small" data-tall="1">모두 펼치기</button> <button type="button" class="btn small" data-tall="0">모두 접기</button>' : ''}</h4><div class="tw"><table class="at"><thead><tr><th class="l">${esc(I.dn)}</th><th>판정</th><th>매출</th><th>${costName()}</th><th>CM</th><th>매출효과</th>${M.has.C ? '<th>비용율효과</th>' : ''}${M.has.V ? '<th>원가율효과</th>' : ''}</tr></thead><tbody>`;
+    let h = `<h4>${esc(I.dn)}별 매출 · CM 기여 <small class="muted">${levels} · CM 변화 큰 순 · 이름 클릭 = 그 항목만 보기</small>${dl.length ? ' <button type="button" class="btn small" data-tall="1">모두 펼치기</button> <button type="button" class="btn small" data-tall="0">모두 접기</button>' : ''} ${TF_BTN}</h4><div class="tw"><table class="at" data-tk="${esc(tk || '')}"><thead><tr>${thc([[I.dn, '이름순'], ['판정', '큰 문제 순'], ['매출', `${yrs()[1]} 매출 큰 순`], [costName(), '증감 순'], ['CM', 'CM 증감 순'], ['매출효과', ''], ...(M.has.C ? [['비용율효과', '']] : []), ...(M.has.V ? [['원가율효과', '']] : [])])}</tr></thead><tbody>`;
     h += treeRowsHtml(tops, 0, null, kidsOf, cells, g => nameOf(g));
     return h + '</tbody></table></div>';
   }
@@ -1659,6 +1735,16 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       const tb = all.closest('h4').nextElementSibling; const table = (tb.matches('.tw') ? tb : tb.nextElementSibling).querySelector('tbody');
       const open = all.dataset.tall === '1';
       for (const tr of table.querySelectorAll('tr[data-t]')) { if (open) { tr.hidden = false; const b = tr.querySelector('.tg'); if (b) { b.textContent = '▾'; b.setAttribute('aria-expanded', 'true'); } } else if (!tr.dataset.tp) setOpen(table, tr.dataset.t, false); }
+      if (open) tblApply(table.parentNode);   // keep unchosen items hidden
+      return;
+    }
+    const tf = e.target.closest('[data-tf]');
+    if (tf) { tblPicker(tf); return; }
+    const th = e.target.closest('th[data-c]');
+    if (th) {
+      const table = th.closest('table'), k = table.dataset.tk, st = tblState.get(k) || {}, c = +th.dataset.c, first = c ? -1 : 1;
+      if (st.c !== c || !st.dir) { st.c = c; st.dir = first; } else if (st.dir === first) st.dir = -first; else st.dir = 0;
+      tblState.set(k, st); tblApply(table);
     }
   });
   // puzzle tree for Excel: every level, indented names
@@ -1709,14 +1795,16 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       if (t.top) { const tc = trendCharts(C, t.leaves); if (tc) card.appendChild(tc); }
       if (I.subs.length > 1) {
         const two = el('div', 'two');
-        if (I.pc) { const d = el('div'); d.innerHTML = puzzleHtml(C, I.pc, '비용율', I.dn, I.dim); two.appendChild(d); }
-        if (I.pv) { const d = el('div'); d.innerHTML = puzzleHtml(C, I.pv, '원가율', I.dn, I.dim); two.appendChild(d); }
+        const tk = `${t.name}|${I.dn}|`;
+        if (I.pc) { const d = el('div'); d.innerHTML = puzzleHtml(C, I.pc, '비용율', I.dn, I.dim, tk + 'pc'); two.appendChild(d); }
+        if (I.pv) { const d = el('div'); d.innerHTML = puzzleHtml(C, I.pv, '원가율', I.dn, I.dim, tk + 'pv'); two.appendChild(d); }
         card.appendChild(two);
-        const cb = el('div'); cb.style.display = 'contents'; cb.innerHTML = contribHtml(C, I); card.appendChild(cb);
+        const cb = el('div'); cb.style.display = 'contents'; cb.innerHTML = contribHtml(C, I, tk + 'cb'); card.appendChild(cb);
       }
       wrap.appendChild(card);
     }
     host.appendChild(wrap);
+    for (const tb of host.querySelectorAll('table[data-tk]')) if (tblState.has(tb.dataset.tk)) tblApply(tb);   // keep sort / chosen items across redraws
     if (more > 0) host.appendChild(el('p', 'muted', `${M.dims[AS.s.unit]} ${more}개는 CM 변화가 작아 생략했습니다. 판정표에서 모두 볼 수 있습니다.`));
   }
   $('vIns').addEventListener('click', e => {
