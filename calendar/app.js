@@ -408,12 +408,32 @@
   const EV_AUTO = ['제품명(자동)', '대카테고리(자동)', '소카테고리(자동)', '할인율%(자동)', '등록자(자동)'];
   const evRow = e => [chLabel(e.channel_code, e.channel), e.channel_detail || '', e.title, e.product_code, e.start_date, e.end_date, Number(e.list_price), Number(e.sale_price), e.pack_qty ?? '', e.expected_qty ?? '', e.memo || '',
     e.product_name || '', catOf(e).l, catOf(e).s, discount(e.list_price, e.sale_price) ?? '', e.created_by ? userName(e.created_by) : ''];
-  async function exportEvents() {
-    try {
-      const all = await api.listAllEvents();
-      const rows = [[...EV_HEAD, ...EV_AUTO], ...all.map(evRow)];
-      download(await buildXlsx([{ name: '행사일정', rows, header: true }]), `행사일정_${todayKst()}.xlsx`);
-    } catch (x) { toast(x.message); }
+  // download by month range: events that overlap [first day of from-month, last day of to-month]
+  function exportEvents() {
+    const t = todayKst().split('-').map(Number), cur = t[0] * 12 + t[1] - 1;
+    const ym = i => `${Math.floor(i / 12)}-${String(i % 12 + 1).padStart(2, '0')}`;
+    const opts = sel => { const s = el('select', { class: 'in' }); for (let i = cur + 12; i >= 2024 * 12; i--) s.append(el('option', { value: i }, `${Math.floor(i / 12)}년 ${i % 12 + 1}월`)); s.value = sel; return s; };
+    const from = opts(cur), to = opts(cur), msg = el('div', { class: 'err' }); msg.hidden = true;
+    const preset = (a, b) => { from.value = a; to.value = b; };
+    const go = el('button', { class: 'btn pri', style: 'margin-top:12px;width:100%' }, '엑셀로 받기');
+    go.addEventListener('click', async () => {
+      let a = +from.value, b = +to.value; if (a > b) [a, b] = [b, a];
+      msg.hidden = true; go.disabled = true; go.textContent = '받는 중…';
+      try {
+        const d0 = ym(a) + '-01', d1 = ymd(Math.floor(b / 12), b % 12 + 1, 0);
+        const list = await api.listEvents(d0, d1);
+        if (!list.length) throw new Error('선택한 기간에 행사가 없습니다.');
+        const rows = [[...EV_HEAD, ...EV_AUTO], ...list.map(evRow)];
+        download(await buildXlsx([{ name: '행사일정', rows, header: true }]), `행사일정_${ym(a).replace('-', '')}${a === b ? '' : '-' + ym(b).replace('-', '')}.xlsx`);
+        close(); toast(`${list.length}건 받았습니다.`);
+      } catch (x) { msg.textContent = x.message; msg.hidden = false; go.disabled = false; go.textContent = '엑셀로 받기'; }
+    });
+    const chip = (label, a, b) => el('button', { class: 'btn', style: 'flex:1;padding:8px 4px', onclick: () => preset(a, b) }, label);
+    const close = sheet('일정 엑셀로 내려받기', el('div', {},
+      el('p', { class: 's', style: 'color:var(--muted);margin-top:0' }, '받을 연월을 고르세요. 기간에 하루라도 걸친 행사가 모두 들어갑니다 (예: 10/28~11/3 행사는 10월·11월 둘 다).'),
+      el('div', { style: 'display:flex;gap:6px;margin-bottom:10px' }, chip('이번 달', cur, cur), chip('지난 달', cur - 1, cur - 1), chip('최근 3개월', cur - 2, cur), chip('다음 달', cur + 1, cur + 1)),
+      el('div', { style: 'display:flex;gap:8px;align-items:center' }, el('div', { class: 'f', style: 'flex:1;margin:0' }, el('label', {}, '시작 월'), from), el('span', { style: 'padding-top:18px' }, '~'), el('div', { class: 'f', style: 'flex:1;margin:0' }, el('label', {}, '끝 월'), to)),
+      msg, go));
   }
   function excelDate(v) {
     if (typeof v === 'number' && v > 20000 && v < 80000) return new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000).toISOString().slice(0, 10);
