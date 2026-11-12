@@ -119,7 +119,14 @@
       return this._loadMe();
     }
     logout() { this.sess = null; this.user = null; try { localStorage.removeItem(this.SKEY); } catch (e) {} }
-    listEvents(from, to) { return this._rest(`events?select=*&start_date=lte.${to}&end_date=gte.${from}&order=start_date.asc,channel.asc`); }
+    // the server returns at most 1000 rows per request, so page through
+    async listEvents(from, to) {
+      const out = [];
+      for (let off = 0; ; off += 1000) {
+        const r = await this._rest(`events?select=*&start_date=lte.${to}&end_date=gte.${from}&order=start_date.asc,channel.asc,id.asc&limit=1000&offset=${off}`);
+        out.push(...(r || [])); if (!r || r.length < 1000) return out;
+      }
+    }
     listAllEvents() { return this._rest('events?select=*&order=start_date.asc'); }
     async saveEvent(ev) {
       validate(ev);
