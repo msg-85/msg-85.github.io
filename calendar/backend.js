@@ -23,6 +23,12 @@
     if (ev.expected_qty != null && !(ev.expected_qty >= 0)) throw new AppError('예상수량을 확인해 주세요.');
     if (!(Number.isInteger(ev.pack_qty) && ev.pack_qty > 0)) throw new AppError('단위당 입수량을 1 이상의 정수로 적어 주세요.');
   }
+  // temporary password a master hands out: no look-alike characters, easy to read out
+  const tempPassword = () => { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; for (const x of crypto.getRandomValues(new Uint8Array(8))) s += a[x % a.length]; return s; };
+  function checkNewPw(cur, next) {
+    if (!next || next.length < 6) throw new AppError('새 비밀번호는 6자 이상으로 정해 주세요.');
+    if (cur === next) throw new AppError('지금 비밀번호와 다른 비밀번호로 정해 주세요.');
+  }
   const randomCode = () => { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; const r = crypto.getRandomValues(new Uint8Array(8)); for (const x of r) s += a[x % a.length]; return s.slice(0, 4) + '-' + s.slice(4); };
 
   // ======================= Supabase =======================
@@ -35,7 +41,7 @@
       return j;
     }
     _save(j) {
-      this.sess = { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: Date.now() + (j.expires_in || 3600) * 1000, uid: j.user && j.user.id };
+      this.sess = { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: Date.now() + (j.expires_in || 3600) * 1000, uid: j.user && j.user.id, email: (j.user && j.user.email) || (this.sess && this.sess.email) || null };
       try { localStorage.setItem(this.SKEY, JSON.stringify(this.sess)); } catch (e) {}
     }
     async _token() {
@@ -72,8 +78,27 @@
       const p = rows && rows[0];
       if (!p) throw new AppError('가입 코드 등록이 끝나지 않은 계정입니다.', 'noprofile');
       if (!p.active) throw new AppError('사용이 중지된 계정입니다. 마스터에게 문의해 주세요.', 'inactive');
-      this.user = { id: p.id, login: p.login, name: p.display_name, role: p.role, channels: p.channels || [] };
+      this.user = { id: p.id, login: p.login, name: p.display_name, role: p.role, channels: p.channels || [], mustChange: !!p.must_change_pw };
       return this.user;
+    }
+    // change my own password: the current one is checked first by signing in with it
+    async changePassword(cur, next) {
+      checkNewPw(cur, next);
+      let email = this.sess && this.sess.email;
+      if (!email) { const t = await this._token(); const r = await fetch(this.url + '/auth/v1/user', { headers: { apikey: this.key, Authorization: 'Bearer ' + t } }); email = r.ok ? (await r.json()).email : (this.user.login || '').toLowerCase() + EMAIL_DOMAIN; }
+      this._save(await this._auth('token?grant_type=password', { email, password: cur }).catch(e => { throw new AppError(e.code === 400 ? '지금 비밀번호가 맞지 않습니다.' : e.message); }));
+      const r = await fetch(this.url + '/auth/v1/user', { method: 'PUT', headers: { apikey: this.key, Authorization: 'Bearer ' + this.sess.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: next }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})), m = j.msg || j.message || j.error_description || ''; throw new AppError(/different/i.test(m) ? '지금 비밀번호와 다른 비밀번호로 정해 주세요.' : /weak|length|short/i.test(m) ? '비밀번호가 너무 쉽습니다. 6자 이상으로 다시 정해 주세요.' : ('비밀번호를 바꾸지 못했습니다. ' + m)); }
+      // the password is already changed here; a server without migrate-password.sql has no flag to clear
+      try { await this._rest('rpc/password_changed', { method: 'POST', body: {} }); } catch (e) { if (this.user.mustChange) throw e; }
+      this.user.mustChange = false;
+    }
+    // master: give someone a temporary password (they must change it at their next login)
+    async resetPassword(userId) {
+      const temp = tempPassword();
+      try { await this._rest('rpc/admin_reset_password', { method: 'POST', body: { p_user: userId, p_temp: temp } }); }
+      catch (e) { if (e.code === 404 || /admin_reset_password/.test(e.message)) throw new AppError('서버 설정이 아직 안 됐습니다 (migrate-password.sql 실행 필요).'); throw e; }
+      return temp;
     }
     async login(login, pw) {
       this._save(await this._auth('token?grant_type=password', { email: login.trim().toLowerCase() + EMAIL_DOMAIN, password: pw }).catch(e => { throw new AppError(e.code === 400 ? '아이디 또는 비밀번호가 맞지 않습니다.' : e.message); }));
@@ -159,7 +184,7 @@
           { id: 11, event_id: null, kind: 'create', changes: { channel_code: CH('네이버'), title: '주말 특가', product_code: '9000101', start_date: D(21), end_date: D(23), list_price: 36000, sale_price: 29900, pack_qty: 24, expected_qty: 700, memo: '' }, before_row: null, reason: '신규 등록', status: 'pending', requested_by: 'u-lee', requested_at: new Date().toISOString(), decided_by: null, decided_at: null, comment: null },
         ] };
     }
-    _me(u) { this.user = { id: u.id, login: u.login, name: u.display_name, role: u.role, channels: u.channels || [] }; try { sessionStorage.setItem(this.K + '-me', u.id); } catch (e) {} return this.user; }
+    _me(u) { this.user = { id: u.id, login: u.login, name: u.display_name, role: u.role, channels: u.channels || [], mustChange: !!u.must_change_pw }; try { sessionStorage.setItem(this.K + '-me', u.id); } catch (e) {} return this.user; }
     async restore() { let id = null; try { id = sessionStorage.getItem(this.K + '-me'); } catch (e) {} const u = this.db.users.find(x => x.id === id && x.active); return u ? this._me(u) : null; }
     async login(login, pw) {
       const u = this.db.users.find(x => x.login === login.trim().toLowerCase());
@@ -209,6 +234,17 @@
     async upsertProducts(rows) { this._master(); for (const r of rows) { const i = this.db.products.findIndex(p => p.code === r.code); if (i >= 0) this.db.products[i] = { ...this.db.products[i], ...r }; else this.db.products.push({ active: true, ...r }); } this._persist(); return rows; }
     _master() { this._guard(); if (this.user.role !== 'master') throw new AppError('마스터만 할 수 있습니다.', 403); }
     async listUsers() { this._guard(); return this.db.users.map(({ pw, ...u }) => u); }
+    async changePassword(cur, next) {
+      this._guard(); checkNewPw(cur, next);
+      const u = this.db.users.find(x => x.id === this.user.id);
+      if (u.pw !== cur) throw new AppError('지금 비밀번호가 맞지 않습니다.');
+      u.pw = next; u.must_change_pw = false; this.user.mustChange = false; this._persist();
+    }
+    async resetPassword(userId) {
+      this._master(); if (userId === this.user.id) throw new AppError('본인 비밀번호는 ☰ → 비밀번호 변경에서 바꿔 주세요.');
+      const u = this.db.users.find(x => x.id === userId); if (!u) throw new AppError('사용자를 찾지 못했습니다.');
+      const temp = tempPassword(); u.pw = temp; u.must_change_pw = true; this._persist(); return temp;
+    }
     async setUser(id, patch) { this._master(); const u = this.db.users.find(x => x.id === id); Object.assign(u, patch); this._persist(); }
     async listInvites() { this._master(); return [...this.db.invites].reverse(); }
     async createInvite(role, note, channels) { this._master(); const inv = { code: randomCode(), role, note: note || null, channels: channels || [], created_by: this.user.id, created_at: new Date().toISOString(), used_by: null, used_at: null, revoked: false }; this.db.invites.push(inv); this._persist(); return inv; }
