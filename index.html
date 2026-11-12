@@ -37,6 +37,7 @@ a { color: var(--out); }
 .tab { border: 1px solid var(--line); background: var(--panel); padding: 4px 14px; cursor: pointer; font-weight: 600; }
 .tab[aria-selected="true"] { background: var(--in); border-color: var(--in); color: var(--on-accent); }
 #tabIn[aria-selected="true"] { background: var(--out); border-color: var(--out); }
+#tabAna[aria-selected="true"] { background: var(--s3); border-color: var(--s3); color: #fff; }
 .who { margin-left: auto; color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: center; }
 
 .pane { background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; min-width: 0; }
@@ -217,6 +218,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     <div class="tabs" role="tablist" id="tabs" hidden>
       <button class="tab" id="tabOut" role="tab" type="button" aria-selected="true">보내기</button>
       <button class="tab" id="tabIn" role="tab" type="button" aria-selected="false">답장 보기</button>
+      <button class="tab" id="tabAna" role="tab" type="button" aria-selected="false">분석표</button>
     </div>
     <span class="who" id="who" hidden>연결됨 <button class="btn small" id="logoutBtn" type="button">연결 끊기</button></span>
   </header>
@@ -265,13 +267,15 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     <div class="list" id="list"></div>
     <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button><button class="btn" id="linkedBtn" type="button" hidden>연동형 엑셀 받기</button><button class="btn" id="reportBtn" type="button" hidden>보고서 받기 (pptx)</button></div>
     <div class="sub" role="tablist" id="rTabs" hidden>
-      <button type="button" role="tab" data-v="vSum">요약표</button>
-      <button type="button" role="tab" data-v="vJudge">판정표</button>
-      <button type="button" role="tab" data-v="vIns">INSIGHT</button>
-      <button type="button" role="tab" data-v="vReq">요청 · 추가 분석</button>
-      <button type="button" role="tab" data-v="vTable">결과표</button>
-      <button type="button" role="tab" data-v="vSrc">올린 데이터</button>
+      <button type="button" role="tab" data-v="vNote" data-m="reply">답장</button>
+      <button type="button" role="tab" data-v="vSum" data-m="ana">요약표</button>
+      <button type="button" role="tab" data-v="vJudge" data-m="ana">판정표</button>
+      <button type="button" role="tab" data-v="vIns" data-m="ana">INSIGHT</button>
+      <button type="button" role="tab" data-v="vReq" data-m="ana">요청 · 추가 분석</button>
+      <button type="button" role="tab" data-v="vTable" data-m="reply">결과표</button>
+      <button type="button" role="tab" data-v="vSrc" data-m="reply ana">올린 데이터</button>
     </div>
+    <div class="view" id="vNote" hidden></div>
     <div class="abar" id="aBar" hidden></div>
     <div class="crumb" id="aCrumb" hidden></div>
     <div class="view" id="vSum" hidden></div>
@@ -379,15 +383,25 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   });
 
   // ---------- tabs ----------
+  // 'read' = replies (outbox/*.txt: 답장 · 결과표 · 올린 데이터); 'ana' = 분석표 (analysis/*.json: in-browser analysis of an upload)
+  let mode = 'read';
   function tab(name) {
     const send = name === 'send';
     $('sendPane').hidden = !send; $('readPane').hidden = send;
     $('tabOut').setAttribute('aria-selected', String(send));
-    $('tabIn').setAttribute('aria-selected', String(!send));
-    if (!send) loadList();
+    $('tabIn').setAttribute('aria-selected', String(name === 'read'));
+    $('tabAna').setAttribute('aria-selected', String(name === 'ana'));
+    if (send) return;
+    if (mode !== name || !cur) {
+      mode = name; cur = null; AS = null; srcState = null; openToken++;
+      $('rHead').hidden = true; $('rTabs').hidden = true; $('aBar').hidden = true; $('aCrumb').hidden = true;
+      for (const v of VIEWS) $(v).hidden = true;
+    }
+    loadList();
   }
   $('tabOut').addEventListener('click', () => tab('send'));
   $('tabIn').addEventListener('click', () => tab('read'));
+  $('tabAna').addEventListener('click', () => tab('ana'));
 
   // ---------- table helpers ----------
   const clean = t => t.replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
@@ -564,20 +578,24 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   // ---------- replies ----------
   async function loadList() {
     $('listInfo').textContent = '불러오는 중입니다.'; $('rErr').hidden = true;
+    const ana = mode === 'ana', none = ana ? '아직 분석표가 없습니다. 디스코드에 "번호 ○○ 분석표로 분석해줘"라고 보내주세요.' : '아직 답장이 없습니다.';
     try {
-      const items = await (await api('/contents/outbox')).json();
-      outFiles = new Set(items.filter(i => i.type === 'file').map(i => i.name));
-      const names = items.filter(i => i.type === 'file' && i.name.endsWith('.txt')).map(i => i.name).sort().reverse();
+      const items = await (await api(ana ? '/contents/analysis' : '/contents/outbox')).json();
+      if (ana !== (mode === 'ana')) return;
+      const names = items.filter(i => i.type === 'file' && i.name.endsWith(ana ? '.json' : '.txt')).map(i => i.name).sort().reverse();
+      if (!ana) outFiles = new Set(items.filter(i => i.type === 'file').map(i => i.name));
       $('list').replaceChildren(...names.map(name => {
         const b = document.createElement('button');
-        b.type = 'button'; b.className = 'btn item'; b.textContent = name;
-        b.addEventListener('click', () => openReply(name, b));
+        b.type = 'button'; b.className = 'btn item'; b.dataset.name = name; b.textContent = ana ? name.replace(/\.json$/, '') : name;
+        if (cur && cur.name === name) b.setAttribute('aria-current', 'true');
+        b.addEventListener('click', () => (ana ? openAna : openReply)(name, b));
         return b;
       }));
-      $('listInfo').textContent = names.length ? `답장 ${names.length}개` : '아직 답장이 없습니다.';
+      $('listInfo').textContent = names.length ? (ana ? `분석표 ${names.length}개` : `답장 ${names.length}개`) : none;
+      if (ana) for (const b of $('list').children) loadAnaTitle(b);
     } catch (e) {
       $('list').replaceChildren();
-      if (e.status === 404) { $('listInfo').textContent = '아직 답장이 없습니다.'; return; }
+      if (e.status === 404) { $('listInfo').textContent = none; return; }
       $('listInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false;
     }
   }
@@ -610,16 +628,59 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       const m =/^(\d{8}-\d{6})/.exec(name);
       srcState = { stamp: (extra && extra.source) || (m && m[1]) || '', loaded: false };
       $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
-      reqState = null; startAnalysis(cur, srcState);
-      view('vSum');
+      AS = null; reqState = null; showTabs('reply');
+      view('vNote');
     } catch (e) { $('listInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false; }
   }
-  const AVIEWS = ['vSum', 'vJudge', 'vIns'];
+  // 분석표: analysis/<name>.json = { title, source: '<inbox stamp>', note?, createdAt, analysis?: {unit, split, merge, filt} }
+  const anaCache = new Map();
+  function anaEntry(name) {
+    if (!anaCache.has(name)) {
+      const p = api('/contents/analysis/' + encodeURIComponent(name), { accept: 'application/vnd.github.raw+json' }).then(r => r.text()).then(JSON.parse);
+      p.catch(() => anaCache.delete(name)); anaCache.set(name, p);
+    }
+    return anaCache.get(name);
+  }
+  function loadAnaTitle(b) {
+    const name = b.dataset.name;
+    anaEntry(name).then(j => { if (j.title) b.textContent = `${j.title} · ${name.replace(/\.json$/, '')}`; }, () => {});
+  }
+  async function openAna(name, button) {
+    const my = ++openToken;
+    $('rErr').hidden = true; $('listInfo').textContent = '여는 중입니다.';
+    for (const b of $('list').children) b.removeAttribute('aria-current');
+    button.setAttribute('aria-current', 'true');
+    try {
+      const j = await anaEntry(name);
+      if (my !== openToken) return;
+      const stamp = j.source || (/^(\d{8}-\d{6})/.exec(name) || [])[1] || '';
+      $('listInfo').textContent = '';
+      $('rHead').hidden = false; $('rTitle').textContent = j.title || name.replace(/\.json$/, '');
+      drawTable('');
+      cur = { name, title: j.title || name.replace(/\.json$/, ''), note: j.note || '', body: '', extra: j, ana: true };
+      $('xlsxBtn').textContent = '엑셀로 내려받기'; $('xlsxBtn').disabled = false;
+      for (const [id] of EXTRA_FILES) $(id).hidden = true;
+      srcState = { stamp, loaded: false };
+      $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
+      reqState = null; showTabs('ana'); startAnalysis(cur, srcState);
+      view(AVIEWS.includes(curView) || curView === 'vReq' ? curView : 'vSum');
+    } catch (e) { $('listInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false; }
+  }
+  function showTabs(m) {
+    $('rTabs').hidden = false;
+    for (const b of $('rTabs').children) b.hidden = !b.dataset.m.split(' ').includes(m);
+  }
+  function drawNote() {
+    const c = cur, host = $('vNote'); if (!c) return;
+    host.innerHTML = c.note ? `<p class="summary">${esc(c.note)}</p>` : '<p class="muted">이 답장에는 메모가 없습니다. 결과표 탭을 보세요.</p>';
+  }
+  const AVIEWS = ['vSum', 'vJudge', 'vIns'], VIEWS = ['vNote', 'vSum', 'vJudge', 'vIns', 'vReq', 'vTable', 'vSrc'];
   let curView = 'vSum';
   function view(id) {
     curView = id;
     for (const b of $('rTabs').children) b.setAttribute('aria-selected', String(b.dataset.v === id));
-    for (const v of ['vSum', 'vJudge', 'vIns', 'vReq', 'vTable', 'vSrc']) $(v).hidden = v !== id;
+    for (const v of VIEWS) $(v).hidden = v !== id;
+    if (id === 'vNote') drawNote();
     const a = AVIEWS.includes(id) && AS && AS.model;
     $('aBar').hidden = !a; $('aCrumb').hidden = !a;
     if (id === 'vSrc' && srcState && !srcState.loaded) srcState.loading = loadSource();
@@ -811,10 +872,10 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       if (AS && AS.loading) await AS.loading;
       if (c !== cur) return;
       const sheets = AS && AS.model ? exportSheets() : [];
-      const memo = [['항목', '내용'], ['제목', c.title], ['답장 파일', c.name]];
+      const memo = [['항목', '내용'], ['제목', c.title], [c.ana ? '분석표' : '답장 파일', c.name]];
       if (st && st.stamp) memo.push(['올린 데이터 번호', st.stamp]);
-      for (const p of (c.note || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)) memo.push(['답장 메모', p]);
-      sheets.push({ name: '답장 메모', rows: memo, header: true, wrap: [1], widths: [18, 110] });
+      for (const p of (c.note || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)) memo.push([c.ana ? '메모' : '답장 메모', p]);
+      sheets.push({ name: c.ana ? '분석표 정보' : '답장 메모', rows: memo, header: true, wrap: [1], widths: [18, 110] });
       if (c.body) sheets.push({ name: '결과표', rows: parse(c.body).rows, header: true });
       if (st && st.table) sheets.push({ name: st.cut ? '올린 데이터(앞부분)' : '올린 데이터', rows: st.table.rows });
       const blob = await buildXlsx(sheets);
@@ -1270,7 +1331,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     if (s.filt[d]) for (const k of s.filt[d]) seen.add(k);
     const list = [...seen].sort((a, b) => M.vals[d][a].localeCompare(M.vals[d][b], 'ko', { numeric: true }));
     const pop = el('div', 'msp');
-    pop.innerHTML = `<input type="search" placeholder="찾기 (${list.length.toLocaleString()}개)"><div class="msl">${list.slice(0, 3000).map(k => `<label><input type="checkbox" value="${k}"${s.filt[d] && s.filt[d].has(k) ? ' checked' : ''}> ${esc(M.vals[d][k])}</label>`).join('')}</div>${list.length > 3000 ? '<span class="muted">앞 3,000개만 보입니다. 찾기로 좁혀 주세요.</span>' : ''}<div class="msa"><button type="button" class="btn small" data-ms="clear">전체 해제</button><button type="button" class="btn small" data-ms="vis">보이는 것 모두</button><button type="button" class="btn small primary" data-ms="ok">적용</button></div>`;
+    pop.innerHTML = `<input type="search" placeholder="찾기 (${list.length.toLocaleString()}개)"><div class="msl">${list.slice(0, 3000).map(k => `<label><input type="checkbox" value="${k}"${!s.filt[d] || s.filt[d].has(k) ? ' checked' : ''}> ${esc(M.vals[d][k])}</label>`).join('')}</div>${list.length > 3000 ? '<span class="muted">앞 3,000개만 보입니다. 찾기로 좁혀 주세요.</span>' : ''}<div class="msa"><button type="button" class="btn small" data-ms="clear">전체 해제</button><button type="button" class="btn small" data-ms="vis">전체 선택</button><button type="button" class="btn small primary" data-ms="ok">적용</button></div>`;
     det.appendChild(pop);
     const q = pop.querySelector('input[type=search]');
     q.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); for (const lb of pop.querySelectorAll('.msl label')) lb.hidden = t && !lb.textContent.toLowerCase().includes(t); });
@@ -1286,7 +1347,9 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     if (b.dataset.ms === 'clear') { for (const c of pop.querySelectorAll('.msl input')) c.checked = false; return; }
     if (b.dataset.ms === 'vis') { for (const lb of pop.querySelectorAll('.msl label')) if (!lb.hidden) lb.querySelector('input').checked = true; return; }
     const set = new Set([...pop.querySelectorAll('.msl input:checked')].map(c => +c.value));
-    AS.s.filt[d] = set.size ? set : null;
+    // nothing checked or every option checked = no filter (전체)
+    const all = pop.querySelectorAll('.msl input').length, more = !!pop.querySelector('.msp > .muted, .muted');
+    AS.s.filt[d] = set.size && (set.size < all || more) ? set : null;
     changed();
   });
   document.addEventListener('click', e => { for (const o of document.querySelectorAll('details.ms[open]')) if (!o.contains(e.target)) o.open = false; });
@@ -1699,14 +1762,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   let reqState = null;
   async function drawReq() {
     const c = cur; if (!c) return;
-    const base = c.name.replace(/\.txt$/, ''), host = $('vReq'), ready = AS && AS.model;
+    const base = c.name.replace(/\.(txt|json)$/, ''), host = $('vReq'), ready = AS && AS.model;
     host.innerHTML = `<div class="req"><h3 style="margin:0;font-size:15px">요청 쓰기</h3>
       <p class="muted">기본 화면 말고 더 보고 싶은 분석을 적어주세요. 지금 고른 범위가 같이 저장됩니다. 저장한 뒤 디스코드에 "요청 넣음"이라고 보내주시면 Claude가 답을 이 탭에 올립니다.</p>
       <p class="muted">지금 범위: ${ready ? esc(scopeText()) : '(자료를 읽는 중이거나 자동 분석이 안 되는 자료)'}</p>
       <textarea id="reqText" maxlength="4000" placeholder="예: 01.도매 안에서 제품군별로 원가율이 오른 이유를 SKU까지 보여줘"></textarea>
       <div class="bar"><span class="grow" id="reqInfo"></span><button type="button" class="btn primary" id="reqSend">요청 저장</button></div></div>
       <h3 style="margin:4px 0 0;font-size:15px">요청과 답</h3><div class="ins" id="reqList"><p class="muted">불러오는 중입니다.</p></div>
-      ${c.note ? `<details class="memo"><summary>처음 답장 메모 (Claude)</summary><p class="summary">${esc(c.note)}</p></details>` : ''}`;
+      ${c.note ? `<details class="memo"><summary>메모 (Claude)</summary><p class="summary">${esc(c.note)}</p></details>` : ''}`;
     $('reqSend').addEventListener('click', () => sendReq(c, base));
     const my = reqState = {};
     try {
