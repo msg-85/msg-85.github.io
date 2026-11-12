@@ -1041,16 +1041,16 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const years = yOrd.map(i => ys[i].replace(/\s+/g, '')), periods = pOrd.map(i => ps[i]);
     if (years.length < 2) return { error: `비교할 연도가 하나뿐입니다 (${years[0]}). 두 해 이상이 있어야 합니다.` };
     const nL = leafDims.length, nY = years.length, nP = periods.length, cells = nL * nY * nP;
-    if (cells > 4e6) return { error: `칸 조합이 너무 많습니다 (${nL.toLocaleString()}개 × ${nY}년 × ${nP}기간). 차원을 줄여서 올려주세요.` };
+    if (cells > 2.5e6) return { error: `칸 조합이 너무 많습니다 (${nL.toLocaleString()}개 × ${nY}년 × ${nP}기간). 차원을 줄여서 올려주세요.` };
     const used = [...new Set(R.s.map(s => s % 100))].sort((a, b) => a - b), uw = used.length, uix = new Int32Array(11).fill(-1);
     used.forEach((s, i) => { uix[s] = i; });
-    const raw = new Float32Array(cells * uw).fill(NaN);
+    const raw = new Float64Array(cells * uw).fill(NaN);
     for (let i = 0; i < R.l.length; i++) {
       const s = R.s[i], add = s >= 100, at = ((R.l[i] * nY + yNew[R.y[i]]) * nP + pNew[R.p[i]]) * uw + uix[s % 100];
       if (add) raw[at] = isNaN(raw[at]) ? R.v[i] : raw[at] + R.v[i];
       else if (isNaN(raw[at])) raw[at] = R.v[i];   // a pivot repeats a value (총매출2): the first one counts
     }
-    const data = new Float32Array(cells * 5), has = { D: false, G: false, C: false, V: false, M: false };
+    const data = new Float64Array(cells * 5), has = { D: false, G: false, C: false, V: false, M: false };
     const fin = Number.isFinite;
     for (let c = 0; c < cells; c++) {
       const g = s => uix[s] < 0 ? NaN : raw[c * uw + uix[s]];
@@ -1096,7 +1096,10 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   }
   function initState(M, c) {
     const nd = M.dims.length;
-    const s = { filt: M.dims.map(() => null), unit: 0, split: Math.min(1, nd - 1), merge: true, y0: M.nY - 2, y1: M.nY - 1, p0: 0, p1: M.nP - 1, thr: 0.1, jl: nd > 1 ? nd - 1 : 0, jf: 'all', q: '', sort: null };
+    const multi = M.vals.map((v, d) => d).filter(d => M.vals[d].length > 1), u0 = multi.length ? multi[0] : 0;
+    const s = { filt: M.dims.map(() => null), unit: u0, split: multi.length > 1 ? multi[1] : u0, merge: true, y0: M.nY - 2, y1: M.nY - 1, p0: 0, p1: M.nP - 1, thr: 0.1, jl: nd > 1 ? nd - 1 : 0, jf: 'all', q: '', sort: null };
+    let big = 0; for (let i = 0; i < M.data.length; i += 5) big += M.data[i];
+    s.div = big / Math.max(1, M.nY) > 5e9 ? 1e6 : big / Math.max(1, M.nY) > 5e6 ? 1e3 : 1;
     const pre = c.extra && c.extra.analysis;
     if (pre) applyState(M, s, pre);
     try { const v = localStorage.getItem(sKey(c.name)); if (v) applyState(M, s, JSON.parse(v)); } catch (e) {}
@@ -1107,7 +1110,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   function stateOut() {
     const M = AS.model, s = AS.s, filt = {};
     s.filt.forEach((f, d) => { if (f) filt[M.dims[d]] = [...f].map(k => M.vals[d][k]); });
-    return { filt, unit: M.dims[s.unit], split: M.dims[s.split], merge: s.merge, years: [M.years[s.y0], M.years[s.y1]], periods: [M.periods[s.p0], M.periods[s.p1]], thr: s.thr };
+    return { filt, unit: M.dims[s.unit], split: M.dims[s.split], merge: s.merge, years: [M.years[s.y0], M.years[s.y1]], periods: [M.periods[s.p0], M.periods[s.p1]], thr: s.thr, div: s.div };
   }
   function applyState(M, s, o) {
     const di = n => M.dims.indexOf(n);
@@ -1118,6 +1121,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     if (o.years) { const a = M.years.indexOf(o.years[0]), b = M.years.indexOf(o.years[1]); if (a >= 0 && b >= 0 && a !== b) { s.y0 = a; s.y1 = b; } }
     if (o.periods) { const a = M.periods.indexOf(o.periods[0]), b = M.periods.indexOf(o.periods[1]); if (a >= 0 && b >= 0) { s.p0 = Math.min(a, b); s.p1 = Math.max(a, b); } }
     if (typeof o.thr === 'number') s.thr = o.thr;
+    if ([1, 1e3, 1e6, 1e8].includes(o.div)) s.div = o.div;
   }
 
   // ---------- numbers ----------
@@ -1177,27 +1181,38 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   const chip = k => `<span class="j ${k}">${JL[k]}</span>`;
   // rate puzzle: parent rate change = ① each item's own rate change + ② share shift + ③ items that ended or started.
   // ② and ③ are measured against the parent's base rate, so an item only counts as "mix" when its rate differs from the average.
+  // Items with no sales in a year can still carry cost (returns, adjustments). The split is done on the items
+  // with sales, and what those other amounts do to the rate is one extra row, so the parts always add up to the real change.
   function puzzle(gs, key) {
-    const S0 = gs.reduce((t, g) => t + Math.max(0, g.s.S0), 0), S1 = gs.reduce((t, g) => t + Math.max(0, g.s.S1), 0);
     const amt = (g, y) => key === 'c' ? g.s['C' + y] : g.s['V' + y];
-    const R0 = S0 > 0 ? gs.reduce((t, g) => t + (g.s.S0 > 0 ? amt(g, 0) : 0), 0) / S0 : 0;
-    const R1 = S1 > 0 ? gs.reduce((t, g) => t + (g.s.S1 > 0 ? amt(g, 1) : 0), 0) / S1 : 0;
-    const rows = gs.map(g => {
-      const w0 = S0 > 0 && g.s.S0 > 0 ? g.s.S0 / S0 : 0, w1 = S1 > 0 && g.s.S1 > 0 ? g.s.S1 / S1 : 0;
+    const tot = (y, f) => gs.reduce((t, g) => t + f(g, y), 0);
+    const P0 = tot(0, g => g.s.S0 > 0 ? g.s.S0 : 0), P1 = tot(1, g => g.s.S1 > 0 ? g.s.S1 : 0);
+    const Rp0 = P0 > 0 ? tot(0, g => g.s.S0 > 0 ? amt(g, 0) : 0) / P0 : 0, Rp1 = P1 > 0 ? tot(1, g => g.s.S1 > 0 ? amt(g, 1) : 0) / P1 : 0;
+    const S0 = tot(0, g => g.s.S0), S1 = tot(1, g => g.s.S1);
+    const R0 = S0 > 0 ? tot(0, amt) / S0 : 0, R1 = S1 > 0 ? tot(1, amt) / S1 : 0;
+    const rows = gs.filter(g => g.s.S0 > 0 || g.s.S1 > 0).map(g => {
+      const w0 = P0 > 0 && g.s.S0 > 0 ? g.s.S0 / P0 : 0, w1 = P1 > 0 && g.s.S1 > 0 ? g.s.S1 / P1 : 0;
       const r0 = g.s[key + '0'], r1 = g.s[key + '1'];
       let rate = 0, mix = 0, ne = 0;
-      if (w0 > 0 && w1 > 0) { rate = w1 * (r1 - r0); mix = (w1 - w0) * (r0 - R0); }
-      else if (w1 > 0) ne = w1 * (r1 - R0);
-      else if (w0 > 0) ne = -w0 * (r0 - R0);
+      if (w0 > 0 && w1 > 0) { rate = w1 * (r1 - r0); mix = (w1 - w0) * (r0 - Rp0); }
+      else if (w1 > 0) ne = w1 * (r1 - Rp0);
+      else if (w0 > 0) ne = -w0 * (r0 - Rp0);
       return { g, name: g.name, S0: g.s.S0, S1: g.s.S1, w0, w1, r0, r1, rate, mix, ne, tot: rate + mix + ne };
     });
+    const adj = (R1 - Rp1) - (R0 - Rp0);
+    if (Math.abs(adj) > 5e-6) {
+      const n = gs.filter(g => !(g.s.S0 > 0) || !(g.s.S1 > 0)).length;
+      rows.push({ name: '매출 없는 비용·조정', S0: S0 - P0, S1: S1 - P1, w0: 0, w1: 0, r0: null, r1: null, rate: 0, mix: 0, ne: adj, tot: adj, other: true, adj: true, note: `매출이 0 이하인 ${n}곳의 금액` });
+    }
     const sum = k => rows.reduce((t, r) => t + r[k], 0);
     return { rows, R0, R1, dR: R1 - R0, rate: sum('rate'), mix: sum('mix'), ne: sum('ne'), S0, S1 };
   }
 
   // ---------- formatting ----------
   const fin2 = v => v != null && Number.isFinite(v);
-  const fN = v => !fin2(v) ? '–' : Math.abs(v) >= 10 || v === Math.round(v) ? Math.round(v).toLocaleString() : v.toFixed(1);
+  const DIVS = [[1, '원'], [1e3, '천원'], [1e6, '백만원'], [1e8, '억원']];
+  const divName = () => (DIVS.find(d => d[0] === AS.s.div) || DIVS[0])[1];
+  const fN = v => { if (!fin2(v)) return '–'; v /= (AS && AS.s && AS.s.div) || 1; return Math.abs(v) >= 10 || v === Math.round(v) ? Math.round(v).toLocaleString() : v.toFixed(1); };
   const fD = v => !fin2(v) ? '–' : (v > 0.05 ? '+' : '') + fN(v);
   const fP = v => !fin2(v) ? '–' : (v * 100).toFixed(1) + '%';
   const fPP = (v, n = 1) => !fin2(v) ? '–' : (v > 0 ? '+' : '') + (v * 100).toFixed(n) + '%p';
@@ -1232,6 +1247,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const yo = M.years.map((y, i) => [i, y]);
     h += `<label class="f">비교<span><select data-k="y0">${opt(yo, s.y0)}</select> → <select data-k="y1">${opt(yo, s.y1)}</select></span></label>`;
     if (M.nP > 1) { const po = M.periods.map((p, i) => [i, p]); h += `<label class="f">기간<span><select data-k="p0">${opt(po, s.p0)}</select> ~ <select data-k="p1">${opt(po, s.p1)}</select></span></label>`; }
+    h += `<label class="f">금액 단위<select data-k="div">${opt(DIVS, s.div)}</select></label>`;
     h += `<label class="f">${costName()} 상승 기준 (%p 초과)<input type="number" step="0.05" min="0" data-k="thr" value="${s.thr}"></label>`;
     $('aBar').innerHTML = h;
   }
@@ -1287,7 +1303,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       h += `<span>›</span><span><b>${esc(M.dims[d])}</b>: ${esc(v.slice(0, 3).join(', '))}${v.length > 3 ? ` 외 ${v.length - 3}개` : ''}</span><button type="button" class="x" data-cr="${d}" title="이 필터 지우기">✕</button>`;
     });
     const [a, b] = yrs();
-    h += `<span>· ${esc(M.dims[s.unit])}별 · ${esc(M.dims[s.split])}로 쪼개 보기 · ${esc(a)} → ${esc(b)}${perText() ? ' · ' + esc(perText()) : ''}</span>`;
+    h += `<span>· ${esc(M.dims[s.unit])}별 · ${esc(M.dims[s.split])}로 쪼개 보기 · ${esc(a)} → ${esc(b)}${perText() ? ' · ' + esc(perText()) : ''} · 금액 ${divName()}</span>`;
     if (M.cut) h += `<span class="neg">· 자료가 너무 커서 앞부분만 계산했습니다</span>`;
     $('aCrumb').innerHTML = h;
   }
@@ -1452,7 +1468,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     for (const [p, nm] of [[pc, '비용율'], [pv, '원가율']]) {
       if (!p || subs.length < 2) continue;
       const main = Math.abs(p.mix) > Math.abs(p.rate) ? `${dn} 구성 변화(비중 이동) 영향이 율 변화보다 큽니다` : `${dn}별 ${nm} 자체의 변화가 주된 원인입니다`;
-      const up = p.rows.filter(r => r.tot > 0).sort((a, b) => b.tot - a.tot).slice(0, 2), dw = p.rows.filter(r => r.tot < 0).sort((a, b) => a.tot - b.tot).slice(0, 2);
+      const up = p.rows.filter(r => r.tot > 0 && !r.adj).sort((a, b) => b.tot - a.tot).slice(0, 2), dw = p.rows.filter(r => r.tot < 0 && !r.adj).sort((a, b) => a.tot - b.tot).slice(0, 2);
       const why = r => Math.abs(r.ne) > Math.abs(r.rate) + Math.abs(r.mix) ? (r.w0 > 0 ? '종료' : '신규') : Math.abs(r.mix) > Math.abs(r.rate) ? `비중 ${fP(r.w0)}→${fP(r.w1)}` : `${nm} ${fP(r.r0)}→${fP(r.r1)}`;
       const lst = rs => rs.map(r => `${r.name} ${fPP(r.tot, 2)} (${why(r)})`).join(', ');
       const txt = `${nm} ${fP(p.R0)} → ${fP(p.R1)} (${fPP(p.dR, 2)}) = ① ${dn}별 율 변화 ${fPP(p.rate, 2)} + ② 구성비 변화 ${fPP(p.mix, 2)} + ③ 종료·신규 ${fPP(p.ne, 2)} → ${main}.` +
@@ -1473,14 +1489,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     return { subs, pc, pv, B, plain, dn };
   }
   function puzzleRows(p, limit) {
-    const rs = p.rows.slice().sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
+    const adjR = p.rows.filter(r => r.adj), rs = p.rows.filter(r => !r.adj).sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
     const shown = rs.slice(0, limit), rest = rs.slice(limit);
     if (rest.length) {
       const o = { name: `기타 ${rest.length}개`, S0: 0, S1: 0, w0: 0, w1: 0, rate: 0, mix: 0, ne: 0, tot: 0, other: true };
       for (const r of rest) for (const k of ['S0', 'S1', 'w0', 'w1', 'rate', 'mix', 'ne', 'tot']) o[k] += r[k];
       shown.push(o);
     }
-    return shown;
+    return shown.concat(adjR);
   }
   function puzzleHtml(p, nm, dn) {
     let h = `<h4>${nm} 증감 퍼즐 <small class="muted">${esc(dn)} 기준 · 합계가 위 증감과 맞습니다</small></h4>
@@ -1508,11 +1524,11 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       for (const [yi, y] of [[0, s.y0], [1, s.y1]]) {
         let a = 0, c = 0, v = 0;
         for (const l of leaves) { const o = ((l * M.nY + y) * M.nP + p) * 5; a += M.data[o]; c += M.data[o + 3]; v += M.data[o + 4]; }
-        S[yi].push(a); rC[yi].push(a > 0 ? +(c / a * 100).toFixed(2) : null); rV[yi].push(a > 0 ? +(v / a * 100).toFixed(2) : null);
+        S[yi].push(a / (s.div || 1)); rC[yi].push(a > 0 ? +(c / a * 100).toFixed(2) : null); rV[yi].push(a > 0 ? +(v / a * 100).toFixed(2) : null);
       }
     }
     const [Y0, Y1] = yrs(), out = el('div', 'charts');
-    out.appendChild(chart({ title: '기간별 매출', x, series: [{ name: Y0, values: S[0] }, { name: Y1, values: S[1] }] }));
+    out.appendChild(chart({ title: `기간별 매출 (${divName()})`, x, series: [{ name: Y0, values: S[0] }, { name: Y1, values: S[1] }] }));
     const ser = [];
     if (M.has.C) ser.push({ name: Y0 + ' 비용율', values: rC[0] }, { name: Y1 + ' 비용율', values: rC[1] });
     if (M.has.V) ser.push({ name: Y0 + ' 원가율', values: rV[0] }, { name: Y1 + ' 원가율', values: rV[1] });
@@ -1550,8 +1566,8 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   // ---------- Excel: the analysis as it is selected on screen ----------
   function exportSheets() {
     const M = AS.model, s = AS.s, C = compute(), [Y0, Y1] = yrs(), sheets = [];
-    const r1 = v => fin2(v) ? Math.round(v * 10) / 10 : '', pc = v => fin2(v) ? (v * 100).toFixed(2) + '%' : '', pp = v => fin2(v) ? fPP(v, 2) : '';
-    sheets.push({ name: '선택 조건', rows: [['항목', '내용'], ['보는 범위', scopeText()], ['판정 기준', `${costName()} +${s.thr}%p 초과 상승: 매출↓ → 큰 문제, 매출↑·CM↓ → 문제, CM 유지 → 비용↑·CM유지`], ['자료', `${M.kind} · ${M.nL.toLocaleString()}개 조합 · ${M.years.join(', ')}`]], header: true, wrap: [1], widths: [14, 110] });
+    const r1 = v => fin2(v) ? Math.round(v / (s.div || 1) * 10) / 10 : '', pc = v => fin2(v) ? (v * 100).toFixed(2) + '%' : '', pp = v => fin2(v) ? fPP(v, 2) : '';
+    sheets.push({ name: '선택 조건', rows: [['항목', '내용'], ['보는 범위', scopeText()], ['금액 단위', divName()], ['판정 기준', `${costName()} +${s.thr}%p 초과 상승: 매출↓ → 큰 문제, 매출↑·CM↓ → 문제, CM 유지 → 비용↑·CM유지`], ['자료', `${M.kind} · ${M.nL.toLocaleString()}개 조합 · ${M.years.join(', ')}`]], header: true, wrap: [1], widths: [14, 110] });
     const { blocks, lines } = sumBlocks(C), sum = [[M.dims[s.unit], '항목', Y0, Y1, 'Δ', '증감률']];
     for (const b of blocks) {
       for (const ln of lines) { const v = lineVals(b.s, ln); sum.push(v.kind === 'amt' ? [b.name, ln[0].trim(), r1(v.a), r1(v.b), r1(v.d), pc(v.g)] : [b.name, ln[0].replace(/^[　·\s]+/, ''), pc(v.a), pc(v.b), pp(v.d), '']); }
