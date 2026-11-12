@@ -80,6 +80,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .lock { font-size: 12px; color: var(--muted); }
 .empty { color: var(--muted); text-align: center; padding: 24px 0; font-size: 14px; }
 .fab { position: fixed; right: max(18px, calc(50% - 362px)); bottom: calc(22px + env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 29px; border: 0; background: var(--brand); color: var(--brand-ink); font-size: 30px; box-shadow: var(--shadow); cursor: pointer; z-index: 6; }
+.fab2 { right: calc(max(18px, calc(50% - 362px)) + 70px); background: var(--sheet); color: var(--fg); border: 1px solid var(--line); }
+.dpick { display: flex; gap: 10px; align-items: flex-start; padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.dpick input { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.dpick .s { color: var(--muted); font-size: 13px; }
+.dlist { max-height: 46vh; overflow: auto; margin: 8px 0; }
 /* sheets */
 .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
 .sheet { background: var(--sheet); width: 100%; max-width: 760px; max-height: 92vh; overflow: auto; border-radius: 18px 18px 0 0; padding: 8px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow: var(--shadow); }
@@ -175,6 +180,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
     <div class="dhead" id="dayHead"></div>
     <div id="dayList"></div>
   </div>
+  <button class="fab fab2" id="delBtn" aria-label="행사 골라서 삭제" hidden>−</button>
   <button class="fab" id="addBtn" aria-label="일정 등록" hidden>+</button>
 </div>
 
