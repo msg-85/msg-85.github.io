@@ -65,8 +65,32 @@
     try { [S.channels, S.products, S.users] = await Promise.all([api.listChannels(), api.listProducts(), api.listUsers()]); }
     catch (x) { return fail(x); }
     fillFilters(); await load(); refreshRequests();
+    if (S.user.mustChange) return changePw(true);
     // first login on this device (per role): show the short guide once
     try { const k = 'evcal-help-seen-' + S.user.role; if (!localStorage.getItem(k)) { localStorage.setItem(k, '1'); showHelp(); } } catch (e) {}
+  }
+  // ---------------- password ----------------
+  // forced: logged in with a temporary password from the master; closing without changing logs out
+  function changePw(forced) {
+    const f = (ph, ac) => el('input', { class: 'in', type: 'password', placeholder: ph, autocomplete: ac, style: 'margin-top:8px' });
+    const cur = f(forced ? '받은 임시 비밀번호' : '지금 비밀번호', 'current-password'), n1 = f('새 비밀번호 (6자 이상)', 'new-password'), n2 = f('새 비밀번호 한 번 더', 'new-password');
+    const err = el('div', { class: 'err', hidden: true }), btn = el('button', { class: 'btn pri' }, '바꾸기');
+    let done = false, close;
+    btn.addEventListener('click', async () => {
+      err.hidden = true;
+      if (n1.value !== n2.value) { err.textContent = '새 비밀번호 두 칸이 서로 다릅니다.'; err.hidden = false; return; }
+      btn.disabled = true;
+      try { await api.changePassword(cur.value, n1.value); done = true; close(); toast('비밀번호를 바꿨습니다.'); }
+      catch (x) { err.textContent = x.message; err.hidden = false; }
+      btn.disabled = false;
+    });
+    n2.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
+    close = sheet(forced ? '새 비밀번호 정하기' : '비밀번호 변경', el('div', {},
+      forced ? el('div', { class: 'ok' }, '마스터가 준 임시 비밀번호로 로그인했습니다.\n계속 쓰려면 본인만 아는 새 비밀번호를 정해 주세요.') : null,
+      cur, n1, n2, err, el('div', { class: 'acts' }, btn),
+      el('p', { class: 's', style: 'color:var(--muted);font-size:13px' }, forced ? '창을 닫으면 로그아웃됩니다.' : '비밀번호를 잊었으면 마스터에게 "비밀번호 초기화"를 부탁하세요.')),
+      () => { if (forced && !done) { api.logout(); S.user = null; showLogin(); toast('새 비밀번호를 정해야 쓸 수 있습니다.'); } });
+    setTimeout(() => cur.focus(), 60);
   }
   function fail(x) { if (x.code === 401) { api.logout(); showLogin(); } else toast(x.message); }
   function fillFilters() {
@@ -371,6 +395,7 @@
       isM ? mi('🕘 변경 이력', showLog) : null,
       el('div', { class: 'sec' }, '기타'),
       mi('❓ 사용 안내', showHelp),
+      mi('🔒 비밀번호 변경', () => changePw(false)),
       isStandalone() ? null : mi('📱 홈 화면에 앱으로 설치', install),
       mi('🌓 화면 색: ' + THEME_LABEL[getTheme()] + ' (누르면 바뀜)', () => { const order = ['auto', 'light', 'dark'], nx = order[(order.indexOf(getTheme()) + 1) % 3]; setTheme(nx); toast('화면 색: ' + THEME_LABEL[nx]); }),
       api.demo ? mi('🔄 시연 데이터 처음으로 되돌리기', () => { api.reset(); api.logout(); location.reload(); }) : null,
@@ -534,6 +559,18 @@
       const act = el('button', { class: 'btn' + (u.active ? ' del' : ''), disabled: u.id === S.user.id }, u.active ? '중지' : '다시 사용');
       act.addEventListener('click', async () => { try { await api.setUser(u.id, { active: !u.active }); u.active = !u.active; act.textContent = u.active ? '중지' : '다시 사용'; act.className = 'btn' + (u.active ? ' del' : ''); } catch (x) { toast(x.message); } });
       const chInfo = el('div', { class: 's', style: 'color:var(--muted);font-size:12px' }, (u.channels || []).length ? '담당: ' + u.channels.map(c => chLabel(c)).join(', ') : (u.role === 'manager' ? '담당 채널 미지정' : ''));
+      const pwBtn = u.id === S.user.id ? null : el('button', { class: 'lnk', style: 'border:0;background:none;padding:2px 0;color:var(--accent,#2e7d6b);font-size:12px;cursor:pointer;text-decoration:underline' }, '비밀번호 초기화');
+      if (pwBtn) pwBtn.addEventListener('click', async () => {
+        if (!confirm(u.display_name + '(' + u.login + ')의 비밀번호를 임시 비밀번호로 바꿀까요?\n지금 쓰던 비밀번호는 바로 안 되고, 다른 기기 로그인도 끊깁니다.')) return;
+        try {
+          const temp = await api.resetPassword(u.id);
+          const msg = '[행사 일정 캘린더] ' + location.origin + location.pathname + '\n아이디: ' + u.login + '\n임시 비밀번호: ' + temp + '\n로그인하면 새 비밀번호를 정하는 화면이 나옵니다.';
+          sheet('임시 비밀번호', el('div', {},
+            el('div', { class: 'ok' }, u.display_name + '님의 임시 비밀번호입니다. 본인에게만 전달하세요.\n\n', el('span', { class: 'code' }, temp)),
+            el('div', { class: 'acts' }, el('button', { class: 'btn pri', onclick: () => navigator.clipboard.writeText(msg).then(() => toast('복사했습니다.')) }, '안내 문구 복사')),
+            el('p', { class: 's', style: 'color:var(--muted);font-size:13px' }, '이 창을 닫으면 다시 볼 수 없습니다. 잊으면 한 번 더 초기화하면 됩니다.')));
+        } catch (x) { toast(x.message); }
+      });
       const chBtn = el('button', { class: 'btn', style: 'padding:6px 10px' }, '채널');
       chBtn.addEventListener('click', () => {
         const pk = channelPicker(u.channels || []); let close2;
@@ -541,7 +578,7 @@
         save.addEventListener('click', async () => { try { const v = pk.get(); await api.setUser(u.id, { channels: v }); u.channels = v; chInfo.textContent = v.length ? '담당: ' + v.map(c => chLabel(c)).join(', ') : '담당 채널 미지정'; close2(); toast('담당 채널을 바꿨습니다.'); } catch (x) { toast(x.message); } });
         close2 = sheet(u.display_name + ' 담당 채널', el('div', {}, pk.box, el('div', { class: 'acts' }, save)));
       });
-      return el('div', { class: 'li' }, el('div', { class: 'grow' }, el('b', {}, u.display_name), el('div', { class: 's', style: 'color:var(--muted);font-size:12px' }, u.login), chInfo), u.role === 'manager' ? chBtn : null, sel, act);
+      return el('div', { class: 'li' }, el('div', { class: 'grow' }, el('b', {}, u.display_name), el('div', { class: 's', style: 'color:var(--muted);font-size:12px' }, u.login), chInfo, pwBtn), u.role === 'manager' ? chBtn : null, sel, act);
     }));
     sheet('가입 코드 · 사용자', el('div', {},
       el('h3', { style: 'margin:4px 0 8px' }, '새 가입 코드 만들기'),
