@@ -112,6 +112,69 @@ td.num { text-align: right; font-family: var(--mono); }
 .items p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .files { display: flex; flex-wrap: wrap; gap: 4px; }
 
+/* analysis: selection bar, tables, 판정 chips, puzzles. Everything below is recomputed in the browser from the uploaded data. */
+:root { --bad: #ffd3da; --jr: #fde1e1; --jrf: #a8161b; --jw: #fff1d1; --jwf: #7f4d00; --ju: #e2f3e7; --juf: #1d6a35; --jo: #e6ecfb; --jof: #2c4a9a; --jn: #eee6fa; --jnf: #5a3a9c; --je: #ebebeb; --jef: #4d4d4d; --pos: #1d7a4a; --neg: #c0262d; }
+@media (prefers-color-scheme: dark) { :root { --bad: #4d2329; --jr: #4a1f22; --jrf: #ffb3b0; --jw: #47361a; --jwf: #ffd58a; --ju: #1c3a27; --juf: #9fe0b4; --jo: #23304f; --jof: #b6c6ff; --jn: #33284a; --jnf: #d5c2ff; --je: #333; --jef: #ccc; --pos: #6fd39b; --neg: #ff8a8a; } }
+.abar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end; flex-shrink: 0; }
+.abar .f { display: flex; flex-direction: column; gap: 1px; font-size: 12px; color: var(--muted); }
+.abar .f.row { flex-direction: row; align-items: center; gap: 4px; }
+.abar select, .abar input[type=number], .abar input[type=search] { font-size: 13px; padding: 3px 6px; border: 1px solid var(--line); background: var(--sheet); color: var(--fg); }
+.abar input[type=number] { width: 64px; }
+.abar .sp { flex: 1; }
+.ms { position: relative; }
+.ms > summary { list-style: none; cursor: pointer; border: 1px solid var(--line); background: var(--sheet); padding: 3px 8px; font-size: 13px; min-width: 96px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+.ms > summary::-webkit-details-marker { display: none; }
+.ms.on > summary { border-color: var(--out); color: var(--out); font-weight: 600; }
+.msp { position: absolute; z-index: 30; top: calc(100% + 2px); left: 0; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(0,0,0,.2); padding: 8px; width: 290px; display: flex; flex-direction: column; gap: 6px; }
+.msl { max-height: 300px; overflow: auto; display: flex; flex-direction: column; font-size: 13px; }
+.msl label { display: flex; gap: 6px; align-items: center; padding: 1px 2px; color: var(--fg); cursor: pointer; }
+.msa { display: flex; gap: 6px; justify-content: flex-end; }
+.crumb { font-size: 13px; color: var(--muted); background: var(--sheet); border: 1px solid var(--line); padding: 5px 10px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; flex-shrink: 0; }
+.crumb b { color: var(--fg); }
+.crumb .x { border: 1px solid var(--line); background: var(--panel); padding: 0 7px; cursor: pointer; font-size: 12px; color: var(--fg); }
+.crumb .x:hover { border-color: var(--warn); }
+.tw { overflow: auto; border: 1px solid var(--line); background: var(--sheet); flex-shrink: 0; }
+.at { width: 100%; font-size: 13px; }
+.at th, .at td { white-space: nowrap; max-width: none; padding: 3px 8px; }
+.at thead th { font: 600 12px var(--sans); color: var(--fg); background: var(--head); position: sticky; top: 0; }
+.at thead th:first-child { left: auto; }
+.at tbody th { position: static; font: 600 13px var(--sans); color: var(--fg); text-align: left; background: var(--head); }
+.at td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.at td.l, .at th.l { text-align: left; }
+.at td.it { font-style: italic; color: var(--muted); }
+.at td.bad { background: var(--bad); }
+.at tr.tot td { font-weight: 700; background: var(--head); }
+.at tr.blk th { cursor: pointer; }
+.at tr.dr { cursor: pointer; }
+.at tr.dr:hover td { background: var(--head); }
+.at thead th.s { cursor: pointer; }
+.neg { color: var(--neg); } .pos { color: var(--pos); }
+.j { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.j.red { background: var(--jr); color: var(--jrf); } .j.warn { background: var(--jw); color: var(--jwf); } .j.up { background: var(--ju); color: var(--juf); }
+.j.ok { background: var(--jo); color: var(--jof); } .j.new { background: var(--jn); color: var(--jnf); } .j.end { background: var(--je); color: var(--jef); } .j.na { color: var(--muted); }
+.ins { display: flex; flex-direction: column; gap: 12px; }
+.icard { background: var(--sheet); border: 1px solid var(--line); border-left: 4px solid var(--out); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.icard.red { border-left-color: var(--neg); } .icard.warn { border-left-color: #d08a00; } .icard.up, .icard.ok { border-left-color: var(--pos); }
+.icard h3 { margin: 0; font-size: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.icard h3 small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.icard h4 { margin: 0; font-size: 14px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--line); padding: 7px 10px; background: var(--panel); }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.tile .d { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.bul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 3px; }
+.bul li { line-height: 1.6; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.two > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.muted { color: var(--muted); font-size: 12.5px; }
+.req { display: flex; flex-direction: column; gap: 8px; }
+.req textarea { width: 100%; min-height: 90px; resize: vertical; border: 1px solid var(--line); background: var(--sheet); padding: 8px; color: var(--fg); }
+.qa { background: var(--sheet); border: 1px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.qa .q { white-space: pre-wrap; }
+.qa .a { border-left: 3px solid var(--out); padding-left: 10px; white-space: pre-wrap; }
+details.memo > summary { cursor: pointer; color: var(--muted); }
+
 @media (max-width: 700px) {
   html, body { height: auto; }
   .app { height: auto; }
@@ -129,7 +192,9 @@ td.num { text-align: right; font-family: var(--mono); }
   @page { size: A4; margin: 10mm; }
   html, body, .app { height: auto; }
   body { padding: 0; background: #fff; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .top, #readPane > .bar:not(#rHead), #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles { display: none !important; }
+  .top, #readPane > .bar:not(#rHead), #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles, #aBar, .crumb .x, .req textarea, .req .bar { display: none !important; }
+  .tw { overflow: visible; }
+  .icard, .tile { break-inside: avoid; }
   .pane { border: 0; padding: 0; gap: 8px; }
   .view { overflow: visible; flex: none; }
   .grid { overflow: visible; max-height: none; }
@@ -193,13 +258,19 @@ td.num { text-align: right; font-family: var(--mono); }
     <div class="list" id="list"></div>
     <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button><button class="btn" id="linkedBtn" type="button" hidden>연동형 엑셀 받기</button><button class="btn" id="reportBtn" type="button" hidden>보고서 받기 (pptx)</button></div>
     <div class="sub" role="tablist" id="rTabs" hidden>
-      <button type="button" role="tab" data-v="vDash">대시보드</button>
-      <button type="button" role="tab" data-v="vNote">분석</button>
+      <button type="button" role="tab" data-v="vSum">요약표</button>
+      <button type="button" role="tab" data-v="vJudge">판정표</button>
+      <button type="button" role="tab" data-v="vIns">INSIGHT</button>
+      <button type="button" role="tab" data-v="vReq">요청 · 추가 분석</button>
       <button type="button" role="tab" data-v="vTable">결과표</button>
       <button type="button" role="tab" data-v="vSrc">올린 데이터</button>
     </div>
-    <div class="view" id="vDash" hidden></div>
-    <div class="view" id="vNote" hidden></div>
+    <div class="abar" id="aBar" hidden></div>
+    <div class="crumb" id="aCrumb" hidden></div>
+    <div class="view" id="vSum" hidden></div>
+    <div class="view" id="vJudge" hidden></div>
+    <div class="view" id="vIns" hidden></div>
+    <div class="view" id="vReq" hidden></div>
     <div class="view" id="vTable" hidden>
       <div class="grid" id="rGrid" hidden></div>
       <div class="bar">
@@ -525,38 +596,30 @@ td.num { text-align: right; font-family: var(--mono); }
       $('listInfo').textContent = '';
       $('rHead').hidden = false; $('rTitle').textContent = f.title || name;
       $('rTabs').hidden = false;
-      drawDash(extra); drawNote(f.note, extra); drawTable(f.body);
+      drawTable(f.body);
       cur = { name, title: f.title || name.replace(/\.txt$/, ''), note: f.note, body: f.body, extra };
       $('xlsxBtn').textContent = '엑셀로 내려받기'; $('xlsxBtn').disabled = false;
       for (const [id, ext, label] of EXTRA_FILES) { const b = $(id), fn = name.replace(/\.txt$/, ext); b.hidden = !outFiles.has(fn); b.dataset.file = fn; b.textContent = label; b.disabled = false; }
       const m =/^(\d{8}-\d{6})/.exec(name);
       srcState = { stamp: (extra && extra.source) || (m && m[1]) || '', loaded: false };
       $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
-      view(extra && extra.kpis ? 'vDash' : 'vNote');
+      reqState = null; startAnalysis(cur, srcState);
+      view('vSum');
     } catch (e) { $('listInfo').textContent = ''; $('rErr').textContent = explain(e); $('rErr').hidden = false; }
   }
+  const AVIEWS = ['vSum', 'vJudge', 'vIns'];
+  let curView = 'vSum';
   function view(id) {
+    curView = id;
     for (const b of $('rTabs').children) b.setAttribute('aria-selected', String(b.dataset.v === id));
-    for (const v of ['vDash', 'vNote', 'vTable', 'vSrc']) $(v).hidden = v !== id;
+    for (const v of ['vSum', 'vJudge', 'vIns', 'vReq', 'vTable', 'vSrc']) $(v).hidden = v !== id;
+    const a = AVIEWS.includes(id) && AS && AS.model;
+    $('aBar').hidden = !a; $('aCrumb').hidden = !a;
     if (id === 'vSrc' && srcState && !srcState.loaded) srcState.loading = loadSource();
+    if (id === 'vReq') drawReq();
+    if (AVIEWS.includes(id)) drawAnalysis();
   }
   for (const b of $('rTabs').children) b.addEventListener('click', () => view(b.dataset.v));
-
-  // ---------- analysis ----------
-  function drawNote(note, extra) {
-    const host = $('vNote'); host.replaceChildren();
-    const { summary, items } = noteItems(note, extra);
-    if (summary) host.appendChild(el('p', 'summary', summary));
-    const list = el('div', 'items');
-    for (const it of items || []) {
-      const a = el('article');
-      if (it.title || it.tag) { const h = el('h3'); if (it.tag) h.appendChild(el('small', '', it.tag)); h.appendChild(document.createTextNode(it.title || '')); a.appendChild(h); }
-      a.appendChild(el('p', '', it.body || ''));
-      list.appendChild(a);
-    }
-    host.appendChild(list);
-    if (!summary && !(items || []).length) host.appendChild(el('p', 'empty', '이 답장에는 설명이 없습니다.'));
-  }
 
   // ---------- result table ----------
   function drawTable(body) {
@@ -588,7 +651,7 @@ td.num { text-align: right; font-family: var(--mono); }
     if (!st.stamp) { $('sInfo').textContent = '이 답장과 연결된 올린 데이터가 없습니다.'; return; }
     $('sInfo').textContent = '올린 데이터를 불러오는 중입니다.';
     try {
-      const man = JSON.parse(await (await api(`/contents/inbox/${st.stamp}/manifest.json`, { accept: 'application/vnd.github.raw+json' })).text());
+      const man = await manifestOf(st);
       if (st !== srcState) return;
       const bits = [man.title && '제목: ' + man.title, man.note && '요청: ' + man.note, '번호 ' + st.stamp].filter(Boolean);
       $('sNote').textContent = bits.join(' · '); $('sNote').hidden = false;
@@ -603,6 +666,11 @@ td.num { text-align: right; font-family: var(--mono); }
       $('sInfo').textContent = e.status === 404 ? `올린 데이터(번호 ${st.stamp})를 찾지 못했습니다.` : '';
       if (e.status !== 404) { $('rErr').textContent = explain(e); $('rErr').hidden = false; }
     }
+  }
+  function manifestOf(st) {
+    if (!st.man) st.man = api(`/contents/inbox/${st.stamp}/manifest.json`, { accept: 'application/vnd.github.raw+json' }).then(r => r.text()).then(JSON.parse);
+    st.man.catch(() => { st.man = null; });
+    return st.man;
   }
   // Streams one uploaded file's gzip parts as text, stopping after `limit` characters (at a line end).
   async function readSource(stamp, f, limit) {
@@ -628,7 +696,11 @@ td.num { text-align: right; font-family: var(--mono); }
     const f = man.files[index];
     [...$('sFiles').children].forEach((b, i) => b.setAttribute('aria-current', String(i === index)));
     $('sInfo').textContent = `${f.name} 불러오는 중입니다.`; $('sCopy').hidden = true;
-    const { text, cut } = await readSource(st.stamp, f, SRC_CHARS);
+    let text, cut;
+    if (index === 0 && st.full) {   // the analysis already read this file whole: show its start
+      const all = (await st.full).text; cut = all.length > SRC_CHARS;
+      text = cut ? all.slice(0, all.lastIndexOf('\n', SRC_CHARS) > 0 ? all.lastIndexOf('\n', SRC_CHARS) : SRC_CHARS) : all;
+    } else ({ text, cut } = await readSource(st.stamp, f, SRC_CHARS));
     if (st !== srcState) return;
     const body = clean(text), t = parse(body); t.raw = body; st.table = t; st.cut = cut; st.fileName = f.name; st.file = f;
     const shown = drawGrid($('sGrid'), t);
@@ -721,19 +793,6 @@ td.num { text-align: right; font-family: var(--mono); }
       ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: sheetXml(s) })),
     ]);
   }
-  // Analysis items: from the JSON, or for a plain reply the first paragraph is the summary
-  // and every other paragraph or numbered line is an item. Used by the 분석 tab and the Excel file.
-  function noteItems(note, extra) {
-    if (extra && extra.items) return { summary: extra.summary || '', items: extra.items };
-    const paras = (note || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
-    const summary = (extra && extra.summary) || paras.shift() || '', items = [];
-    for (const p of paras) for (const part of p.split(/\n(?=\d+\.\s)/)) {
-      const lines = part.split('\n'), m = /^(\d+)\.\s*(.*)$/.exec(lines[0]);
-      if (m) items.push({ tag: m[1], title: m[2].split(/[.:]\s/)[0], body: part.replace(/^\d+\.\s*/, '') });
-      else items.push({ title: lines.length > 1 ? lines[0] : '', body: lines.length > 1 ? lines.slice(1).join('\n') : part });
-    }
-    return { summary, items };
-  }
   async function downloadXlsx() {
     if (!cur) return;
     const c = cur, btn = $('xlsxBtn'); btn.disabled = true; btn.textContent = '엑셀 만드는 중…';
@@ -742,25 +801,14 @@ td.num { text-align: right; font-family: var(--mono); }
       if (st && st.stamp && !st.loaded) st.loading = loadSource();
       if (st && st.loading) await st.loading;
       if (c !== cur) return;
-      const sheets = [], x = c.extra || {}, a = noteItems(c.note, c.extra);
-      const sum = [['항목', '값', '설명'], ['제목', c.title, ''], ['답장 파일', c.name, '']];
-      if (st && st.stamp) sum.push(['올린 데이터 번호', st.stamp, '']);
-      if (a.summary) sum.push(['결론', a.summary, '']);
-      for (const k of x.kpis || []) sum.push([k.label, k.value, k.delta || '']);
-      sheets.push({ name: '요약', rows: sum, header: true, wrap: [1, 2], widths: [26, 60, 40] });
-      if (a.items.length) sheets.push({ name: '분석', rows: [['구분', '제목', '내용'], ...a.items.map(i => [i.tag || '', i.title || '', i.body || ''])], header: true, wrap: [1, 2], widths: [12, 30, 100] });
+      if (AS && AS.loading) await AS.loading;
+      if (c !== cur) return;
+      const sheets = AS && AS.model ? exportSheets() : [];
+      const memo = [['항목', '내용'], ['제목', c.title], ['답장 파일', c.name]];
+      if (st && st.stamp) memo.push(['올린 데이터 번호', st.stamp]);
+      for (const p of (c.note || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)) memo.push(['답장 메모', p]);
+      sheets.push({ name: '답장 메모', rows: memo, header: true, wrap: [1], widths: [18, 110] });
       if (c.body) sheets.push({ name: '결과표', rows: parse(c.body).rows, header: true });
-      if ((x.charts || []).length) {
-        const rows = [];
-        for (const ch of x.charts) {
-          const labels = ch.type === 'bar' ? (ch.categories || []) : (ch.x || []), series = ch.series || [];
-          rows.push([ch.title || ''], ['', ...series.map(s => s.name)]);
-          labels.forEach((l, i) => rows.push([l, ...series.map(s => s.values[i] == null ? '' : (ch.unit === '%' ? s.values[i] + '%' : s.values[i]))]));
-          if (ch.note) rows.push(['※ ' + ch.note]);
-          rows.push([]);
-        }
-        sheets.push({ name: '그래프 데이터', rows, widths: [22, 14, 14, 14, 14, 14] });
-      }
       if (st && st.table) sheets.push({ name: st.cut ? '올린 데이터(앞부분)' : '올린 데이터', rows: st.table.rows });
       const blob = await buildXlsx(sheets);
       const a2 = document.createElement('a'), url = URL.createObjectURL(blob);
@@ -811,18 +859,6 @@ td.num { text-align: right; font-family: var(--mono); }
     if (out[out.length - 1] < hi) out.push(out[out.length - 1] + s);
     return out;
   }
-  function drawDash(extra) {
-    const host = $('vDash'); host.replaceChildren();
-    if (!extra || !(extra.kpis || extra.charts)) { host.appendChild(el('p', 'empty', '이 답장에는 대시보드가 없습니다. 분석과 결과표 탭을 봐주세요.')); return; }
-    if (extra.kpis) {
-      const k = el('div', 'kpis');
-      for (const x of extra.kpis) { const c = el('div', 'kpi'); c.append(el('span', 'k', x.label), el('span', 'v', x.value)); if (x.delta) c.appendChild(el('span', 'd', x.delta)); k.appendChild(c); }
-      host.appendChild(k);
-    }
-    const g = el('div', 'charts');
-    for (const ch of extra.charts || []) { try { g.appendChild(chart(ch)); } catch (e) { g.appendChild(el('p', 'err', '그래프를 그리지 못했습니다: ' + (ch.title || ''))); } }
-    host.appendChild(g);
-  }
   function chart(ch) {
     const card = el('div', 'card'); card.appendChild(el('h3', '', ch.title || ''));
     const series = ch.series || [];
@@ -832,7 +868,7 @@ td.num { text-align: right; font-family: var(--mono); }
       card.appendChild(lg);
     }
     const tip = el('div', 'tip'); tip.hidden = true;
-    const svg = (ch.type === 'bar' ? barChart : lineChart)(ch, series, tip, card);
+    const svg = lineChart(ch, series, tip, card);
     card.append(svg, tip);
     if (ch.note) card.appendChild(el('p', 'cn', ch.note));
     return card;
@@ -877,38 +913,726 @@ td.num { text-align: right; font-family: var(--mono); }
     hit.addEventListener('pointerleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); });
     return svg;
   }
-  function barChart(ch, series, tip, card) {   // horizontal bars from zero; negatives go left
-    const cats = ch.categories || [], n = series.length, bh = n > 1 ? 9 : 14, gap = 2, row = n * bh + (n - 1) * gap + 10;
-    const W = 560, L = ch.labelWidth || 150, R = 46, T = 6, B = 22, H = T + B + cats.length * row;
-    const all = series.flatMap(s => s.values).filter(v => v != null).concat(0);
-    let mn = Math.min(...all), mx = Math.max(...all);
-    if (ch.labels) { const pad = (mx - mn) * 0.18; if (mn < 0) mn -= pad; if (mx > 0) mx += pad; }   // room for value labels
-    const tk = ticks(mn, mx, 4), lo = tk[0], hi = tk[tk.length - 1];
-    const px = v => L + (v - lo) * (W - L - R) / (hi - lo);
-    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': ch.title || '' });
-    for (const v of tk) { sv('line', { x1: px(v), x2: px(v), y1: T, y2: H - B, stroke: 'var(--grid)' }, svg); sv('text', { x: px(v), y: H - 6, 'text-anchor': 'middle' }, svg).textContent = fmt(v); }
-    sv('line', { x1: px(0), x2: px(0), y1: T, y2: H - B, stroke: 'var(--muted)' }, svg);
-    cats.forEach((c, ci) => {
-      const y0 = T + ci * row + 5;
-      sv('text', { x: L - 8, y: y0 + (row - 10) / 2 + 4, 'text-anchor': 'end' }, svg).textContent = c;
-      series.forEach((s, si) => {
-        const v = s.values[ci]; if (v == null) return;
-        const y = y0 + si * (bh + gap), a = px(Math.min(0, v)), b = px(Math.max(0, v)), w = Math.max(1, b - a), rr = Math.min(4, w / 2, bh / 2);
-        // round only the data end, keep the zero end square
-        const d = v >= 0
-          ? `M${a} ${y}H${a + w - rr}Q${a + w} ${y} ${a + w} ${y + rr}V${y + bh - rr}Q${a + w} ${y + bh} ${a + w - rr} ${y + bh}H${a}Z`
-          : `M${b} ${y}H${a + rr}Q${a} ${y} ${a} ${y + rr}V${y + bh - rr}Q${a} ${y + bh} ${a + rr} ${y + bh}H${b}Z`;
-        const color = COLORS[si % COLORS.length];
-        const bar = sv('path', { d, fill: color }, svg);
-        if (ch.labels) { const t = sv('text', { class: 'val', x: v >= 0 ? b + 4 : a - 4, y: y + bh / 2 + 4, 'text-anchor': v >= 0 ? 'start' : 'end' }, svg); t.textContent = (v > 0 ? '+' : '') + fmt(v, ch.unit); }
-        const hit = sv('rect', { x: L, y: y0 - 4, width: W - L, height: row - 2, fill: 'transparent' }, svg);
-        const show = e => { const p = local(svg, card, e, W); showTip(tip, card, c, series.map((s2, k) => ({ name: s2.name, color: COLORS[k % COLORS.length], value: fmt(s2.values[ci], ch.unit) })), p.cx, p.cy); };
-        if (si === 0) { hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show); hit.addEventListener('pointerleave', () => { tip.hidden = true; }); }
-        else hit.remove();
-        bar.style.pointerEvents = 'none';
-      });
+  // ================= analysis: 요약표 · 판정표 · INSIGHT =================
+  // The uploaded table is read whole and turned into amounts per (dims, year, period):
+  // S 총매출, D 차감, G 판관비, C 비용(차감+판관비), V 변동원가; CM = S − C − V.
+  // Rates in the upload (차감율(%) …) become amounts using the same row's 총매출, so every
+  // selection is summed as amounts and its rates are recomputed, never averaged.
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const MEAS = [['D', /차감/], ['G', /판관/], ['V', /원가/], ['M', /공헌|^cm|이익|margin/i], ['S', /매출|revenue|sales/i], ['C', /비용|판촉/]];
+  function measOf(label) {
+    const s = String(label || '').replace(/^(합계|sum|평균|average)\s*[:：]\s*/i, '').trim();
+    if (!s) return null;
+    for (const [k, re] of MEAS) if (re.test(s)) return { k, rate: /%|율|률|rate/i.test(s) };
+    return null;
+  }
+  const SLOT_A = { S: 0, D: 1, G: 2, C: 3, V: 4, M: 5 }, SLOT_R = { D: 6, G: 7, C: 8, V: 9, M: 10 };
+  const slotOf = m => m.rate ? (m.k in SLOT_R ? SLOT_R[m.k] : -1) : SLOT_A[m.k];
+  function num(v, rate) {
+    let s = String(v == null ? '' : v).trim();
+    if (!s || s === '-' || s[0] === '#') return NaN;
+    let neg = false;
+    if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+    const pct = s.endsWith('%'); s = s.replace(/[,%\s₩원]/g, '');
+    if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s)) return NaN;
+    let x = parseFloat(s); if (neg) x = -x;
+    if (pct || (rate && Math.abs(x) > 1.5)) x /= 100;
+    return x;
+  }
+  const YEAR_H = /^(연|연도|년도|년|year|fy|기준년도|회계연도)$/i;
+  const PER_H = /^(월|기간|month|년월|연월|period|일자|날짜|date)$/i;
+  const SUBT = /요약$|합계$|^총합계|^total$|total$|^전체$/i;
+  const isYearV = v => /^'?(\d{2}|\d{4})\s*(년|년도)?$/.test(String(v).trim()) || /^fy\s*'?\d{2,4}$/i.test(String(v).trim());
+  const yearNum = v => { const m = /\d+/.exec(v); if (!m) return 0; const n = +m[0]; return n < 100 ? 2000 + n : n; };
+
+  function buildModel(text) {
+    const rows = parse(clean(text)).rows.map(r => r.map(c => (c == null ? '' : String(c)).trim()));
+    let h = -1, flat = false;
+    for (let i = 0; i < Math.min(rows.length, 60); i++) {
+      const r = rows[i];
+      if (r.some(c => /^(Σ\s*)?값$|^values$/i.test(c))) { h = i; break; }
+      if (r.filter(c => measOf(c)).length >= 2 && !r.some(c => /^-?[\d,.]+%?$/.test(c))) { h = i; flat = true; break; }
+    }
+    if (h < 0) return { error: '머리글을 찾지 못했습니다. 「값」 열이 있는 피벗이나, 총매출·비용 같은 열 이름이 있는 표여야 자동 분석이 됩니다.' };
+    const H = rows[h], nC = Math.max(...rows.slice(h, h + 200).map(r => r.length));
+    const dimCols = [], dimNames = [];
+    let yearCol = H.findIndex(c => YEAR_H.test(c));
+    // records, filled below: leaf, year label, period label, slot, value
+    const leafIx = new Map(), leafDims = [], yIx = new Map(), pIx = new Map();
+    const R = { l: [], y: [], p: [], s: [], v: [] };
+    const leafOf = dims => { const k = dims.join('\u0001'); let i = leafIx.get(k); if (i == null) { i = leafDims.length; leafIx.set(k, i); leafDims.push(dims); } return i; };
+    const ix = (m, k) => { let i = m.get(k); if (i == null) { i = m.size; m.set(k, i); } return i; };
+    const push = (l, y, p, s, v) => { R.l.push(l); R.y.push(ix(yIx, y)); R.p.push(ix(pIx, p)); R.s.push(s); R.v.push(v); };
+
+    if (!flat) {
+      const valCol = H.findIndex(c => /^(Σ\s*)?값$|^values$/i.test(c));
+      if (yearCol < 0) {   // a column before 값 whose values look like years
+        for (let c = 0; c < valCol; c++) {
+          let n = 0, y = 0; const dist = new Set();
+          for (let i = h + 1; i < Math.min(rows.length, h + 300); i++) { const v = rows[i][c]; if (v) { n++; dist.add(v); if (isYearV(v)) y++; } }
+          if (n && y / n > 0.8 && dist.size <= 12) { yearCol = c; break; }
+        }
+      }
+      for (let c = 0; c < valCol; c++) if (c !== yearCol && H[c]) { dimCols.push(c); dimNames.push(H[c]); }
+      // period columns after 값. Without a 연 column, a year row above the header gives each column its year,
+      // or the column headers themselves are years (26년 / 27년 / 총합계).
+      const above = h > 0 ? rows[h - 1] : [];
+      const hasAbove = yearCol < 0 && above.some(isYearV);
+      let lastY = '';
+      const per = [];
+      for (let c = valCol + 1; c < nC; c++) {
+        const yv = above[c] || '', ph = H[c] || '';
+        if (hasAbove && yv) lastY = yv;
+        if (!ph && !yv) continue;
+        per.push({ c, label: ph || yv, year: hasAbove ? lastY : '', sub: SUBT.test(ph) || (hasAbove && (SUBT.test(yv) || !isYearV(lastY))) });
+      }
+      let use = per.filter(p => !p.sub); if (!use.length) use = per;
+      const colYears = yearCol < 0 && !hasAbove && use.length > 1 && use.every(p => isYearV(p.label));
+      if (yearCol < 0 && !hasAbove && !colYears) return { error: '연도(26년·27년 같은) 열이나 줄을 찾지 못했습니다.' };
+      const fill = [];
+      const labelCols = [...dimCols, yearCol].filter(c => c >= 0);
+      for (let i = h + 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r.some(c => c)) continue;
+        for (const c of labelCols) if (r[c]) fill[c] = r[c];
+        if (labelCols.some(c => r[c] && SUBT.test(r[c]))) continue;
+        const m = measOf(r[valCol]); if (!m) continue;
+        const s = slotOf(m); if (s < 0) continue;
+        const leaf = leafOf(dimCols.map(c => fill[c] || '(빈칸)'));
+        for (const p of use) {
+          const x = num(r[p.c], m.rate); if (!isFinite(x)) continue;
+          if (colYears) push(leaf, p.label, '전체', s, x);
+          else push(leaf, yearCol >= 0 ? (fill[yearCol] || '') : p.year, p.label, s, x);
+        }
+      }
+    } else {
+      let perCol = H.findIndex(c => PER_H.test(c));
+      const mcols = [];
+      H.forEach((c, i) => { if (i === yearCol || i === perCol) return; const m = measOf(c); if (m && slotOf(m) >= 0) mcols.push({ c: i, m, s: slotOf(m) }); });
+      for (let c = 0; c < H.length; c++) {
+        if (!H[c] || c === yearCol || c === perCol || mcols.some(m => m.c === c)) continue;
+        let n = 0, k = 0;
+        for (let i = h + 1; i < Math.min(rows.length, h + 300); i++) { const v = rows[i][c]; if (v) { n++; if (isFinite(num(v))) k++; } }
+        if (n && k / n > 0.9) continue;   // a number column we do not know: leave it out
+        dimCols.push(c); dimNames.push(H[c]);
+      }
+      for (let i = h + 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r.some(c => c)) continue;
+        if (dimCols.some(c => r[c] && SUBT.test(r[c]))) continue;
+        let yl = yearCol >= 0 ? r[yearCol] : '', pl = perCol >= 0 ? r[perCol] : '전체';
+        const dm = /^(\d{4})\s*[-./년]?\s*(\d{1,2})/.exec(pl);
+        if (dm) { if (!yl) yl = dm[1]; pl = (+dm[2]) + '월'; } else if (/^\d{1,2}$/.test(pl)) pl = (+pl) + '월';
+        if (!yl) continue;
+        const leaf = leafOf(dimCols.map(c => r[c] || '(빈칸)'));
+        for (const mc of mcols) { const x = num(r[mc.c], mc.m.rate); if (isFinite(x)) push(leaf, yl, pl, mc.s + (mc.m.rate ? 0 : 100), x); }   // +100: amounts add up
+      }
+    }
+    if (!R.l.length) return { error: '숫자를 읽지 못했습니다. 총매출·비용·원가·공헌이익 같은 값 이름을 확인해 주세요.' };
+    // years and periods in order
+    const ys = [...yIx.keys()], ps = [...pIx.keys()];
+    const yOrd = ys.map((y, i) => i).sort((a, b) => yearNum(ys[a]) - yearNum(ys[b]) || a - b);
+    const mnum = p => { const m = /^(\d{1,2})월$/.exec(p); return m ? +m[1] : null; };
+    const isMonth = ps.every(p => mnum(p) != null);
+    const pOrd = ps.map((p, i) => i);
+    if (isMonth) pOrd.sort((a, b) => mnum(ps[a]) - mnum(ps[b]));
+    const yNew = new Int32Array(ys.length), pNew = new Int32Array(ps.length);
+    yOrd.forEach((o, i) => { yNew[o] = i; }); pOrd.forEach((o, i) => { pNew[o] = i; });
+    const years = yOrd.map(i => ys[i].replace(/\s+/g, '')), periods = pOrd.map(i => ps[i]);
+    if (years.length < 2) return { error: `비교할 연도가 하나뿐입니다 (${years[0]}). 두 해 이상이 있어야 합니다.` };
+    const nL = leafDims.length, nY = years.length, nP = periods.length, cells = nL * nY * nP;
+    if (cells > 4e6) return { error: `칸 조합이 너무 많습니다 (${nL.toLocaleString()}개 × ${nY}년 × ${nP}기간). 차원을 줄여서 올려주세요.` };
+    const used = [...new Set(R.s.map(s => s % 100))].sort((a, b) => a - b), uw = used.length, uix = new Int32Array(11).fill(-1);
+    used.forEach((s, i) => { uix[s] = i; });
+    const raw = new Float32Array(cells * uw).fill(NaN);
+    for (let i = 0; i < R.l.length; i++) {
+      const s = R.s[i], add = s >= 100, at = ((R.l[i] * nY + yNew[R.y[i]]) * nP + pNew[R.p[i]]) * uw + uix[s % 100];
+      if (add) raw[at] = isNaN(raw[at]) ? R.v[i] : raw[at] + R.v[i];
+      else if (isNaN(raw[at])) raw[at] = R.v[i];   // a pivot repeats a value (총매출2): the first one counts
+    }
+    const data = new Float32Array(cells * 5), has = { D: false, G: false, C: false, V: false, M: false };
+    const fin = Number.isFinite;
+    for (let c = 0; c < cells; c++) {
+      const g = s => uix[s] < 0 ? NaN : raw[c * uw + uix[s]];
+      const S = fin(g(0)) ? g(0) : 0;
+      let D = fin(g(1)) ? g(1) : fin(g(6)) ? g(6) * S : NaN;
+      let G = fin(g(2)) ? g(2) : fin(g(7)) ? g(7) * S : NaN;
+      let C = fin(g(3)) ? g(3) : fin(g(8)) ? g(8) * S : fin(D) && fin(G) ? D + G : NaN;
+      const Mv = fin(g(5)) ? g(5) : fin(g(10)) ? g(10) * S : NaN;
+      let V = fin(g(4)) ? g(4) : fin(g(9)) ? g(9) * S : fin(C) && fin(Mv) ? S - C - Mv : NaN;
+      if (!fin(C) && fin(V) && fin(Mv)) C = S - V - Mv;
+      if (fin(D)) has.D = true; if (fin(G)) has.G = true; if (fin(C)) has.C = true; if (fin(V)) has.V = true; if (fin(Mv)) has.M = true;
+      if (!fin(C) && !fin(V) && fin(Mv)) C = S - Mv;   // only CM given: everything else counts as cost
+      const o = c * 5; data[o] = S; data[o + 1] = fin(D) ? D : 0; data[o + 2] = fin(G) ? G : 0; data[o + 3] = fin(C) ? C : 0; data[o + 4] = fin(V) ? V : 0;
+    }
+    if (!has.C && !has.V && !has.M) return { error: '비용·원가·공헌이익 값이 없어 율을 계산할 수 없습니다.' };
+    const nd = dimNames.length, vals = dimNames.map(() => []), vmap = dimNames.map(() => new Map());
+    const leafDim = dimNames.map(() => new Int32Array(nL));
+    leafDims.forEach((dims, l) => dims.forEach((v, d) => { let k = vmap[d].get(v); if (k == null) { k = vals[d].length; vmap[d].set(v, k); vals[d].push(v); } leafDim[d][l] = k; }));
+    if (!nd) { dimNames.push('전체'); vals.push(['전체']); leafDim.push(new Int32Array(nL)); }
+    return { dims: dimNames, vals, leafDim, years, periods, isMonth, nL, nY, nP, data, has, kind: flat ? '목록형 표' : '피벗' };
+  }
+
+  // ---------- state ----------
+  let AS = null;
+  const sKey = name => 'data-window-an:' + name;
+  function startAnalysis(c, st) {
+    const my = AS = { c, st, model: null, error: '', loading: null, s: null };
+    my.loading = (async () => {
+      try {
+        if (!st.stamp) throw new Error('이 답장과 연결된 올린 데이터가 없습니다.');
+        const man = await manifestOf(st);
+        const f = (man.files || [])[0]; if (!f) throw new Error('올린 파일이 없습니다.');
+        if (!st.full) st.full = readSource(st.stamp, f, 400e6);
+        const { text, cut } = await st.full;
+        if (my !== AS) return;
+        const m = buildModel(text);
+        if (m.error) throw new Error(m.error);
+        if (cut) m.cut = true;
+        my.model = m; my.s = initState(m, c);
+      } catch (e) { if (my === AS) my.error = e.status ? explain(e) : (e.message || String(e)); }
+      if (my === AS && cur === c) view(curView);
+    })();
+  }
+  function initState(M, c) {
+    const nd = M.dims.length;
+    const s = { filt: M.dims.map(() => null), unit: 0, split: Math.min(1, nd - 1), merge: true, y0: M.nY - 2, y1: M.nY - 1, p0: 0, p1: M.nP - 1, thr: 0.1, jl: nd > 1 ? nd - 1 : 0, jf: 'all', q: '', sort: null };
+    const pre = c.extra && c.extra.analysis;
+    if (pre) applyState(M, s, pre);
+    try { const v = localStorage.getItem(sKey(c.name)); if (v) applyState(M, s, JSON.parse(v)); } catch (e) {}
+    return s;
+  }
+  function saveState() { try { localStorage.setItem(sKey(AS.c.name), JSON.stringify(stateOut())); } catch (e) {} }
+  // state by names, so it survives a re-upload and can travel inside a request
+  function stateOut() {
+    const M = AS.model, s = AS.s, filt = {};
+    s.filt.forEach((f, d) => { if (f) filt[M.dims[d]] = [...f].map(k => M.vals[d][k]); });
+    return { filt, unit: M.dims[s.unit], split: M.dims[s.split], merge: s.merge, years: [M.years[s.y0], M.years[s.y1]], periods: [M.periods[s.p0], M.periods[s.p1]], thr: s.thr };
+  }
+  function applyState(M, s, o) {
+    const di = n => M.dims.indexOf(n);
+    if (o.filt) { s.filt = M.dims.map(() => null); for (const [n, list] of Object.entries(o.filt)) { const d = di(n); if (d < 0) continue; const set = new Set(list.map(v => M.vals[d].indexOf(v)).filter(k => k >= 0)); if (set.size) s.filt[d] = set; } }
+    if (di(o.unit) >= 0) s.unit = di(o.unit);
+    if (di(o.split) >= 0) s.split = di(o.split);
+    if (typeof o.merge === 'boolean') s.merge = o.merge;
+    if (o.years) { const a = M.years.indexOf(o.years[0]), b = M.years.indexOf(o.years[1]); if (a >= 0 && b >= 0 && a !== b) { s.y0 = a; s.y1 = b; } }
+    if (o.periods) { const a = M.periods.indexOf(o.periods[0]), b = M.periods.indexOf(o.periods[1]); if (a >= 0 && b >= 0) { s.p0 = Math.min(a, b); s.p1 = Math.max(a, b); } }
+    if (typeof o.thr === 'number') s.thr = o.thr;
+  }
+
+  // ---------- numbers ----------
+  function compute() {
+    const M = AS.model, s = AS.s, key = [s.y0, s.y1, s.p0, s.p1].join();
+    if (AS.tKey !== key) {   // per-leaf totals over the chosen periods: [S,D,G,C,V] for year 0 then year 1
+      const T = new Float64Array(M.nL * 10), D = M.data, nY = M.nY, nP = M.nP;
+      for (let l = 0; l < M.nL; l++) for (const [yi, y] of [[0, s.y0], [1, s.y1]]) for (let p = s.p0; p <= s.p1; p++) {
+        const o = ((l * nY + y) * nP + p) * 5; for (let k = 0; k < 5; k++) T[l * 10 + yi * 5 + k] += D[o + k];
+      }
+      AS.T = T; AS.tKey = key;
+    }
+    const T = AS.T, sel = [];
+    for (let l = 0; l < M.nL; l++) {
+      let ok = true;
+      for (let d = 0; d < M.dims.length && ok; d++) if (s.filt[d] && !s.filt[d].has(M.leafDim[d][l])) ok = false;
+      if (ok && (T[l * 10] || T[l * 10 + 5] || T[l * 10 + 3] || T[l * 10 + 8])) sel.push(l);
+    }
+    return { T, sel, tot: stat(sumOf(T, sel)) };
+  }
+  function sumOf(T, leaves) { const a = new Float64Array(10); for (const l of leaves) for (let k = 0; k < 10; k++) a[k] += T[l * 10 + k]; return a; }
+  // groups of leaves by one dimension (d = -1: every combination on its own)
+  function groupsOf(C, leaves, d) {
+    const M = AS.model, map = new Map();
+    for (const l of leaves) {
+      const k = d < 0 ? l : M.leafDim[d][l];
+      let g = map.get(k); if (!g) { g = { code: k, leaves: [] }; map.set(k, g); }
+      g.leaves.push(l);
+    }
+    const out = [...map.values()];
+    for (const g of out) { g.name = d < 0 ? M.dims.map((n, i) => M.vals[i][M.leafDim[i][g.leaves[0]]]).join(' / ') : M.vals[d][g.code]; g.s = stat(sumOf(C.T, g.leaves)); }
+    return out.sort((a, b) => (b.s.S1 || b.s.S0) - (a.s.S1 || a.s.S0));
+  }
+  function stat(a) {
+    const [S0, D0, G0, C0, V0, S1, D1, G1, C1, V1] = a, M0 = S0 - C0 - V0, M1 = S1 - C1 - V1;
+    const r = (x, S) => S > 0 ? x / S : null, dif = (x, y) => x != null && y != null ? y - x : null;
+    const o = { S0, S1, C0, C1, V0, V1, D0, D1, G0, G1, M0, M1, dS: S1 - S0, dM: M1 - M0, gS: S0 > 0 ? (S1 - S0) / S0 : null,
+      c0: r(C0, S0), c1: r(C1, S1), v0: r(V0, S0), v1: r(V1, S1), m0: r(M0, S0), m1: r(M1, S1), d0: r(D0, S0), d1: r(D1, S1), g0: r(G0, S0), g1: r(G1, S1) };
+    o.dc = dif(o.c0, o.c1); o.dv = dif(o.v0, o.v1); o.dm = dif(o.m0, o.m1); o.dd = dif(o.d0, o.d1); o.dg = dif(o.g0, o.g1);
+    if (S0 > 0 && S1 > 0) { o.eS = o.dS * o.m0; o.eC = -o.dc * S1; o.eV = -o.dv * S1; }   // eS + eC + eV = dM exactly
+    else { o.eS = o.dM; o.eC = 0; o.eV = 0; }
+    o.k = judge(o);
+    return o;
+  }
+  // 판정: the cost rate (비용율, or 원가율 when the upload has no 비용) against the threshold in %p
+  function judge(o) {
+    if (o.S0 <= 0 && o.S1 <= 0) return 'na';
+    if (o.S0 <= 0) return 'new';
+    if (o.S1 <= 0) return 'end';
+    const has = AS.model.has, d = has.C ? o.dc : o.dv;
+    if (d == null) return 'na';
+    if (d * 100 > AS.s.thr + 1e-9) return o.dS <= 0 ? 'red' : o.dM < 0 ? 'warn' : 'up';
+    return 'ok';
+  }
+  const JL = { red: '🔴 큰 문제', warn: '⚠️ 문제', up: '🟢 비용↑·CM유지', ok: '✅ OK', new: '🆕 신규', end: '⛔ 종료', na: '–' };
+  const SEV = { red: 0, warn: 1, up: 2, new: 3, end: 4, ok: 5, na: 6 };
+  const chip = k => `<span class="j ${k}">${JL[k]}</span>`;
+  // rate puzzle: parent rate change = ① each item's own rate change + ② share shift + ③ items that ended or started.
+  // ② and ③ are measured against the parent's base rate, so an item only counts as "mix" when its rate differs from the average.
+  function puzzle(gs, key) {
+    const S0 = gs.reduce((t, g) => t + Math.max(0, g.s.S0), 0), S1 = gs.reduce((t, g) => t + Math.max(0, g.s.S1), 0);
+    const amt = (g, y) => key === 'c' ? g.s['C' + y] : g.s['V' + y];
+    const R0 = S0 > 0 ? gs.reduce((t, g) => t + (g.s.S0 > 0 ? amt(g, 0) : 0), 0) / S0 : 0;
+    const R1 = S1 > 0 ? gs.reduce((t, g) => t + (g.s.S1 > 0 ? amt(g, 1) : 0), 0) / S1 : 0;
+    const rows = gs.map(g => {
+      const w0 = S0 > 0 && g.s.S0 > 0 ? g.s.S0 / S0 : 0, w1 = S1 > 0 && g.s.S1 > 0 ? g.s.S1 / S1 : 0;
+      const r0 = g.s[key + '0'], r1 = g.s[key + '1'];
+      let rate = 0, mix = 0, ne = 0;
+      if (w0 > 0 && w1 > 0) { rate = w1 * (r1 - r0); mix = (w1 - w0) * (r0 - R0); }
+      else if (w1 > 0) ne = w1 * (r1 - R0);
+      else if (w0 > 0) ne = -w0 * (r0 - R0);
+      return { g, name: g.name, S0: g.s.S0, S1: g.s.S1, w0, w1, r0, r1, rate, mix, ne, tot: rate + mix + ne };
     });
-    return svg;
+    const sum = k => rows.reduce((t, r) => t + r[k], 0);
+    return { rows, R0, R1, dR: R1 - R0, rate: sum('rate'), mix: sum('mix'), ne: sum('ne'), S0, S1 };
+  }
+
+  // ---------- formatting ----------
+  const fin2 = v => v != null && Number.isFinite(v);
+  const fN = v => !fin2(v) ? '–' : Math.abs(v) >= 10 || v === Math.round(v) ? Math.round(v).toLocaleString() : v.toFixed(1);
+  const fD = v => !fin2(v) ? '–' : (v > 0.05 ? '+' : '') + fN(v);
+  const fP = v => !fin2(v) ? '–' : (v * 100).toFixed(1) + '%';
+  const fPP = (v, n = 1) => !fin2(v) ? '–' : (v > 0 ? '+' : '') + (v * 100).toFixed(n) + '%p';
+  const fG = v => !fin2(v) ? '–' : (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  const sg = v => !fin2(v) || Math.abs(v) < 1e-12 ? '' : v > 0 ? 'pos' : 'neg';   // good when up
+  const sgc = v => sg(fin2(v) ? -v : v);                                           // good when down (cost rates)
+  const isBad = v => fin2(v) && v * 100 > AS.s.thr + 1e-9;
+  const yrs = () => [AS.model.years[AS.s.y0], AS.model.years[AS.s.y1]];
+  const perText = () => { const M = AS.model, s = AS.s; return M.nP < 2 ? '' : s.p0 === 0 && s.p1 === M.nP - 1 ? '전체 기간' : M.periods[s.p0] + (s.p1 > s.p0 ? '~' + M.periods[s.p1] : ''); };
+  const costName = () => AS.model.has.C ? '비용율' : '원가율';
+  function scopeText() {
+    const M = AS.model, s = AS.s, f = [];
+    s.filt.forEach((set, d) => { if (set) { const v = [...set].map(k => M.vals[d][k]); f.push(`${M.dims[d]}: ${v.slice(0, 4).join(', ')}${v.length > 4 ? ` 외 ${v.length - 4}개` : ''}`); } });
+    const [a, b] = yrs();
+    return `${f.length ? f.join(' · ') : '전체'} | ${M.dims[s.unit]}별로 보기 · ${M.dims[s.split]}로 쪼개 보기${s.merge ? ' · 합쳐 보기' : ''} | ${a} → ${b}${perText() ? ' · ' + perText() : ''}`;
+  }
+
+  // ---------- selection bar ----------
+  function drawBar() {
+    const M = AS.model, s = AS.s, opt = (list, v) => list.map(([k, n]) => `<option value="${k}"${+k === +v ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    const dimOpts = M.dims.map((d, i) => [i, d]);
+    let h = '';
+    M.dims.forEach((d, i) => {
+      const sel = s.filt[i], txt = !sel ? '전체' : sel.size === 1 ? M.vals[i][[...sel][0]] : sel.size + '개 선택';
+      h += `<div class="f">${esc(d)}<details class="ms${sel ? ' on' : ''}" data-d="${i}"><summary title="${esc(txt)}">${esc(txt)} ▾</summary></details></div>`;
+    });
+    if (M.dims.length > 1) {
+      h += `<label class="f">보는 단위<select data-k="unit">${opt(dimOpts, s.unit)}</select></label>`;
+      h += `<label class="f">쪼개 볼 기준<select data-k="split">${opt(dimOpts, s.split)}</select></label>`;
+    }
+    h += `<label class="f row" title="켜면 고른 항목을 하나로 묶어 INSIGHT를 냅니다. 끄면 보는 단위별로 따로 냅니다."><input type="checkbox" data-k="merge"${s.merge ? ' checked' : ''}> 선택 범위<br>합쳐 보기</label>`;
+    const yo = M.years.map((y, i) => [i, y]);
+    h += `<label class="f">비교<span><select data-k="y0">${opt(yo, s.y0)}</select> → <select data-k="y1">${opt(yo, s.y1)}</select></span></label>`;
+    if (M.nP > 1) { const po = M.periods.map((p, i) => [i, p]); h += `<label class="f">기간<span><select data-k="p0">${opt(po, s.p0)}</select> ~ <select data-k="p1">${opt(po, s.p1)}</select></span></label>`; }
+    h += `<label class="f">${costName()} 상승 기준 (%p 초과)<input type="number" step="0.05" min="0" data-k="thr" value="${s.thr}"></label>`;
+    $('aBar').innerHTML = h;
+  }
+  // options for one filter: values present once the other filters apply
+  function fillPicker(det) {
+    const M = AS.model, s = AS.s, d = +det.dataset.d, C = compute();
+    const seen = new Set();
+    for (let l = 0; l < M.nL; l++) {
+      let ok = true;
+      for (let e = 0; e < M.dims.length && ok; e++) if (e !== d && s.filt[e] && !s.filt[e].has(M.leafDim[e][l])) ok = false;
+      if (ok && (C.T[l * 10] || C.T[l * 10 + 5])) seen.add(M.leafDim[d][l]);
+    }
+    if (s.filt[d]) for (const k of s.filt[d]) seen.add(k);
+    const list = [...seen].sort((a, b) => M.vals[d][a].localeCompare(M.vals[d][b], 'ko', { numeric: true }));
+    const pop = el('div', 'msp');
+    pop.innerHTML = `<input type="search" placeholder="찾기 (${list.length.toLocaleString()}개)"><div class="msl">${list.slice(0, 3000).map(k => `<label><input type="checkbox" value="${k}"${s.filt[d] && s.filt[d].has(k) ? ' checked' : ''}> ${esc(M.vals[d][k])}</label>`).join('')}</div>${list.length > 3000 ? '<span class="muted">앞 3,000개만 보입니다. 찾기로 좁혀 주세요.</span>' : ''}<div class="msa"><button type="button" class="btn small" data-ms="clear">전체 해제</button><button type="button" class="btn small" data-ms="vis">보이는 것 모두</button><button type="button" class="btn small primary" data-ms="ok">적용</button></div>`;
+    det.appendChild(pop);
+    const q = pop.querySelector('input[type=search]');
+    q.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); for (const lb of pop.querySelectorAll('.msl label')) lb.hidden = t && !lb.textContent.toLowerCase().includes(t); });
+    q.focus();
+  }
+  $('aBar').addEventListener('toggle', e => {
+    const det = e.target; if (!det.classList || !det.classList.contains('ms')) return;
+    if (det.open) { for (const o of $('aBar').querySelectorAll('details.ms[open]')) if (o !== det) o.open = false; if (!det.querySelector('.msp')) fillPicker(det); }
+  }, true);
+  $('aBar').addEventListener('click', e => {
+    const b = e.target.closest('[data-ms]'); if (!b) return;
+    const det = b.closest('details.ms'), d = +det.dataset.d, pop = det.querySelector('.msp');
+    if (b.dataset.ms === 'clear') { for (const c of pop.querySelectorAll('.msl input')) c.checked = false; return; }
+    if (b.dataset.ms === 'vis') { for (const lb of pop.querySelectorAll('.msl label')) if (!lb.hidden) lb.querySelector('input').checked = true; return; }
+    const set = new Set([...pop.querySelectorAll('.msl input:checked')].map(c => +c.value));
+    AS.s.filt[d] = set.size ? set : null;
+    changed();
+  });
+  document.addEventListener('click', e => { for (const o of document.querySelectorAll('details.ms[open]')) if (!o.contains(e.target)) o.open = false; });
+  $('aBar').addEventListener('change', e => {
+    const t = e.target, k = t.dataset && t.dataset.k; if (!k) return;
+    const s = AS.s;
+    if (k === 'merge') s.merge = t.checked;
+    else if (k === 'thr') s.thr = Math.max(0, parseFloat(t.value) || 0);
+    else s[k] = +t.value;
+    if (s.p0 > s.p1) [s.p0, s.p1] = [s.p1, s.p0];
+    if (s.y0 === s.y1) { if (k === 'y0') s.y1 = s.y0 === AS.model.nY - 1 ? s.y0 - 1 : s.y0 + 1; else s.y0 = s.y1 === 0 ? 1 : s.y1 - 1; }
+    changed();
+  });
+  function changed() { saveState(); drawAnalysis(); }
+  function drawCrumb() {
+    const M = AS.model, s = AS.s;
+    let h = `<span>보는 범위:</span><button type="button" class="x" data-cr="all" title="필터 모두 지우기">전체</button>`;
+    s.filt.forEach((set, d) => {
+      if (!set) return;
+      const v = [...set].map(k => M.vals[d][k]);
+      h += `<span>›</span><span><b>${esc(M.dims[d])}</b>: ${esc(v.slice(0, 3).join(', '))}${v.length > 3 ? ` 외 ${v.length - 3}개` : ''}</span><button type="button" class="x" data-cr="${d}" title="이 필터 지우기">✕</button>`;
+    });
+    const [a, b] = yrs();
+    h += `<span>· ${esc(M.dims[s.unit])}별 · ${esc(M.dims[s.split])}로 쪼개 보기 · ${esc(a)} → ${esc(b)}${perText() ? ' · ' + esc(perText()) : ''}</span>`;
+    if (M.cut) h += `<span class="neg">· 자료가 너무 커서 앞부분만 계산했습니다</span>`;
+    $('aCrumb').innerHTML = h;
+  }
+  $('aCrumb').addEventListener('click', e => {
+    const b = e.target.closest('[data-cr]'); if (!b) return;
+    if (b.dataset.cr === 'all') AS.s.filt = AS.model.dims.map(() => null); else AS.s.filt[+b.dataset.cr] = null;
+    changed();
+  });
+  // drill: keep only this item, look one level down
+  function drill(d, code, toIns) {
+    const s = AS.s, nd = AS.model.dims.length;
+    s.filt[d] = new Set([code]);
+    if (s.unit === d || s.unit < d) {
+      s.unit = s.split !== d && s.split > d ? s.split : Math.min(d + 1, nd - 1);
+      s.split = nextDim(s.unit);
+    }
+    if (toIns) { saveState(); view('vIns'); } else changed();
+  }
+  function nextDim(u) { const s = AS.s; for (let i = u + 1; i < AS.model.dims.length; i++) if (!(s.filt[i] && s.filt[i].size === 1)) return i; return u; }
+
+  function drawAnalysis() {
+    if (!AS || !AVIEWS.includes(curView)) return;
+    const host = $(curView);
+    if (!AS.model) {
+      $('aBar').hidden = true; $('aCrumb').hidden = true;
+      host.innerHTML = `<p class="empty">${AS.error ? esc(AS.error) + '<br>결과표와 올린 데이터 탭은 그대로 볼 수 있습니다.' : '올린 데이터를 읽고 계산하는 중입니다…'}</p>`;
+      return;
+    }
+    drawBar(); drawCrumb();
+    const C = compute();
+    if (!C.sel.length) { host.innerHTML = '<p class="empty">고른 범위에 숫자가 없습니다. 필터를 바꿔 주세요.</p>'; return; }
+    try {
+      if (curView === 'vSum') drawSum(C); else if (curView === 'vJudge') drawJudge(C); else drawIns(C);
+    } catch (e) { host.innerHTML = `<p class="err">화면을 그리지 못했습니다: ${esc(e.message)}</p>`; console.error(e); }
+  }
+
+  // ---------- ① 요약표 ----------
+  function sumLines() {
+    const h = AS.model.has, L = [['총매출', 'S', 'amt']];
+    if (h.C) { L.push(['비용 (차감+판관비)', 'C', 'amt'], ['% 비용율', 'c', 'cost']); if (h.D) L.push(['　· 차감율', 'd', 'cost', 1]); if (h.G) L.push(['　· 판관비율', 'g', 'cost', 1]); }
+    if (h.V) L.push(['변동원가', 'V', 'amt'], ['% 원가율', 'v', 'cost']);
+    L.push(['CM (공헌이익)', 'M', 'amt'], ['% CM율', 'm', 'margin']);
+    return L;
+  }
+  function sumBlocks(C) {
+    const s = AS.s, M = AS.model, gs = groupsOf(C, C.sel, s.unit), blocks = [];
+    const tot = { name: s.merge ? '선택 범위 합계' : '합계', s: C.tot, tot: true };
+    if (s.merge) blocks.push(tot);
+    for (const g of gs.slice(0, 80)) blocks.push({ name: g.name, s: g.s, drill: [s.unit, g.code] });
+    if (!s.merge) blocks.push(tot);
+    return { blocks, more: Math.max(0, gs.length - 80), lines: sumLines() };
+  }
+  function lineVals(st, ln) {
+    const [, k, kind] = ln;
+    if (kind === 'amt') { const a = st[k + '0'], b = st[k + '1'], d = b - a; return { a, b, d, g: a > 0 ? d / a : null, kind }; }
+    const a = st[k + '0'], b = st[k + '1'], d = a != null && b != null ? b - a : null;
+    return { a, b, d, kind, bad: kind === 'cost' ? isBad(d) : kind === 'margin' ? isBad(d == null ? null : -d) : false };
+  }
+  function drawSum(C) {
+    const { blocks, more, lines } = sumBlocks(C), [Y0, Y1] = yrs(), M = AS.model, s = AS.s;
+    let h = `<div class="tw"><table class="at"><thead><tr><th class="l">${esc(M.dims[s.unit])} / 항목 <small>(이름 클릭 → ${esc(M.dims[s.split])}로 내려가기)</small></th><th>${esc(Y0)}</th><th>${esc(Y1)}</th><th>Δ (${esc(Y1)} − ${esc(Y0)})</th><th>증감률</th></tr></thead><tbody>`;
+    for (const b of blocks) {
+      h += b.drill ? `<tr class="blk" data-drill="${b.drill.join(':')}"><th colspan="5">${esc(b.name)} <span class="muted">▸ ${esc(M.dims[s.split])} 보기</span></th></tr>` : `<tr class="blk"><th colspan="5">${esc(b.name)}</th></tr>`;
+      for (const ln of lines) {
+        const v = lineVals(b.s, ln), sub = ln[3] ? ' it' : '';
+        if (v.kind === 'amt') h += `<tr><td class="l${sub}">${esc(ln[0])}</td><td class="n">${fN(v.a)}</td><td class="n">${fN(v.b)}</td><td class="n ${ln[1] === 'S' || ln[1] === 'M' ? sg(v.d) : sgc(v.d)}">${fD(v.d)}</td><td class="n ${ln[1] === 'S' || ln[1] === 'M' ? sg(v.g) : sgc(v.g)}">${fG(v.g)}</td></tr>`;
+        else h += `<tr><td class="l${sub || ' it'}">${esc(ln[0])}</td><td class="n${sub}">${fP(v.a)}</td><td class="n${sub}">${fP(v.b)}</td><td class="n${v.bad ? ' bad' : ''} ${v.kind === 'margin' ? sg(v.d) : sgc(v.d)}">${fPP(v.d, 2)}</td><td></td></tr>`;
+      }
+      h += `<tr><td class="l it">판정</td><td colspan="2"></td><td class="n">${chip(b.s.k)}</td><td></td></tr>`;
+    }
+    h += '</tbody></table></div>';
+    if (more) h += `<p class="muted">${esc(M.dims[s.unit])} ${more}개는 생략했습니다 (매출 큰 순 80개). 필터로 좁혀 주세요.</p>`;
+    h += `<p class="muted">분홍 칸 = ${costName()}·원가율 상승(기준 ${s.thr}%p 초과) 또는 CM율 하락. 율은 모두 금액 합계로 다시 계산합니다.</p>`;
+    $('vSum').innerHTML = h;
+  }
+  $('vSum').addEventListener('click', e => { const t = e.target.closest('[data-drill]'); if (t) { const [d, k] = t.dataset.drill.split(':').map(Number); drill(d, k); } });
+
+  // ---------- ② 판정표 ----------
+  const JCOLS = [['k', '판정'], ['name', '이름'], ['S1', '매출'], ['dc', '비용율'], ['dv', '원가율'], ['dM', 'CM'], ['eS', '매출효과'], ['eC', '비용율효과'], ['eV', '원가율효과']];
+  function judgeRows(C) {
+    const s = AS.s, lvl = s.jl, q = s.q.trim().toLowerCase();
+    let rows = groupsOf(C, C.sel, lvl === AS.model.dims.length ? -1 : lvl);
+    const want = { all: null, bad: ['red', 'warn'], red: ['red'], up: ['red', 'warn', 'up'], ne: ['new', 'end'] }[s.jf];
+    if (want) rows = rows.filter(g => want.includes(g.s.k));
+    if (q) rows = rows.filter(g => g.name.toLowerCase().includes(q));
+    const so = s.sort || { k: 'k', d: 1 };
+    const val = g => so.k === 'k' ? SEV[g.s.k] * 1e15 + g.s.dM : so.k === 'name' ? g.name : g.s[so.k] == null ? -Infinity : g.s[so.k];
+    rows.sort((a, b) => { const x = val(a), y = val(b); return (typeof x === 'string' ? x.localeCompare(y, 'ko', { numeric: true }) : x - y) * so.d; });
+    return rows;
+  }
+  function drawJudge(C) {
+    const M = AS.model, s = AS.s, [Y0, Y1] = yrs(), nd = M.dims.length;
+    if (s.jl > nd) s.jl = nd;
+    const rows = judgeRows(C), cnt = {};
+    for (const g of groupsOf(C, C.sel, s.jl === nd ? -1 : s.jl)) cnt[g.s.k] = (cnt[g.s.k] || 0) + 1;
+    const lv = [...M.dims.map((d, i) => [i, d]), [nd, '모든 칸 조합 (가장 아래)']];
+    let h = `<div class="abar"><label class="f">단위<select id="jLvl">${lv.map(([k, n]) => `<option value="${k}"${k === s.jl ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+      <label class="f">판정<select id="jF">${[['all', '전체'], ['bad', '문제만 (🔴·⚠️)'], ['red', '🔴 큰 문제만'], ['up', `${costName()} ↑ 전체 (🔴·⚠️·🟢)`], ['ne', '🆕 신규 · ⛔ 종료']].map(([k, n]) => `<option value="${k}"${k === s.jf ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label class="f">검색<input type="search" id="jQ" value="${esc(s.q)}" placeholder="이름 일부"></label>
+      <span class="muted">${['red', 'warn', 'up', 'ok', 'new', 'end'].filter(k => cnt[k]).map(k => `${JL[k]} ${cnt[k]}`).join(' · ')}</span></div>`;
+    const so = s.sort || { k: 'k', d: 1 }, ar = k => so.k === k ? (so.d > 0 ? ' ▲' : ' ▼') : '';
+    const head = JCOLS.filter(([k]) => (k !== 'dc' && k !== 'eC') || M.has.C).filter(([k]) => (k !== 'dv' && k !== 'eV') || M.has.V);
+    h += `<div class="tw" style="max-height:none"><table class="at"><thead><tr>${head.map(([k, n]) => `<th class="s" data-sort="${k}">${k === 'name' ? esc(lv[s.jl][1]) : n}${k === 'S1' ? ` (${esc(Y0)}→${esc(Y1)})` : ''}${ar(k)}</th>`).join('')}</tr></thead><tbody>`;
+    for (const g of rows.slice(0, 1500)) {
+      const t = g.s, cell = {
+        k: `<td>${chip(t.k)}</td>`, name: `<td class="l">${esc(g.name)}</td>`,
+        S1: `<td class="n">${fN(t.S0)} → ${fN(t.S1)} <span class="${sg(t.gS)}">(${fG(t.gS)})</span></td>`,
+        dc: `<td class="n${isBad(t.dc) ? ' bad' : ''}">${fP(t.c0)} → ${fP(t.c1)} <span class="${sgc(t.dc)}">(${fPP(t.dc)})</span></td>`,
+        dv: `<td class="n${isBad(t.dv) ? ' bad' : ''}">${fP(t.v0)} → ${fP(t.v1)} <span class="${sgc(t.dv)}">(${fPP(t.dv)})</span></td>`,
+        dM: `<td class="n">${fN(t.M0)} → ${fN(t.M1)} <span class="${sg(t.dM)}">(${fD(t.dM)})</span></td>`,
+        eS: `<td class="n ${sg(t.eS)}">${fD(t.eS)}</td>`, eC: `<td class="n ${sg(t.eC)}">${fD(t.eC)}</td>`, eV: `<td class="n ${sg(t.eV)}">${fD(t.eV)}</td>`,
+      };
+      h += `<tr class="dr" data-g="${g.code}">${head.map(([k]) => cell[k]).join('')}</tr>`;
+    }
+    h += '</tbody></table></div>';
+    h += `<p class="muted">${rows.length.toLocaleString()}개${rows.length > 1500 ? ' 중 1,500개만 표시' : ''} · 머리글 클릭 = 정렬 · 행 클릭 = 그 항목만 골라 INSIGHT 보기 · CM 증감 = 매출효과(매출 증감 × 전년 CM율) + 비용율효과(−비용율 증감 × 올해 매출) + 원가율효과(−원가율 증감 × 올해 매출)</p>`;
+    $('vJudge').innerHTML = h;
+    AS.jrows = rows;
+  }
+  $('vJudge').addEventListener('change', e => {
+    if (e.target.id === 'jLvl') { AS.s.jl = +e.target.value; changed(); }
+    if (e.target.id === 'jF') { AS.s.jf = e.target.value; changed(); }
+  });
+  $('vJudge').addEventListener('input', e => {
+    if (e.target.id !== 'jQ') return;
+    AS.s.q = e.target.value; clearTimeout(AS.qt);
+    AS.qt = setTimeout(() => { const pos = e.target.selectionStart; drawAnalysis(); const q = $('jQ'); if (q) { q.focus(); q.setSelectionRange(pos, pos); } }, 250);
+  });
+  $('vJudge').addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]');
+    if (th) { const k = th.dataset.sort, so = AS.s.sort || { k: 'k', d: 1 }; AS.s.sort = { k, d: so.k === k ? -so.d : (k === 'name' || k === 'k' ? 1 : -1) }; changed(); return; }
+    const tr = e.target.closest('tr[data-g]'); if (!tr) return;
+    const M = AS.model, s = AS.s, code = +tr.dataset.g;
+    if (s.jl === M.dims.length) { M.dims.forEach((_, d) => { s.filt[d] = new Set([M.leafDim[d][code]]); }); s.merge = true; saveState(); view('vIns'); }
+    else { s.filt[s.jl] = new Set([code]); s.merge = true; if (s.split <= s.jl) s.split = nextDim(s.jl); saveState(); view('vIns'); }
+  });
+
+  // ---------- ③ INSIGHT ----------
+  function targets(C) {
+    const s = AS.s, M = AS.model, gs = groupsOf(C, C.sel, s.unit);
+    const label = s.filt.some(f => f) ? '선택 범위' : '전체';
+    if (s.merge || gs.length <= 1) return { list: [{ name: label + (s.filt.some(f => f) ? ' (합계)' : ''), s: C.tot, leaves: C.sel, dim: s.split, top: true }], more: 0 };
+    const list = [{ name: label + ' 합계', s: C.tot, leaves: C.sel, dim: s.unit, top: true }];
+    const pick = gs.slice().sort((a, b) => Math.abs(b.s.dM) - Math.abs(a.s.dM)).slice(0, 12);
+    for (const g of pick) list.push({ name: g.name, s: g.s, leaves: g.leaves, dim: s.split, drill: [s.unit, g.code] });
+    return { list, more: gs.length - pick.length };
+  }
+  function insight(C, t) {
+    const M = AS.model, st = t.s, dn = M.dims[t.dim], subs = groupsOf(C, t.leaves, t.dim);
+    const pc = M.has.C ? puzzle(subs, 'c') : null, pv = M.has.V ? puzzle(subs, 'v') : null;
+    const B = [], plain = [];
+    const add = (html, text) => { B.push(html); plain.push(text); };
+    add(`매출 <b>${fN(st.S0)} → ${fN(st.S1)}</b> <span class="${sg(st.gS)}">(${fG(st.gS)})</span>, CM <b>${fN(st.M0)} → ${fN(st.M1)}</b> <span class="${sg(st.dM)}">(${fD(st.dM)})</span>, CM율 ${fP(st.m0)} → ${fP(st.m1)} <span class="${sg(st.dm)}">(${fPP(st.dm, 2)})</span>`,
+      `매출 ${fN(st.S0)} → ${fN(st.S1)} (${fG(st.gS)}), CM ${fN(st.M0)} → ${fN(st.M1)} (${fD(st.dM)}), CM율 ${fP(st.m0)} → ${fP(st.m1)} (${fPP(st.dm, 2)})`);
+    if (st.S0 > 0 && st.S1 > 0) {
+      const parts = [['매출효과', st.eS], M.has.C && ['비용율효과', st.eC], M.has.V && ['원가율효과', st.eV]].filter(Boolean);
+      const big = parts.slice().sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
+      const txt = `CM 증감 ${fD(st.dM)} = ` + parts.map(([n, v]) => `${n} ${fD(v)}`).join(' + ') + ` → 가장 큰 요인은 ${big[0]} (${big[1] >= 0 ? 'CM을 올림' : 'CM을 깎음'})`;
+      add(esc(txt).replace(/(매출효과|비용율효과|원가율효과) ([+-]?[\d,.]+)/g, (m, n, v) => `${n} <span class="${v.startsWith('-') ? 'neg' : 'pos'}">${v}</span>`), txt);
+    }
+    if (M.has.C && M.has.D && M.has.G && st.dc != null) add(`비용율 ${fPP(st.dc, 2)} 중 차감율 <span class="${sgc(st.dd)}">${fPP(st.dd, 2)}</span>, 판관비율 <span class="${sgc(st.dg)}">${fPP(st.dg, 2)}</span>`, `비용율 ${fPP(st.dc, 2)} 중 차감율 ${fPP(st.dd, 2)}, 판관비율 ${fPP(st.dg, 2)}`);
+    for (const [p, nm] of [[pc, '비용율'], [pv, '원가율']]) {
+      if (!p || subs.length < 2) continue;
+      const main = Math.abs(p.mix) > Math.abs(p.rate) ? `${dn} 구성 변화(비중 이동) 영향이 율 변화보다 큽니다` : `${dn}별 ${nm} 자체의 변화가 주된 원인입니다`;
+      const up = p.rows.filter(r => r.tot > 0).sort((a, b) => b.tot - a.tot).slice(0, 2), dw = p.rows.filter(r => r.tot < 0).sort((a, b) => a.tot - b.tot).slice(0, 2);
+      const why = r => Math.abs(r.ne) > Math.abs(r.rate) + Math.abs(r.mix) ? (r.w0 > 0 ? '종료' : '신규') : Math.abs(r.mix) > Math.abs(r.rate) ? `비중 ${fP(r.w0)}→${fP(r.w1)}` : `${nm} ${fP(r.r0)}→${fP(r.r1)}`;
+      const lst = rs => rs.map(r => `${r.name} ${fPP(r.tot, 2)} (${why(r)})`).join(', ');
+      const txt = `${nm} ${fP(p.R0)} → ${fP(p.R1)} (${fPP(p.dR, 2)}) = ① ${dn}별 율 변화 ${fPP(p.rate, 2)} + ② 구성비 변화 ${fPP(p.mix, 2)} + ③ 종료·신규 ${fPP(p.ne, 2)} → ${main}.` +
+        (up.length ? ` 올린 곳: ${lst(up)}.` : '') + (dw.length ? ` 내린 곳: ${lst(dw)}.` : '');
+      add(esc(txt).replace(/([+-]\d+\.\d+%p)/g, m => `<span class="${m.startsWith('+') ? 'neg' : 'pos'}">${m}</span>`), txt);
+    }
+    if (subs.length > 1) {
+      const gs = subs.filter(g => g.s.S0 > 0 || g.s.S1 > 0), inc = gs.filter(g => g.s.dS > 0).sort((a, b) => b.s.dS - a.s.dS).slice(0, 3), dec = gs.filter(g => g.s.dS < 0).sort((a, b) => a.s.dS - b.s.dS).slice(0, 3);
+      const txt = `${dn}별 매출 — 늘어난 곳: ${inc.map(g => `${g.name} ${fD(g.s.dS)}`).join(', ') || '없음'} / 줄어든 곳: ${dec.map(g => `${g.name} ${fD(g.s.dS)}`).join(', ') || '없음'}`;
+      add(esc(txt), txt);
+      const bad = subs.filter(g => g.s.k === 'red' || g.s.k === 'warn').sort((a, b) => a.s.dM - b.s.dM);
+      if (bad.length) {
+        const top = bad.slice(0, 3);
+        add(`${dn} 중 문제 ${bad.length}개 (🔴 ${bad.filter(g => g.s.k === 'red').length} · ⚠️ ${bad.filter(g => g.s.k === 'warn').length}). CM 감소 큰 순: ` + top.map(g => `<b>${esc(g.name)}</b> ${chip(g.s.k)} CM ${fD(g.s.dM)} (${costName()} ${fPP(M.has.C ? g.s.dc : g.s.dv)})`).join(', '),
+          `${dn} 중 문제 ${bad.length}개. CM 감소 큰 순: ` + top.map(g => `${g.name} [${JL[g.s.k]}] CM ${fD(g.s.dM)}`).join(', '));
+      }
+    }
+    return { subs, pc, pv, B, plain, dn };
+  }
+  function puzzleRows(p, limit) {
+    const rs = p.rows.slice().sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot));
+    const shown = rs.slice(0, limit), rest = rs.slice(limit);
+    if (rest.length) {
+      const o = { name: `기타 ${rest.length}개`, S0: 0, S1: 0, w0: 0, w1: 0, rate: 0, mix: 0, ne: 0, tot: 0, other: true };
+      for (const r of rest) for (const k of ['S0', 'S1', 'w0', 'w1', 'rate', 'mix', 'ne', 'tot']) o[k] += r[k];
+      shown.push(o);
+    }
+    return shown;
+  }
+  function puzzleHtml(p, nm, dn) {
+    let h = `<h4>${nm} 증감 퍼즐 <small class="muted">${esc(dn)} 기준 · 합계가 위 증감과 맞습니다</small></h4>
+      <p class="muted">${fP(p.R0)} → ${fP(p.R1)} (${fPP(p.dR, 2)}) = ① 율 변화 ${fPP(p.rate, 2)} + ② 구성비 변화 ${fPP(p.mix, 2)} + ③ 종료·신규 ${fPP(p.ne, 2)}</p>
+      <div class="tw"><table class="at"><thead><tr><th class="l">${esc(dn)}</th><th>매출</th><th>구성비</th><th>${nm}</th><th>① 율</th><th>② 구성비</th><th>③ 종료·신규</th><th>기여 합계</th></tr></thead><tbody>`;
+    for (const r of puzzleRows(p, 12)) h += `<tr><td class="l">${esc(r.name)}</td><td class="n">${fN(r.S0)}→${fN(r.S1)}</td><td class="n">${fP(r.w0)}→${fP(r.w1)}</td><td class="n">${r.other ? '' : `${fP(r.r0)}→${fP(r.r1)}`}</td><td class="n ${sgc(r.rate)}">${fPP(r.rate, 2)}</td><td class="n ${sgc(r.mix)}">${fPP(r.mix, 2)}</td><td class="n ${sgc(r.ne)}">${r.ne ? fPP(r.ne, 2) : ''}</td><td class="n ${sgc(r.tot)}${isBad(r.tot) ? ' bad' : ''}"><b>${fPP(r.tot, 2)}</b></td></tr>`;
+    h += `<tr class="tot"><td class="l">합계</td><td class="n">${fN(p.S0)}→${fN(p.S1)}</td><td class="n">100%</td><td class="n">${fP(p.R0)}→${fP(p.R1)}</td><td class="n">${fPP(p.rate, 2)}</td><td class="n">${fPP(p.mix, 2)}</td><td class="n">${fPP(p.ne, 2)}</td><td class="n">${fPP(p.dR, 2)}</td></tr></tbody></table></div>`;
+    return h;
+  }
+  function contribHtml(I) {
+    const M = AS.model, rs = I.subs.slice().sort((a, b) => Math.abs(b.s.dM) - Math.abs(a.s.dM)).slice(0, 15);
+    let h = `<h4>${esc(I.dn)}별 매출 · CM 기여 <small class="muted">CM 변화 큰 순 ${rs.length}개${I.subs.length > rs.length ? ` / 전체 ${I.subs.length}개` : ''} · 이름 클릭 = 그 항목만 보기</small></h4><div class="tw"><table class="at"><thead><tr><th class="l">${esc(I.dn)}</th><th>판정</th><th>매출</th><th>${costName()}</th><th>CM</th><th>매출효과</th>${M.has.C ? '<th>비용율효과</th>' : ''}${M.has.V ? '<th>원가율효과</th>' : ''}</tr></thead><tbody>`;
+    for (const g of rs) {
+      const t = g.s, dc = M.has.C ? t.dc : t.dv;
+      h += `<tr class="dr" data-drill="${I.dim}:${g.code}"><td class="l">${esc(g.name)}</td><td>${chip(t.k)}</td><td class="n">${fN(t.S0)}→${fN(t.S1)} <span class="${sg(t.gS)}">(${fG(t.gS)})</span></td><td class="n${isBad(dc) ? ' bad' : ''}">${fP(M.has.C ? t.c0 : t.v0)}→${fP(M.has.C ? t.c1 : t.v1)}</td><td class="n">${fN(t.M0)}→${fN(t.M1)} <span class="${sg(t.dM)}">(${fD(t.dM)})</span></td><td class="n ${sg(t.eS)}">${fD(t.eS)}</td>${M.has.C ? `<td class="n ${sg(t.eC)}">${fD(t.eC)}</td>` : ''}${M.has.V ? `<td class="n ${sg(t.eV)}">${fD(t.eV)}</td>` : ''}</tr>`;
+    }
+    return h + '</tbody></table></div>';
+  }
+  function trendCharts(C, leaves) {
+    const M = AS.model, s = AS.s;
+    if (M.nP < 3 || s.p1 - s.p0 < 2) return null;
+    const x = [], S = [[], []], rC = [[], []], rV = [[], []];
+    for (let p = s.p0; p <= s.p1; p++) {
+      x.push(M.periods[p]);
+      for (const [yi, y] of [[0, s.y0], [1, s.y1]]) {
+        let a = 0, c = 0, v = 0;
+        for (const l of leaves) { const o = ((l * M.nY + y) * M.nP + p) * 5; a += M.data[o]; c += M.data[o + 3]; v += M.data[o + 4]; }
+        S[yi].push(a); rC[yi].push(a > 0 ? +(c / a * 100).toFixed(2) : null); rV[yi].push(a > 0 ? +(v / a * 100).toFixed(2) : null);
+      }
+    }
+    const [Y0, Y1] = yrs(), out = el('div', 'charts');
+    out.appendChild(chart({ title: '기간별 매출', x, series: [{ name: Y0, values: S[0] }, { name: Y1, values: S[1] }] }));
+    const ser = [];
+    if (M.has.C) ser.push({ name: Y0 + ' 비용율', values: rC[0] }, { name: Y1 + ' 비용율', values: rC[1] });
+    if (M.has.V) ser.push({ name: Y0 + ' 원가율', values: rV[0] }, { name: Y1 + ' 원가율', values: rV[1] });
+    if (ser.length) out.appendChild(chart({ title: '기간별 비용율 · 원가율 (%)', unit: '%', zero: false, x, series: ser }));
+    return out;
+  }
+  function drawIns(C) {
+    const M = AS.model, { list, more } = targets(C), host = $('vIns');
+    host.innerHTML = '';
+    const wrap = el('div', 'ins');
+    for (const t of list) {
+      const I = insight(C, t), st = t.s, card = el('div', 'icard ' + st.k);
+      const tl = [['매출', `${fN(st.S1)}`, `<span class="${sg(st.gS)}">${fG(st.gS)} (${fD(st.dS)})</span>`]];
+      if (M.has.C) tl.push(['비용율', fP(st.c1), `<span class="${sgc(st.dc)}">${fPP(st.dc, 2)}</span> · ${yrs()[0]} ${fP(st.c0)}`]);
+      if (M.has.V) tl.push(['원가율', fP(st.v1), `<span class="${sgc(st.dv)}">${fPP(st.dv, 2)}</span> · ${yrs()[0]} ${fP(st.v0)}`]);
+      tl.push(['CM', fN(st.M1), `<span class="${sg(st.dM)}">${fD(st.dM)}</span> · CM율 ${fP(st.m1)}`]);
+      card.innerHTML = `<h3>${t.top ? '📌 ' : ''}${t.drill ? `<a href="#" data-drill="${t.drill.join(':')}">${esc(t.name)}</a>` : esc(t.name)} ${chip(st.k)} <small>${esc(I.dn)} 기준으로 쪼개 봄 · ${esc(yrs().join(' → '))}${perText() ? ' · ' + esc(perText()) : ''}</small></h3>
+        <div class="tiles">${tl.map(([k, v, d]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join('')}</div>
+        <ul class="bul">${I.B.map(b => `<li>${b}</li>`).join('')}</ul>`;
+      if (t.top) { const tc = trendCharts(C, t.leaves); if (tc) card.appendChild(tc); }
+      if (I.subs.length > 1) {
+        const two = el('div', 'two');
+        if (I.pc) { const d = el('div'); d.innerHTML = puzzleHtml(I.pc, '비용율', I.dn); two.appendChild(d); }
+        if (I.pv) { const d = el('div'); d.innerHTML = puzzleHtml(I.pv, '원가율', I.dn); two.appendChild(d); }
+        card.appendChild(two);
+        const cb = el('div'); cb.style.display = 'contents'; cb.innerHTML = contribHtml(I); card.appendChild(cb);
+      }
+      wrap.appendChild(card);
+    }
+    host.appendChild(wrap);
+    if (more > 0) host.appendChild(el('p', 'muted', `${M.dims[AS.s.unit]} ${more}개는 CM 변화가 작아 생략했습니다. 판정표에서 모두 볼 수 있습니다.`));
+  }
+  $('vIns').addEventListener('click', e => { const t = e.target.closest('[data-drill]'); if (!t) return; e.preventDefault(); const [d, k] = t.dataset.drill.split(':').map(Number); AS.s.merge = true; drill(d, k); });
+
+  // ---------- Excel: the analysis as it is selected on screen ----------
+  function exportSheets() {
+    const M = AS.model, s = AS.s, C = compute(), [Y0, Y1] = yrs(), sheets = [];
+    const r1 = v => fin2(v) ? Math.round(v * 10) / 10 : '', pc = v => fin2(v) ? (v * 100).toFixed(2) + '%' : '', pp = v => fin2(v) ? fPP(v, 2) : '';
+    sheets.push({ name: '선택 조건', rows: [['항목', '내용'], ['보는 범위', scopeText()], ['판정 기준', `${costName()} +${s.thr}%p 초과 상승: 매출↓ → 큰 문제, 매출↑·CM↓ → 문제, CM 유지 → 비용↑·CM유지`], ['자료', `${M.kind} · ${M.nL.toLocaleString()}개 조합 · ${M.years.join(', ')}`]], header: true, wrap: [1], widths: [14, 110] });
+    const { blocks, lines } = sumBlocks(C), sum = [[M.dims[s.unit], '항목', Y0, Y1, 'Δ', '증감률']];
+    for (const b of blocks) {
+      for (const ln of lines) { const v = lineVals(b.s, ln); sum.push(v.kind === 'amt' ? [b.name, ln[0].trim(), r1(v.a), r1(v.b), r1(v.d), pc(v.g)] : [b.name, ln[0].replace(/^[　·\s]+/, ''), pc(v.a), pc(v.b), pp(v.d), '']); }
+      sum.push([b.name, '판정', '', '', JL[b.s.k], '']);
+    }
+    sheets.push({ name: '요약표', rows: sum, header: true });
+    const jr = judgeRows(C), lvName = s.jl === M.dims.length ? '조합' : M.dims[s.jl];
+    sheets.push({ name: '판정표', header: true, rows: [['판정', lvName, `매출 ${Y0}`, `매출 ${Y1}`, '매출 증감률', `비용율 ${Y0}`, `비용율 ${Y1}`, '비용율 Δ', `원가율 ${Y0}`, `원가율 ${Y1}`, '원가율 Δ', `CM ${Y0}`, `CM ${Y1}`, 'CM Δ', '매출효과', '비용율효과', '원가율효과'],
+      ...jr.map(g => { const t = g.s; return [JL[t.k], g.name, r1(t.S0), r1(t.S1), pc(t.gS), pc(t.c0), pc(t.c1), pp(t.dc), pc(t.v0), pc(t.v1), pp(t.dv), r1(t.M0), r1(t.M1), r1(t.dM), r1(t.eS), r1(t.eC), r1(t.eV)]; })] });
+    const ins = [], pz = [];
+    for (const t of targets(C).list) {
+      const I = insight(C, t);
+      ins.push([`■ ${t.name} (${I.dn} 기준) · ${JL[t.s.k]}`]); for (const p of I.plain) ins.push(['· ' + p]); ins.push([]);
+      for (const [p, nm] of [[I.pc, '비용율'], [I.pv, '원가율']]) {
+        if (!p || I.subs.length < 2) continue;
+        pz.push([`${t.name} · ${nm} 증감 퍼즐 (${I.dn})`], [I.dn, `매출 ${Y0}`, `매출 ${Y1}`, `구성비 ${Y0}`, `구성비 ${Y1}`, `${nm} ${Y0}`, `${nm} ${Y1}`, '① 율', '② 구성비', '③ 종료·신규', '기여 합계']);
+        for (const r of p.rows.slice().sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot))) pz.push([r.name, r1(r.S0), r1(r.S1), pc(r.w0), pc(r.w1), pc(r.r0), pc(r.r1), pp(r.rate), pp(r.mix), pp(r.ne), pp(r.tot)]);
+        pz.push(['합계', r1(p.S0), r1(p.S1), '100%', '100%', pc(p.R0), pc(p.R1), pp(p.rate), pp(p.mix), pp(p.ne), pp(p.dR)], []);
+      }
+    }
+    sheets.push({ name: 'INSIGHT', rows: ins, wrap: [0], widths: [150] });
+    if (pz.length) sheets.push({ name: '증감 퍼즐', rows: pz });
+    return sheets;
+  }
+
+  // ---------- 요청 · 추가 분석: requests saved next to the reply, answers written back by Claude ----------
+  // requests/<reply>/<stamp>.json = { text, scope, state, createdAt }; <stamp>.answer.json = { title, summary, items:[{title, body}], table:{head, rows} }
+  let reqState = null;
+  async function drawReq() {
+    const c = cur; if (!c) return;
+    const base = c.name.replace(/\.txt$/, ''), host = $('vReq'), ready = AS && AS.model;
+    host.innerHTML = `<div class="req"><h3 style="margin:0;font-size:15px">요청 쓰기</h3>
+      <p class="muted">기본 화면 말고 더 보고 싶은 분석을 적어주세요. 지금 고른 범위가 같이 저장됩니다. 저장한 뒤 디스코드에 "요청 넣음"이라고 보내주시면 Claude가 답을 이 탭에 올립니다.</p>
+      <p class="muted">지금 범위: ${ready ? esc(scopeText()) : '(자료를 읽는 중이거나 자동 분석이 안 되는 자료)'}</p>
+      <textarea id="reqText" maxlength="4000" placeholder="예: 01.도매 안에서 제품군별로 원가율이 오른 이유를 SKU까지 보여줘"></textarea>
+      <div class="bar"><span class="grow" id="reqInfo"></span><button type="button" class="btn primary" id="reqSend">요청 저장</button></div></div>
+      <h3 style="margin:4px 0 0;font-size:15px">요청과 답</h3><div class="ins" id="reqList"><p class="muted">불러오는 중입니다.</p></div>
+      ${c.note ? `<details class="memo"><summary>처음 답장 메모 (Claude)</summary><p class="summary">${esc(c.note)}</p></details>` : ''}`;
+    $('reqSend').addEventListener('click', () => sendReq(c, base));
+    const my = reqState = {};
+    try {
+      let items = [];
+      try { items = await (await api('/contents/requests/' + encodeURIComponent(base))).json(); } catch (e) { if (e.status !== 404) throw e; }
+      const names = new Set(items.filter(i => i.type === 'file').map(i => i.name));
+      const qs = [...names].filter(n => /^\d{8}-\d{6}\.json$/.test(n)).sort().reverse();
+      const out = [];
+      for (const n of qs) {
+        const get = async f => JSON.parse(await (await api(`/contents/requests/${encodeURIComponent(base)}/${f}`, { accept: 'application/vnd.github.raw+json' })).text());
+        const q = await get(n), a = names.has(n.replace(/\.json$/, '.answer.json')) ? await get(n.replace(/\.json$/, '.answer.json')) : null;
+        out.push({ n, q, a });
+      }
+      if (my !== reqState || c !== cur) return;
+      const list = $('reqList');
+      if (!out.length) { list.innerHTML = '<p class="muted">아직 요청이 없습니다.</p>'; return; }
+      list.innerHTML = out.map(({ n, q, a }, i) => `<div class="qa"><div class="muted">${esc(n.slice(0, 13).replace(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/, '$1-$2-$3 $4:$5'))} · ${esc(q.scope || '')}${q.state ? ` <button type="button" class="btn small" data-apply="${i}">이 범위로 보기</button>` : ''}</div>
+        <div class="q">${esc(q.text || '')}</div>${a ? ansHtml(a) : '<div class="a muted">답 기다리는 중</div>'}</div>`).join('');
+      list.onclick = e => { const b = e.target.closest('[data-apply]'); if (!b || !AS || !AS.model) return; applyState(AS.model, AS.s, out[+b.dataset.apply].q.state); saveState(); view('vIns'); };
+    } catch (e) { if (my === reqState) $('reqList').innerHTML = `<p class="err">${esc(explain(e))}</p>`; }
+  }
+  function ansHtml(a) {
+    let h = '<div class="a">';
+    if (a.title) h += `<b>${esc(a.title)}</b>\n`;
+    if (a.summary) h += esc(a.summary) + '\n';
+    for (const it of a.items || []) h += `\n<b>${esc(it.title || '')}</b>\n${esc(it.body || '')}\n`;
+    h += '</div>';
+    if (a.table && a.table.rows) h += `<div class="tw"><table class="at"><thead><tr>${(a.table.head || []).map(x => `<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${a.table.rows.map(r => `<tr>${r.map(x => `<td class="${typeof x === 'number' || /^[-+]?[\d,.]+%?p?$/.test(String(x)) ? 'n' : 'l'}">${esc(typeof x === 'number' ? fN(x) : x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    return h;
+  }
+  async function sendReq(c, base) {
+    const text = $('reqText').value.trim(); if (!text) { $('reqInfo').textContent = '요청을 적어주세요.'; return; }
+    const p2 = n => String(n).padStart(2, '0'), d = new Date();
+    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+    const body = { reply: c.name, text, createdAt: d.toISOString() };
+    if (AS && AS.model && AS.c === c) { body.scope = scopeText(); body.state = stateOut(); }
+    $('reqSend').disabled = true; $('reqInfo').textContent = '저장하는 중입니다.';
+    try {
+      await put(`requests/${base}/${stamp}.json`, toBase64(new TextEncoder().encode(JSON.stringify(body, null, 2))), `request ${base} ${stamp}`);
+      $('reqInfo').textContent = `저장했습니다 (${stamp}). 디스코드에 "요청 넣음"이라고 보내주세요.`;
+      $('reqText').value = '';
+      drawReq().then(() => { $('reqInfo') && ($('reqInfo').textContent = `저장했습니다 (${stamp}). 디스코드에 "요청 넣음"이라고 보내주세요.`); });
+    } catch (e) { $('reqInfo').textContent = '저장하지 못했습니다. ' + explain(e); $('reqSend').disabled = false; }
   }
   $('refreshBtn').addEventListener('click', loadList);
 
