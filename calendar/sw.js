@@ -1,5 +1,5 @@
 // App shell cache: the page opens fast and survives a flaky connection. Data always comes from the server.
-const V = 'evcal-v13', SHELL = ['./', 'index.html', 'app.js', 'backend.js', 'demo-products.js', 'config.js', 'xlsx-write.js', 'xlsx-read.js', 'manifest.webmanifest', 'icon-192.png'];
+const V = 'evcal-v14', SHELL = ['./', 'index.html', 'app.js', 'backend.js', 'demo-products.js', 'config.js', 'xlsx-write.js', 'xlsx-read.js', 'manifest.webmanifest', 'icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
