@@ -1016,7 +1016,8 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     for (const [k, re] of MEAS) if (re.test(s)) return { k, rate: /%|율|률|rate/i.test(s) };
     return null;
   }
-  const SLOT_A = { S: 0, D: 1, G: 2, C: 3, V: 4, M: 5 }, SLOT_R = { D: 6, G: 7, C: 8, V: 9, M: 10 };
+  const NM = 7, NT = 14;   // measures per cell: S D G C V Q(수량) P(ASP 기준 판매액); per leaf two periods
+  const SLOT_A = { S: 0, D: 1, G: 2, C: 3, V: 4, M: 5, Q: 11, P: 12 }, SLOT_R = { D: 6, G: 7, C: 8, V: 9, M: 10 };
   const slotOf = m => m.rate ? (m.k in SLOT_R ? SLOT_R[m.k] : -1) : SLOT_A[m.k];
   function num(v, rate) {
     let s = String(v == null ? '' : v).trim();
@@ -1035,11 +1036,17 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   const isYearV = v => /^'?(\d{2}|\d{4})\s*(년|년도)?$/.test(String(v).trim()) || /^fy\s*'?\d{2,4}$/i.test(String(v).trim());
   const yearNum = v => { const m = /\d+/.exec(v); if (!m) return 0; const n = +m[0]; return n < 100 ? 2000 + n : n; };
 
-  function buildModel(text) {
+  // opts (from the 분석표 entry's "model"): { cols: { S, C, V, M, Q, P, D, G: column name or [names] summed; "원가#2" = 2nd column with that name },
+  //   dims: [column names in drill order], year: label when the table has no year, labels: { C, V } }
+  function buildModel(text, opts) {
+    opts = opts || {};
     const rows = parse(clean(text)).rows.map(r => r.map(c => (c == null ? '' : String(c)).trim()));
     let h = -1, flat = false;
+    const colAt = (H, name) => { const m = /^(.*)#(\d+)$/.exec(name), n = (m ? m[1] : name).trim(), k = m ? +m[2] : 1; let seen = 0; for (let c = 0; c < H.length; c++) if (H[c] === n && ++seen === k) return c; return -1; };
+    const ocols = opts.cols && Object.keys(opts.cols).length ? opts.cols : null;
     for (let i = 0; i < Math.min(rows.length, 60); i++) {
       const r = rows[i];
+      if (ocols) { const first = [].concat(ocols.S || ocols.M)[0]; if (colAt(r, first) >= 0) { h = i; flat = true; break; } continue; }
       if (r.some(c => /^(Σ\s*)?값$|^values$/i.test(c))) { h = i; break; }
       if (r.filter(c => measOf(c)).length >= 2 && !r.some(c => /^-?[\d,.]+%?$/.test(c))) { h = i; flat = true; break; }
     }
@@ -1049,7 +1056,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     let yearCol = H.findIndex(c => YEAR_H.test(c));
     // records, filled below: leaf, year label, period label, slot, value
     const leafIx = new Map(), leafDims = [], yIx = new Map(), pIx = new Map();
-    const R = { l: [], y: [], p: [], s: [], v: [] };
+    const R = { l: [], y: [], p: [], s: [], v: [] }, nmCols = [], nmBest = [];
     const leafOf = dims => { const k = dims.join('\u0001'); let i = leafIx.get(k); if (i == null) { i = leafDims.length; leafIx.set(k, i); leafDims.push(dims); } return i; };
     const ix = (m, k) => { let i = m.get(k); if (i == null) { i = m.size; m.set(k, i); } return i; };
     const push = (l, y, p, s, v) => { R.l.push(l); R.y.push(ix(yIx, y)); R.p.push(ix(pIx, p)); R.s.push(s); R.v.push(v); };
@@ -1098,8 +1105,11 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     } else {
       let perCol = H.findIndex(c => PER_H.test(c));
       const mcols = [];
-      H.forEach((c, i) => { if (i === yearCol || i === perCol) return; const m = measOf(c); if (m && slotOf(m) >= 0) mcols.push({ c: i, m, s: slotOf(m) }); });
-      for (let c = 0; c < H.length; c++) {
+      if (ocols) { for (const [k, names] of Object.entries(ocols)) for (const n of [].concat(names)) { const c = colAt(H, n); if (c >= 0 && k in SLOT_A) mcols.push({ c, m: { k, rate: false }, s: SLOT_A[k] }); } }
+      else H.forEach((c, i) => { if (i === yearCol || i === perCol) return; const m = measOf(c); if (m && slotOf(m) >= 0) mcols.push({ c: i, m, s: slotOf(m) }); });
+      // opts.names: { 'SKU ID': 'SKU 명' } = group by the ID, show the latest name; opts.rename: { 'SKU ID': 'SKU' }
+      if (opts.dims) for (const n of opts.dims) { const c = colAt(H, n); if (c >= 0) { dimCols.push(c); dimNames.push((opts.rename && opts.rename[n]) || n.replace(/#\d+$/, '')); nmCols.push(opts.names && opts.names[n] ? colAt(H, opts.names[n]) : -1); } }
+      if (!opts.dims) for (let c = 0; c < H.length; c++) {
         if (!H[c] || c === yearCol || c === perCol || mcols.some(m => m.c === c)) continue;
         let n = 0, k = 0;
         for (let i = h + 1; i < Math.min(rows.length, h + 300); i++) { const v = rows[i][c]; if (v) { n++; if (isFinite(num(v))) k++; } }
@@ -1113,8 +1123,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         let yl = yearCol >= 0 ? r[yearCol] : '', pl = perCol >= 0 ? r[perCol] : '전체';
         const dm = /^(\d{4})\s*[-./년]?\s*(\d{1,2})/.exec(pl);
         if (dm) { if (!yl) yl = dm[1]; pl = (+dm[2]) + '월'; } else if (/^\d{1,2}$/.test(pl)) pl = (+pl) + '월';
+        if (!yl) yl = opts.year || '';
         if (!yl) continue;
         const leaf = leafOf(dimCols.map(c => r[c] || '(빈칸)'));
+        nmCols.forEach((nc, i) => {
+          if (nc < 0 || !r[nc]) return;
+          const v = r[dimCols[i]] || '(빈칸)', t = yearNum(yl) * 100 + (parseInt(pl) || 0), mp = nmBest[i] || (nmBest[i] = new Map()), o = mp.get(v);
+          if (!o || t >= o.t) mp.set(v, { t, n: r[nc] });
+        });
         for (const mc of mcols) { const x = num(r[mc.c], mc.m.rate); if (isFinite(x)) push(leaf, yl, pl, mc.s + (mc.m.rate ? 0 : 100), x); }   // +100: amounts add up
       }
     }
@@ -1129,10 +1145,10 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const yNew = new Int32Array(ys.length), pNew = new Int32Array(ps.length);
     yOrd.forEach((o, i) => { yNew[o] = i; }); pOrd.forEach((o, i) => { pNew[o] = i; });
     const years = yOrd.map(i => ys[i].replace(/\s+/g, '')), periods = pOrd.map(i => ps[i]);
-    if (years.length < 2) return { error: `비교할 연도가 하나뿐입니다 (${years[0]}). 두 해 이상이 있어야 합니다.` };
+    if (years.length < 2 && periods.length < 2) return { error: `비교할 기간이 하나뿐입니다 (${years[0]}). 두 해 이상이나 여러 달이 있어야 합니다.` };
     const nL = leafDims.length, nY = years.length, nP = periods.length, cells = nL * nY * nP;
     if (cells > 2.5e6) return { error: `칸 조합이 너무 많습니다 (${nL.toLocaleString()}개 × ${nY}년 × ${nP}기간). 차원을 줄여서 올려주세요.` };
-    const used = [...new Set(R.s.map(s => s % 100))].sort((a, b) => a - b), uw = used.length, uix = new Int32Array(11).fill(-1);
+    const used = [...new Set(R.s.map(s => s % 100))].sort((a, b) => a - b), uw = used.length, uix = new Int32Array(13).fill(-1);
     used.forEach((s, i) => { uix[s] = i; });
     const raw = new Float64Array(cells * uw).fill(NaN);
     for (let i = 0; i < R.l.length; i++) {
@@ -1140,7 +1156,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       if (add) raw[at] = isNaN(raw[at]) ? R.v[i] : raw[at] + R.v[i];
       else if (isNaN(raw[at])) raw[at] = R.v[i];   // a pivot repeats a value (총매출2): the first one counts
     }
-    const data = new Float64Array(cells * 5), has = { D: false, G: false, C: false, V: false, M: false };
+    const data = new Float64Array(cells * NM), has = { D: false, G: false, C: false, V: false, M: false, Q: false, P: false };
     const fin = Number.isFinite;
     for (let c = 0; c < cells; c++) {
       const g = s => uix[s] < 0 ? NaN : raw[c * uw + uix[s]];
@@ -1153,14 +1169,17 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       if (!fin(C) && fin(V) && fin(Mv)) C = S - V - Mv;
       if (fin(D)) has.D = true; if (fin(G)) has.G = true; if (fin(C)) has.C = true; if (fin(V)) has.V = true; if (fin(Mv)) has.M = true;
       if (!fin(C) && !fin(V) && fin(Mv)) C = S - Mv;   // only CM given: everything else counts as cost
-      const o = c * 5; data[o] = S; data[o + 1] = fin(D) ? D : 0; data[o + 2] = fin(G) ? G : 0; data[o + 3] = fin(C) ? C : 0; data[o + 4] = fin(V) ? V : 0;
+      const Q = g(11), P = g(12);
+      if (fin(Q)) has.Q = true; if (fin(P)) has.P = true;
+      const o = c * NM; data[o + 5] = fin(Q) ? Q : 0; data[o + 6] = fin(P) ? P : 0; data[o] = S; data[o + 1] = fin(D) ? D : 0; data[o + 2] = fin(G) ? G : 0; data[o + 3] = fin(C) ? C : 0; data[o + 4] = fin(V) ? V : 0;
     }
     if (!has.C && !has.V && !has.M) return { error: '비용·원가·공헌이익 값이 없어 율을 계산할 수 없습니다.' };
     const nd = dimNames.length, vals = dimNames.map(() => []), vmap = dimNames.map(() => new Map());
     const leafDim = dimNames.map(() => new Int32Array(nL));
     leafDims.forEach((dims, l) => dims.forEach((v, d) => { let k = vmap[d].get(v); if (k == null) { k = vals[d].length; vmap[d].set(v, k); vals[d].push(v); } leafDim[d][l] = k; }));
+    nmBest.forEach((mp, d) => { if (mp && mp.size) vals[d] = vals[d].map(v => mp.has(v) ? `${mp.get(v).n} (${v})` : v); });
     if (!nd) { dimNames.push('전체'); vals.push(['전체']); leafDim.push(new Int32Array(nL)); }
-    return { dims: dimNames, vals, leafDim, years, periods, isMonth, nL, nY, nP, data, has, kind: flat ? '목록형 표' : '피벗' };
+    return { dims: dimNames, vals, leafDim, years, periods, isMonth, nL, nY, nP, data, has, lab: Object.assign({ C: '비용 (차감+판관비)', V: '변동원가', P: '판매액' }, opts.labels || {}), kind: flat ? '목록형 표' : '피벗' };
   }
 
   // ---------- state ----------
@@ -1176,7 +1195,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         if (!st.full) st.full = readSource(st.stamp, f, 400e6);
         const { text, cut } = await st.full;
         if (my !== AS) return;
-        const m = buildModel(text);
+        const m = buildModel(text, c.extra && c.extra.model);
         if (m.error) throw new Error(m.error);
         if (cut) m.cut = true;
         my.model = m; my.s = initState(m, c);
@@ -1191,7 +1210,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const yB = Math.max(0, M.nY - 2), yC = M.nY - 1;
     const s = { filt: M.dims.map(() => null), unit: u0, split: multi.length > 1 ? multi[1] : u0, merge: true, a0: yB * M.nP, a1: yB * M.nP + M.nP - 1, b0: yC * M.nP, b1: yC * M.nP + M.nP - 1, agg: 'sum', thr: 0.1, jl: nd > 1 ? nd - 1 : 0, jf: 'all', q: '', sort: null };
     if (M.nY < 2 && M.nP > 1) { s.a0 = s.a1 = 0; s.b0 = s.b1 = M.nP - 1; }
-    let big = 0; for (let i = 0; i < M.data.length; i += 5) big += M.data[i];
+    let big = 0; for (let i = 0; i < M.data.length; i += NM) big += M.data[i];
     s.div = big / Math.max(1, M.nY) > 5e9 ? 1e6 : big / Math.max(1, M.nY) > 5e6 ? 1e3 : 1;
     const pre = c.extra && c.extra.analysis;
     if (pre) applyState(M, s, pre);
@@ -1204,7 +1223,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const M = AS.model, s = AS.s, filt = {};
     s.filt.forEach((f, d) => { if (f) filt[M.dims[d]] = [...f].map(k => M.vals[d][k]); });
     const pn = i => M.years[Math.floor(i / M.nP)] + '|' + M.periods[i % M.nP];
-    return { filt, unit: M.dims[s.unit], split: M.dims[s.split], merge: s.merge, base: [pn(s.a0), pn(s.a1)], comp: [pn(s.b0), pn(s.b1)], agg: s.agg, thr: s.thr, div: s.div };
+    return { filt, unit: M.dims[s.unit], split: M.dims[s.split], merge: s.merge, base: [pn(s.a0), pn(s.a1)], comp: [pn(s.b0), pn(s.b1)], agg: s.agg, thr: s.thr, div: s.div, jl: s.jl === M.dims.length ? '*' : M.dims[s.jl] };
   }
   const nPer = () => AS.model.nY * AS.model.nP;
   function applyState(M, s, o) {
@@ -1224,6 +1243,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       if (a >= 0 && b >= 0 && a !== b) { s.a0 = a * M.nP + p0; s.a1 = a * M.nP + p1; s.b0 = b * M.nP + p0; s.b1 = b * M.nP + p1; }
     }
     if (o.agg === 'sum' || o.agg === 'avg') s.agg = o.agg;
+    if (o.jl === '*') s.jl = M.dims.length; else if (o.jl && di(o.jl) >= 0) s.jl = di(o.jl);   // 판정표 단위
     if (typeof o.thr === 'number') s.thr = o.thr;
     if ([1, 1e3, 1e6, 1e8].includes(o.div)) s.div = o.div;
   }
@@ -1232,11 +1252,11 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   function compute() {
     const M = AS.model, s = AS.s, key = [s.a0, s.a1, s.b0, s.b1, s.agg].join();
     if (AS.tKey !== key) {   // per-leaf totals over the base then the compared range: [S,D,G,C,V] × 2 (월평균 = total ÷ months)
-      const T = new Float64Array(M.nL * 10), D = M.data, nY = M.nY, nP = M.nP;
+      const T = new Float64Array(M.nL * NT), D = M.data, nY = M.nY, nP = M.nP;
       for (const [yi, i0, i1] of [[0, s.a0, s.a1], [1, s.b0, s.b1]]) {
         const f = s.agg === 'avg' ? 1 / (i1 - i0 + 1) : 1;
         for (let l = 0; l < M.nL; l++) for (let i = i0; i <= i1; i++) {
-          const o = ((l * nY + Math.floor(i / nP)) * nP + i % nP) * 5; for (let k = 0; k < 5; k++) T[l * 10 + yi * 5 + k] += D[o + k] * f;
+          const o = ((l * nY + Math.floor(i / nP)) * nP + i % nP) * NM; for (let k = 0; k < NM; k++) T[l * NT + yi * NM + k] += D[o + k] * f;
         }
       }
       AS.T = T; AS.tKey = key;
@@ -1245,11 +1265,11 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     for (let l = 0; l < M.nL; l++) {
       let ok = true;
       for (let d = 0; d < M.dims.length && ok; d++) if (s.filt[d] && !s.filt[d].has(M.leafDim[d][l])) ok = false;
-      if (ok && (T[l * 10] || T[l * 10 + 5] || T[l * 10 + 3] || T[l * 10 + 8])) sel.push(l);
+      if (ok && (T[l * NT] || T[l * NT + NM] || T[l * NT + 3] || T[l * NT + NM + 3] || T[l * NT + 4] || T[l * NT + NM + 4])) sel.push(l);
     }
     return { T, sel, tot: stat(sumOf(T, sel)) };
   }
-  function sumOf(T, leaves) { const a = new Float64Array(10); for (const l of leaves) for (let k = 0; k < 10; k++) a[k] += T[l * 10 + k]; return a; }
+  function sumOf(T, leaves) { const a = new Float64Array(NT); for (const l of leaves) for (let k = 0; k < NT; k++) a[k] += T[l * NT + k]; return a; }
   // groups of leaves by one dimension (d = -1: every combination on its own)
   function groupsOf(C, leaves, d) {
     const M = AS.model, map = new Map();
@@ -1263,10 +1283,15 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     return out.sort((a, b) => (b.s.S1 || b.s.S0) - (a.s.S1 || a.s.S0));
   }
   function stat(a) {
-    const [S0, D0, G0, C0, V0, S1, D1, G1, C1, V1] = a, M0 = S0 - C0 - V0, M1 = S1 - C1 - V1;
+    const [S0, D0, G0, C0, V0, Q0, P0, S1, D1, G1, C1, V1, Q1, P1] = a, M0 = S0 - C0 - V0, M1 = S1 - C1 - V1;
     const r = (x, S) => S > 0 ? x / S : null, dif = (x, y) => x != null && y != null ? y - x : null;
     const o = { S0, S1, C0, C1, V0, V1, D0, D1, G0, G1, M0, M1, dS: S1 - S0, dM: M1 - M0, gS: S0 > 0 ? (S1 - S0) / S0 : null,
       c0: r(C0, S0), c1: r(C1, S1), v0: r(V0, S0), v1: r(V1, S1), m0: r(M0, S0), m1: r(M1, S1), d0: r(D0, S0), d1: r(D1, S1), g0: r(G0, S0), g1: r(G1, S1) };
+    // ASP = 판매액 ÷ 수량 (판매액 열이 없으면 매출 ÷ 수량); 판매액 증감 = 수량효과 (ΔQ × ASP0) + ASP효과 (Q1 × ΔASP)
+    const N0 = AS.model.has.P ? P0 : S0, N1 = AS.model.has.P ? P1 : S1;
+    Object.assign(o, { Q0, Q1, P0: N0, P1: N1, dQ: Q1 - Q0, gQ: Q0 > 0 ? (Q1 - Q0) / Q0 : null, a0: Q0 > 0 ? N0 / Q0 : null, a1: Q1 > 0 ? N1 / Q1 : null, dP: N1 - N0 });
+    o.gA = o.a0 > 0 && o.a1 != null ? (o.a1 - o.a0) / o.a0 : null; o.dA = dif(o.a0, o.a1);
+    if (o.a0 != null && o.a1 != null) { o.eQ = o.dQ * o.a0; o.eA = Q1 * o.dA; } else { o.eQ = o.dP; o.eA = 0; }
     o.dc = dif(o.c0, o.c1); o.dv = dif(o.v0, o.v1); o.dm = dif(o.m0, o.m1); o.dd = dif(o.d0, o.d1); o.dg = dif(o.g0, o.g1);
     if (S0 > 0 && S1 > 0) { o.eS = o.dS * o.m0; o.eC = -o.dc * S1; o.eV = -o.dv * S1; }   // eS + eC + eV = dM exactly
     else { o.eS = o.dM; o.eC = 0; o.eV = 0; }
@@ -1321,6 +1346,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   const divName = () => (DIVS.find(d => d[0] === AS.s.div) || DIVS[0])[1];
   const fN = v => { if (!fin2(v)) return '–'; v /= (AS && AS.s && AS.s.div) || 1; return Math.abs(v) >= 10 || v === Math.round(v) ? Math.round(v).toLocaleString() : v.toFixed(1); };
   const fD = v => !fin2(v) ? '–' : (v > 0.05 ? '+' : '') + fN(v);
+  const fQ = v => !fin2(v) ? '–' : Math.round(v).toLocaleString();   // quantities and ASP: never divided by the 금액 단위
   const fP = v => !fin2(v) ? '–' : (v * 100).toFixed(1) + '%';
   const fPP = (v, n = 1) => !fin2(v) ? '–' : (v > 0 ? '+' : '') + (v * 100).toFixed(n) + '%p';
   const fG = v => !fin2(v) ? '–' : (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
@@ -1375,7 +1401,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     for (let l = 0; l < M.nL; l++) {
       let ok = true;
       for (let e = 0; e < M.dims.length && ok; e++) if (e !== d && s.filt[e] && !s.filt[e].has(M.leafDim[e][l])) ok = false;
-      if (ok && (C.T[l * 10] || C.T[l * 10 + 5])) seen.add(M.leafDim[d][l]);
+      if (ok && (C.T[l * NT] || C.T[l * NT + NM])) seen.add(M.leafDim[d][l]);
     }
     if (s.filt[d]) for (const k of s.filt[d]) seen.add(k);
     const list = [...seen].sort((a, b) => M.vals[d][a].localeCompare(M.vals[d][b], 'ko', { numeric: true }));
@@ -1463,8 +1489,9 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   // ---------- ① 요약표 ----------
   function sumLines() {
     const h = AS.model.has, L = [['총매출', 'S', 'amt']];
-    if (h.C) { L.push(['비용 (차감+판관비)', 'C', 'amt'], ['% 비용율', 'c', 'cost']); if (h.D) L.push(['　· 차감율', 'd', 'cost', 1]); if (h.G) L.push(['　· 판관비율', 'g', 'cost', 1]); }
-    if (h.V) L.push(['변동원가', 'V', 'amt'], ['% 원가율', 'v', 'cost']);
+    if (h.Q) { L.push(['판매수량', 'Q', 'qty'], ['ASP', 'a', 'price']); }
+    if (h.C) { L.push([AS.model.lab.C, 'C', 'amt'], ['% 비용율', 'c', 'cost']); if (h.D) L.push(['　· 차감율', 'd', 'cost', 1]); if (h.G) L.push(['　· 판관비율', 'g', 'cost', 1]); }
+    if (h.V) L.push([AS.model.lab.V, 'V', 'amt'], ['% 원가율', 'v', 'cost']);
     L.push(['CM (공헌이익)', 'M', 'amt'], ['% CM율', 'm', 'margin']);
     return L;
   }
@@ -1478,7 +1505,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   }
   function lineVals(st, ln) {
     const [, k, kind] = ln;
-    if (kind === 'amt') { const a = st[k + '0'], b = st[k + '1'], d = b - a; return { a, b, d, g: a > 0 ? d / a : null, kind }; }
+    if (kind === 'amt' || kind === 'qty' || kind === 'price') { const a = st[k + '0'], b = st[k + '1'], d = fin2(a) && fin2(b) ? b - a : null; return { a, b, d, g: a > 0 && d != null ? d / a : null, kind }; }
     const a = st[k + '0'], b = st[k + '1'], d = a != null && b != null ? b - a : null;
     return { a, b, d, kind, bad: kind === 'cost' ? isBad(d) : kind === 'margin' ? isBad(d == null ? null : -d) : false };
   }
@@ -1489,7 +1516,8 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       h += b.drill ? `<tr class="blk" data-drill="${b.drill.join(':')}"><th colspan="5">${esc(b.name)} <span class="muted">▸ ${esc(M.dims[s.split])} 보기</span></th></tr>` : `<tr class="blk"><th colspan="5">${esc(b.name)}</th></tr>`;
       for (const ln of lines) {
         const v = lineVals(b.s, ln), sub = ln[3] ? ' it' : '';
-        if (v.kind === 'amt') h += `<tr><td class="l${sub}">${esc(ln[0])}</td><td class="n">${fN(v.a)}</td><td class="n">${fN(v.b)}</td><td class="n ${ln[1] === 'S' || ln[1] === 'M' ? sg(v.d) : sgc(v.d)}">${fD(v.d)}</td><td class="n ${ln[1] === 'S' || ln[1] === 'M' ? sg(v.g) : sgc(v.g)}">${fG(v.g)}</td></tr>`;
+        if (v.kind === 'qty' || v.kind === 'price') h += `<tr><td class="l${sub}">${esc(ln[0])}${v.kind === 'price' ? ' <small class="muted">(원)</small>' : ''}</td><td class="n">${fQ(v.a)}</td><td class="n">${fQ(v.b)}</td><td class="n ${sg(v.d)}">${v.d == null ? '–' : (v.d > 0 ? '+' : '') + fQ(v.d)}</td><td class="n ${sg(v.g)}">${fG(v.g)}</td></tr>`;
+        else if (v.kind === 'amt') h += `<tr><td class="l${sub}">${esc(ln[0])}</td><td class="n">${fN(v.a)}</td><td class="n">${fN(v.b)}</td><td class="n ${ln[1] === 'S' || ln[1] === 'M' ? sg(v.d) : sgc(v.d)}">${fD(v.d)}</td><td class="n ${ln[1] === 'S' || ln[1] === 'M' ? sg(v.g) : sgc(v.g)}">${fG(v.g)}</td></tr>`;
         else h += `<tr><td class="l${sub || ' it'}">${esc(ln[0])}</td><td class="n${sub}">${fP(v.a)}</td><td class="n${sub}">${fP(v.b)}</td><td class="n${v.bad ? ' bad' : ''} ${v.kind === 'margin' ? sg(v.d) : sgc(v.d)}">${fPP(v.d, 2)}</td><td></td></tr>`;
       }
       h += `<tr><td class="l it">판정</td><td colspan="2"></td><td class="n">${chip(b.s.k)}</td><td></td></tr>`;
@@ -1502,7 +1530,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   $('vSum').addEventListener('click', e => { const t = e.target.closest('[data-drill]'); if (t) { const [d, k] = t.dataset.drill.split(':').map(Number); drill(d, k); } });
 
   // ---------- ② 판정표 ----------
-  const JCOLS = [['k', '판정'], ['name', '이름'], ['S1', '매출'], ['dc', '비용율'], ['dv', '원가율'], ['dM', 'CM'], ['eS', '매출효과'], ['eC', '비용율효과'], ['eV', '원가율효과']];
+  const JCOLS = [['k', '판정'], ['name', '이름'], ['S1', '매출'], ['gQ', '수량'], ['gA', 'ASP'], ['dc', '비용율'], ['dv', '원가율'], ['dM', 'CM'], ['eS', '매출효과'], ['eC', '비용율효과'], ['eV', '원가율효과']];
   function judgeRows(C) {
     const s = AS.s, lvl = s.jl, q = s.q.trim().toLowerCase();
     let rows = groupsOf(C, C.sel, lvl === AS.model.dims.length ? -1 : lvl);
@@ -1525,12 +1553,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <label class="f">검색<input type="search" id="jQ" value="${esc(s.q)}" placeholder="이름 일부"></label>
       <span class="muted">${['red', 'warn', 'up', 'ok', 'new', 'end'].filter(k => cnt[k]).map(k => `${JL[k]} ${cnt[k]}`).join(' · ')}</span></div>`;
     const so = s.sort || { k: 'k', d: 1 }, ar = k => so.k === k ? (so.d > 0 ? ' ▲' : ' ▼') : '';
-    const head = JCOLS.filter(([k]) => (k !== 'dc' && k !== 'eC') || M.has.C).filter(([k]) => (k !== 'dv' && k !== 'eV') || M.has.V);
+    const head = JCOLS.filter(([k]) => (k !== 'dc' && k !== 'eC') || M.has.C).filter(([k]) => (k !== 'dv' && k !== 'eV') || M.has.V).filter(([k]) => (k !== 'gQ' && k !== 'gA') || M.has.Q);
     h += `<div class="tw" style="max-height:none"><table class="at"><thead><tr>${head.map(([k, n]) => `<th class="s" data-sort="${k}">${k === 'name' ? esc(lv[s.jl][1]) : n}${k === 'S1' ? ` (${esc(Y0)}→${esc(Y1)})` : ''}${ar(k)}</th>`).join('')}</tr></thead><tbody>`;
     for (const g of rows.slice(0, 1500)) {
       const t = g.s, cell = {
         k: `<td>${chip(t.k)}</td>`, name: `<td class="l">${esc(g.name)}</td>`,
         S1: `<td class="n">${fN(t.S0)} → ${fN(t.S1)} <span class="${sg(t.gS)}">(${fG(t.gS)})</span></td>`,
+        gQ: `<td class="n">${fQ(t.Q0)} → ${fQ(t.Q1)} <span class="${sg(t.gQ)}">(${fG(t.gQ)})</span></td>`,
+        gA: `<td class="n">${fQ(t.a0)} → ${fQ(t.a1)} <span class="${sg(t.gA)}">(${fG(t.gA)})</span></td>`,
         dc: `<td class="n${isBad(t.dc) ? ' bad' : ''}">${fP(t.c0)} → ${fP(t.c1)} <span class="${sgc(t.dc)}">(${fPP(t.dc)})</span></td>`,
         dv: `<td class="n${isBad(t.dv) ? ' bad' : ''}">${fP(t.v0)} → ${fP(t.v1)} <span class="${sgc(t.dv)}">(${fPP(t.dv)})</span></td>`,
         dM: `<td class="n">${fN(t.M0)} → ${fN(t.M1)} <span class="${sg(t.dM)}">(${fD(t.dM)})</span></td>`,
@@ -1584,6 +1614,18 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       const txt = `CM 증감 ${fD(st.dM)} = ` + parts.map(([n, v]) => `${n} ${fD(v)}`).join(' + ') + ` → 가장 큰 요인은 ${big[0]} (${big[1] >= 0 ? 'CM을 올림' : 'CM을 깎음'})`;
       add(esc(txt).replace(/(매출효과|비용율효과|원가율효과) ([+-]?[\d,.]+)/g, (m, n, v) => `${n} <span class="${v.startsWith('-') ? 'neg' : 'pos'}">${v}</span>`), txt);
     }
+    if (M.has.Q && st.a0 != null && st.a1 != null) {
+      const pn = M.lab.P || '판매액';
+      const txt = `${pn} ${fN(st.P0)} → ${fN(st.P1)} (${fD(st.dP)}) = 수량효과 ${fD(st.eQ)} (수량 ${fQ(st.Q0)} → ${fQ(st.Q1)}, ${fG(st.gQ)}) + ASP효과 ${fD(st.eA)} (ASP ${fQ(st.a0)}원 → ${fQ(st.a1)}원, ${fG(st.gA)})`;
+      add(esc(txt).replace(/(수량효과|ASP효과) ([+-]?[\d,.]+)/g, (m, n, v) => `${n} <span class="${v.startsWith('-') ? 'neg' : 'pos'}">${v}</span>`), txt);
+      if (subs.length > 1) {
+        const cont = subs.filter(g => g.s.a0 != null && g.s.a1 != null);
+        const up = cont.filter(g => g.s.eA > 0).sort((a, b) => b.s.eA - a.s.eA).slice(0, 3), dw = cont.filter(g => g.s.eA < 0).sort((a, b) => a.s.eA - b.s.eA).slice(0, 3);
+        const one = g => `${g.name} ${fQ(g.s.a0)}→${fQ(g.s.a1)}원 (${fG(g.s.gA)}, ${pn} ${fD(g.s.eA)})`;
+        const t2 = `${dn}별 ASP — 오른 곳 (영향 큰 순): ${up.map(one).join(', ') || '없음'} / 내린 곳: ${dw.map(one).join(', ') || '없음'}`;
+        add(esc(t2), t2);
+      }
+    }
     if (M.has.C && M.has.D && M.has.G && st.dc != null) add(`비용율 ${fPP(st.dc, 2)} 중 차감율 <span class="${sgc(st.dd)}">${fPP(st.dd, 2)}</span>, 판관비율 <span class="${sgc(st.dg)}">${fPP(st.dg, 2)}</span>`, `비용율 ${fPP(st.dc, 2)} 중 차감율 ${fPP(st.dd, 2)}, 판관비율 ${fPP(st.dg, 2)}`);
     for (const [p, nm] of [[pc, '비용율'], [pv, '원가율']]) {
       if (!p || subs.length < 2) continue;
@@ -1619,7 +1661,10 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const top = p.rows.map(r => ({ ...r, W1: r.w1, W0: r.w0 }));
     const kids = (row, dl) => {
       if (!dl.length || !row.g) return null;
-      const d = dl[0], subs = groupsOf(C, row.g.leaves, d);
+      // a level with a single value under this row (e.g. SKU → 구분) adds nothing: skip to the next one
+      let d = dl[0], subs = groupsOf(C, row.g.leaves, d);
+      while (subs.length < 2 && dl.length > 1) { dl = dl.slice(1); d = dl[0]; subs = groupsOf(C, row.g.leaves, d); }
+      if (subs.length < 2) return null;
       const cont = row.w0 > 0 && row.w1 > 0 && row.S0 > 0 && row.S1 > 0;
       let rows;
       if (cont) {
@@ -1745,13 +1790,15 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       if (rest.length) { const o = { name: `기타 ${rest.length}개`, leaves: [], other: true, more: rest, lim }; for (const g of rest) fold(o, g); o.s = stat(sumOf(C.T, o.leaves)); shown.push(o); }
       return shown;
     };
-    const kidsOf = r => { const rest = r._dl || dl; if (!rest.length || r.other) return null; const d = rest[0], all = groupsOf(C, r.leaves, d); for (const g of all) { g._dl = rest.slice(1); g._path = (r._path || [[I.dim, r.code]]).concat([[d, g.code]]); } return { rows: lim(all) }; };
+    const kidsOf = r => { let rest = r._dl || dl; if (!rest.length || r.other) return null; let d = rest[0], all = groupsOf(C, r.leaves, d);
+      while (all.length < 2 && rest.length > 1) { rest = rest.slice(1); d = rest[0]; all = groupsOf(C, r.leaves, d); }
+      if (all.length < 2) return null; for (const g of all) { g._dl = rest.slice(1); g._path = (r._path || [[I.dim, r.code]]).concat([[d, g.code]]); } return { rows: lim(all) }; };
     const SEV = { red: 6, warn: 5, up: 4, new: 3, end: 2, ok: 1, na: 0 };
-    const cells = g => { const t = g.s, dc = M.has.C ? t.dc : t.dv; return `<td data-v="${g.other ? '' : SEV[t.k] ?? ''}">${g.other ? '' : chip(t.k)}</td><td class="n" data-v="${nv(t.S1)}">${fN(t.S0)}→${fN(t.S1)}</td><td class="n ${sg(t.dS)}" data-v="${nv(t.dS)}">${fD(t.dS)}${fin2(t.gS) ? ` <small>(${fG(t.gS)})</small>` : ''}</td><td class="n" data-v="${nv(M.has.C ? t.c1 : t.v1)}">${fP(M.has.C ? t.c0 : t.v0)}→${fP(M.has.C ? t.c1 : t.v1)}</td><td class="n ${fin2(dc) ? sgc(dc) : ''}${isBad(dc) ? ' bad' : ''}" data-v="${nv(dc)}">${fin2(dc) ? fPP(dc, 2) : ''}</td><td class="n" data-v="${nv(t.M1)}">${fN(t.M0)}→${fN(t.M1)}</td><td class="n ${sg(t.dM)}" data-v="${nv(t.dM)}">${fD(t.dM)}</td><td class="n ${sg(t.eS)}" data-v="${nv(t.eS)}">${fD(t.eS)}</td>${M.has.C ? `<td class="n ${sg(t.eC)}" data-v="${nv(t.eC)}">${fD(t.eC)}</td>` : ''}${M.has.V ? `<td class="n ${sg(t.eV)}" data-v="${nv(t.eV)}">${fD(t.eV)}</td>` : ''}`; };
+    const cells = g => { const t = g.s, dc = M.has.C ? t.dc : t.dv; return `<td data-v="${g.other ? '' : SEV[t.k] ?? ''}">${g.other ? '' : chip(t.k)}</td><td class="n" data-v="${nv(t.S1)}">${fN(t.S0)}→${fN(t.S1)}</td><td class="n ${sg(t.dS)}" data-v="${nv(t.dS)}">${fD(t.dS)}${fin2(t.gS) ? ` <small>(${fG(t.gS)})</small>` : ''}</td>${M.has.Q ? `<td class="n" data-v="${nv(t.Q1)}">${fQ(t.Q0)}→${fQ(t.Q1)}</td><td class="n ${sg(t.gQ)}" data-v="${nv(t.gQ)}">${fG(t.gQ)}</td><td class="n" data-v="${nv(t.a1)}">${fQ(t.a0)}→${fQ(t.a1)}</td><td class="n ${sg(t.gA)}" data-v="${nv(t.gA)}">${fG(t.gA)}</td>` : ''}<td class="n" data-v="${nv(M.has.C ? t.c1 : t.v1)}">${fP(M.has.C ? t.c0 : t.v0)}→${fP(M.has.C ? t.c1 : t.v1)}</td><td class="n ${fin2(dc) ? sgc(dc) : ''}${isBad(dc) ? ' bad' : ''}" data-v="${nv(dc)}">${fin2(dc) ? fPP(dc, 2) : ''}</td><td class="n" data-v="${nv(t.M1)}">${fN(t.M0)}→${fN(t.M1)}</td><td class="n ${sg(t.dM)}" data-v="${nv(t.dM)}">${fD(t.dM)}</td><td class="n ${sg(t.eS)}" data-v="${nv(t.eS)}">${fD(t.eS)}</td>${M.has.C ? `<td class="n ${sg(t.eC)}" data-v="${nv(t.eC)}">${fD(t.eC)}</td>` : ''}${M.has.V ? `<td class="n ${sg(t.eV)}" data-v="${nv(t.eV)}">${fD(t.eV)}</td>` : ''}`; };
     const nameOf = g => g.other ? esc(g.name) : `<a href="#" data-drill="${(g._path || [[I.dim, g.code]]).map(x => x.join(':')).join(';')}">${esc(g.name)}</a>`;
     const tops = lim(I.subs);
     const levels = dl.length ? `${esc(I.dn)} → ${dl.map(d => esc(M.dims[d])).join(' → ')}` : esc(I.dn);
-    let h = `<h4>${esc(I.dn)}별 매출 · CM 기여 <small class="muted">${levels} · CM 변화 큰 순 · 이름 클릭 = 그 항목만 보기</small>${dl.length ? ' <button type="button" class="btn small" data-tall="1">모두 펼치기</button> <button type="button" class="btn small" data-tall="0">모두 접기</button>' : ''} ${TF_BTN}</h4><div class="tw"><table class="at" data-tk="${esc(tk || '')}"><thead><tr>${thc([[I.dn, '이름순'], ['판정', '큰 문제 순'], [`매출 ${yLab()}`, '비교 기간 값 기준'], ['매출 증감', ''], [costName(), '비교 기간 값 기준'], [`${costName()} 증감`, ''], [`CM ${yLab()}`, '비교 기간 값 기준'], ['CM 증감', ''], ['매출효과', ''], ...(M.has.C ? [['비용율효과', '']] : []), ...(M.has.V ? [['원가율효과', '']] : [])])}</tr></thead><tbody>`;
+    let h = `<h4>${esc(I.dn)}별 매출 · CM 기여 <small class="muted">${levels} · CM 변화 큰 순 · 이름 클릭 = 그 항목만 보기</small>${dl.length ? ' <button type="button" class="btn small" data-tall="1">모두 펼치기</button> <button type="button" class="btn small" data-tall="0">모두 접기</button>' : ''} ${TF_BTN}</h4><div class="tw"><table class="at" data-tk="${esc(tk || '')}"><thead><tr>${thc([[I.dn, '이름순'], ['판정', '큰 문제 순'], [`매출 ${yLab()}`, '비교 기간 값 기준'], ['매출 증감', ''], ...(M.has.Q ? [[`수량 ${yLab()}`, '비교 기간 값 기준'], ['수량 증감률', ''], [`ASP ${yLab()}`, '비교 기간 값 기준 (원)'], ['ASP 증감률', '']] : []), [costName(), '비교 기간 값 기준'], [`${costName()} 증감`, ''], [`CM ${yLab()}`, '비교 기간 값 기준'], ['CM 증감', ''], ['매출효과', ''], ...(M.has.C ? [['비용율효과', '']] : []), ...(M.has.V ? [['원가율효과', '']] : [])])}</tr></thead><tbody>`;
     h += treeRowsHtml(tops, 0, null, kidsOf, cells, g => nameOf(g));
     return h + '</tbody></table></div>';
   }
@@ -1806,7 +1853,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         if (j >= len) { S[yi].push(null); rC[yi].push(null); rV[yi].push(null); continue; }
         const i = i0 + j, y = Math.floor(i / M.nP), p = i % M.nP;
         let a = 0, c = 0, v = 0;
-        for (const l of leaves) { const o = ((l * M.nY + y) * M.nP + p) * 5; a += M.data[o]; c += M.data[o + 3]; v += M.data[o + 4]; }
+        for (const l of leaves) { const o = ((l * M.nY + y) * M.nP + p) * NM; a += M.data[o]; c += M.data[o + 3]; v += M.data[o + 4]; }
         S[yi].push(a / (s.div || 1)); rC[yi].push(a > 0 ? +(c / a * 100).toFixed(2) : null); rV[yi].push(a > 0 ? +(v / a * 100).toFixed(2) : null);
       }
     }
@@ -1827,6 +1874,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       const tl = [['매출', `${fN(st.S1)}`, `<span class="${sg(st.gS)}">${fG(st.gS)} (${fD(st.dS)})</span>`]];
       if (M.has.C) tl.push(['비용율', fP(st.c1), `<span class="${sgc(st.dc)}">${fPP(st.dc, 2)}</span> · ${yrs()[0]} ${fP(st.c0)}`]);
       if (M.has.V) tl.push(['원가율', fP(st.v1), `<span class="${sgc(st.dv)}">${fPP(st.dv, 2)}</span> · ${yrs()[0]} ${fP(st.v0)}`]);
+      if (M.has.Q) tl.splice(1, 0, ['ASP (원)', fQ(st.a1), `<span class="${sg(st.gA)}">${fG(st.gA)}</span> · 수량 <span class="${sg(st.gQ)}">${fG(st.gQ)}</span>`]);
       tl.push(['CM', fN(st.M1), `<span class="${sg(st.dM)}">${fD(st.dM)}</span> · CM율 ${fP(st.m1)}`]);
       card.innerHTML = `<h3>${t.top ? '📌 ' : ''}${t.drill ? `<a href="#" data-drill="${t.drill.join(':')}">${esc(t.name)}</a>` : esc(t.name)} ${chip(st.k)} <small>${esc(I.dn)} 기준으로 쪼개 봄 · ${esc(yrs().join(' → '))}${perText() ? ' · ' + esc(perText()) : ''}</small></h3>
         <div class="tiles">${tl.map(([k, v, d]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join('')}</div>
@@ -1861,13 +1909,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     sheets.push({ name: '선택 조건', rows: [['항목', '내용'], ['보는 범위', scopeText()], ['금액 단위', divName()], ['판정 기준', `${costName()} +${s.thr}%p 초과 상승: 매출↓ → 큰 문제, 매출↑·CM↓ → 문제, CM 유지 → 비용↑·CM유지`], ['자료', `${M.kind} · ${M.nL.toLocaleString()}개 조합 · ${M.years.join(', ')}`]], header: true, wrap: [1], widths: [14, 110] });
     const { blocks, lines } = sumBlocks(C), sum = [[M.dims[s.unit], '항목', Y0, Y1, 'Δ', '증감률']];
     for (const b of blocks) {
-      for (const ln of lines) { const v = lineVals(b.s, ln); sum.push(v.kind === 'amt' ? [b.name, ln[0].trim(), r1(v.a), r1(v.b), r1(v.d), pc(v.g)] : [b.name, ln[0].replace(/^[　·\s]+/, ''), pc(v.a), pc(v.b), pp(v.d), '']); }
+      for (const ln of lines) { const v = lineVals(b.s, ln); const q = x => fin2(x) ? Math.round(x) : ''; sum.push(v.kind === 'qty' || v.kind === 'price' ? [b.name, ln[0].trim() + (v.kind === 'price' ? ' (원)' : ''), q(v.a), q(v.b), q(v.d), pc(v.g)] : v.kind === 'amt' ? [b.name, ln[0].trim(), r1(v.a), r1(v.b), r1(v.d), pc(v.g)] : [b.name, ln[0].replace(/^[　·\s]+/, ''), pc(v.a), pc(v.b), pp(v.d), '']); }
       sum.push([b.name, '판정', '', '', JL[b.s.k], '']);
     }
     sheets.push({ name: '요약표', rows: sum, header: true });
     const jr = judgeRows(C), lvName = s.jl === M.dims.length ? '조합' : M.dims[s.jl];
-    sheets.push({ name: '판정표', header: true, rows: [['판정', lvName, `매출 ${Y0}`, `매출 ${Y1}`, '매출 증감률', `비용율 ${Y0}`, `비용율 ${Y1}`, '비용율 Δ', `원가율 ${Y0}`, `원가율 ${Y1}`, '원가율 Δ', `CM ${Y0}`, `CM ${Y1}`, 'CM Δ', '매출효과', '비용율효과', '원가율효과'],
-      ...jr.map(g => { const t = g.s; return [JL[t.k], g.name, r1(t.S0), r1(t.S1), pc(t.gS), pc(t.c0), pc(t.c1), pp(t.dc), pc(t.v0), pc(t.v1), pp(t.dv), r1(t.M0), r1(t.M1), r1(t.dM), r1(t.eS), r1(t.eC), r1(t.eV)]; })] });
+    const hq = M.has.Q, q0 = x => fin2(x) ? Math.round(x) : '';
+    sheets.push({ name: '판정표', header: true, rows: [['판정', lvName, `매출 ${Y0}`, `매출 ${Y1}`, '매출 증감률', ...(hq ? [`수량 ${Y0}`, `수량 ${Y1}`, '수량 증감률', `ASP ${Y0}`, `ASP ${Y1}`, 'ASP 증감률', '판매액 수량효과', '판매액 ASP효과'] : []), `비용율 ${Y0}`, `비용율 ${Y1}`, '비용율 Δ', `원가율 ${Y0}`, `원가율 ${Y1}`, '원가율 Δ', `CM ${Y0}`, `CM ${Y1}`, 'CM Δ', '매출효과', '비용율효과', '원가율효과'],
+      ...jr.map(g => { const t = g.s; return [JL[t.k], g.name, r1(t.S0), r1(t.S1), pc(t.gS), ...(hq ? [q0(t.Q0), q0(t.Q1), pc(t.gQ), q0(t.a0), q0(t.a1), pc(t.gA), r1(t.eQ), r1(t.eA)] : []), pc(t.c0), pc(t.c1), pp(t.dc), pc(t.v0), pc(t.v1), pp(t.dv), r1(t.M0), r1(t.M1), r1(t.dM), r1(t.eS), r1(t.eC), r1(t.eV)]; })] });
     const ins = [], pz = [];
     for (const t of targets(C).list) {
       const I = insight(C, t);
