@@ -1056,7 +1056,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     let yearCol = H.findIndex(c => YEAR_H.test(c));
     // records, filled below: leaf, year label, period label, slot, value
     const leafIx = new Map(), leafDims = [], yIx = new Map(), pIx = new Map();
-    const R = { l: [], y: [], p: [], s: [], v: [] }, nmCols = [], nmBest = [];
+    const R = { l: [], y: [], p: [], s: [], v: [] }, nmCols = [], nmBest = [], fixes = [];
     const leafOf = dims => { const k = dims.join('\u0001'); let i = leafIx.get(k); if (i == null) { i = leafDims.length; leafIx.set(k, i); leafDims.push(dims); } return i; };
     const ix = (m, k) => { let i = m.get(k); if (i == null) { i = m.size; m.set(k, i); } return i; };
     const push = (l, y, p, s, v) => { R.l.push(l); R.y.push(ix(yIx, y)); R.p.push(ix(pIx, p)); R.s.push(s); R.v.push(v); };
@@ -1108,7 +1108,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       if (ocols) { for (const [k, names] of Object.entries(ocols)) for (const n of [].concat(names)) { const c = colAt(H, n); if (c >= 0 && k in SLOT_A) mcols.push({ c, m: { k, rate: false }, s: SLOT_A[k] }); } }
       else H.forEach((c, i) => { if (i === yearCol || i === perCol) return; const m = measOf(c); if (m && slotOf(m) >= 0) mcols.push({ c: i, m, s: slotOf(m) }); });
       // opts.names: { 'SKU ID': 'SKU 명' } = group by the ID, show the latest name; opts.rename: { 'SKU ID': 'SKU' }
-      if (opts.dims) for (const n of opts.dims) { const c = colAt(H, n); if (c >= 0) { dimCols.push(c); dimNames.push((opts.rename && opts.rename[n]) || n.replace(/#\d+$/, '')); nmCols.push(opts.names && opts.names[n] ? colAt(H, opts.names[n]) : -1); } }
+      if (opts.dims) for (const n of opts.dims) { const c = colAt(H, n); if (c >= 0) { dimCols.push(c); dimNames.push((opts.rename && opts.rename[n]) || n.replace(/#\d+$/, '')); nmCols.push(opts.names && opts.names[n] ? colAt(H, opts.names[n]) : -1); fixes.push(opts.fix && opts.fix[n] || null); } }   // opts.fix: { '대분류': { '03. 단백질': 'A. 단백질' } }
       if (!opts.dims) for (let c = 0; c < H.length; c++) {
         if (!H[c] || c === yearCol || c === perCol || mcols.some(m => m.c === c)) continue;
         let n = 0, k = 0;
@@ -1125,7 +1125,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         if (dm) { if (!yl) yl = dm[1]; pl = (+dm[2]) + '월'; } else if (/^\d{1,2}$/.test(pl)) pl = (+pl) + '월';
         if (!yl) yl = opts.year || '';
         if (!yl) continue;
-        const leaf = leafOf(dimCols.map(c => r[c] || '(빈칸)'));
+        const leaf = leafOf(dimCols.map((c, i) => { const v = r[c] || '(빈칸)'; return fixes[i] && fixes[i][v] || v; }));
         nmCols.forEach((nc, i) => {
           if (nc < 0 || !r[nc]) return;
           const v = r[dimCols[i]] || '(빈칸)', t = yearNum(yl) * 100 + (parseInt(pl) || 0), mp = nmBest[i] || (nmBest[i] = new Map()), o = mp.get(v);
