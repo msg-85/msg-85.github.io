@@ -173,6 +173,10 @@ td.num { text-align: right; font-family: var(--mono); }
 .icard h3 { margin: 0; font-size: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .icard h3 small { font-size: 12px; font-weight: 400; color: var(--muted); }
 .icard h4 { margin: 0; font-size: 14px; }
+.chk { display: flex; flex-direction: column; gap: 6px; min-width: 0; border-top: 2px solid var(--line); padding-top: 10px; margin-top: 4px; }
+.chk h4.sech { font-size: 15px; }
+.chk > h4:not(.sech) { margin-top: 8px; }
+.chk p { margin: 0; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .tile { border: 1px solid var(--line); padding: 7px 10px; background: var(--panel); }
 .tile .k { font-size: 12px; color: var(--muted); }
@@ -1865,6 +1869,118 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     if (ser.length) out.appendChild(chart({ title: '기간별 비용율 · 원가율 (%)', unit: '%', zero: false, x, series: ser }));
     return out;
   }
+  // ---------- 이익 회복 점검: ① 비용율↑·매출↓ ② 기준 흐름 대비 과소 ③ 비용율↑·매출↑·CM율↓ → 기준 CM 회복에 필요한 매출 역산 ----------
+  const UNDER_TOL = 0.03;   // ②: 흐름상 예상보다 3% 넘게 적으면 과소
+  // base-range monthly sales trend (least squares; under 3 months = flat average) projected onto the compared months
+  function trendExp(leaves) {
+    const M = AS.model, s = AS.s, D = M.data, nY = M.nY, nP = M.nP, xs = [], ys = [];
+    for (let i = s.a0; i <= s.a1; i++) { const y = Math.floor(i / nP), p = i % nP; let a = 0; for (const l of leaves) a += D[((l * nY + y) * nP + p) * NM]; xs.push(i); ys.push(a); }
+    const n = xs.length, mx = xs.reduce((t, v) => t + v, 0) / n, my = ys.reduce((t, v) => t + v, 0) / n;
+    let b = 0;
+    if (n >= 3) { let sxy = 0, sxx = 0; for (let k = 0; k < n; k++) { sxy += (xs[k] - mx) * (ys[k] - my); sxx += (xs[k] - mx) ** 2; } b = sxx ? sxy / sxx : 0; }
+    let e = 0; const nB = s.b1 - s.b0 + 1;
+    for (let i = s.b0; i <= s.b1; i++) e += Math.max(0, my + b * (i - mx));
+    return { exp: s.agg === 'avg' ? e / nB : e, slope: s.agg === 'avg' ? b : b };
+  }
+  // sales needed in the compared period, at its own CM율, to get back to the base CM
+  function recov(t) {
+    if (!(t.S1 > 0)) return { st: 'na' };
+    if (t.M1 >= t.M0) return { st: 'ok', need: t.S1, add: 0, g: 0 };
+    if (!(t.m1 > 0)) return { st: 'neg' };
+    const need = t.M0 / t.m1; return { st: 'go', need, add: need - t.S1, g: (need - t.S1) / t.S1 };
+  }
+  const costD = t => AS.model.has.C ? t.dc : t.dv;
+  const CHK = [
+    { id: 'k1', no: '①', title: () => `${costName()} 증가 · 매출 감소`, test: g => g.s.S0 > 0 && g.s.S1 > 0 && isBad(costD(g.s)) && g.s.dS < 0, size: r => r.rc.add ?? Infinity,
+      note: () => `기준 기간보다 ${costName()}이 ${AS.s.thr}%p 넘게 오르고 매출은 줄어든 항목` },
+    { id: 'k2', no: '②', title: () => '기준 흐름 대비 매출 과소', test: g => { if (!(g.s.S0 > 0)) return false; g._ex = g._ex || trendExp(g.leaves); return g._ex.exp > 0 && g.s.S1 < g._ex.exp * (1 - UNDER_TOL); }, size: r => r.ex ? r.ex.exp - r.s.S1 : 0, tr: 1,
+      note: () => `기준 기간의 달별 매출 추세(직선 추세, 3개월 미만이면 평균)를 비교 기간으로 이어 그린 예상 매출보다 비교 기간 매출이 ${UNDER_TOL * 100}% 넘게 적게 잡힌 항목` },
+    { id: 'k3', no: '③', title: () => `${costName()} 증가 · 매출 증가 · 이익 효율 하락`, test: g => g.s.S0 > 0 && g.s.S1 > 0 && isBad(costD(g.s)) && g.s.dS > 0 && g.s.dm < 0, size: r => r.rc.add ?? Infinity,
+      note: () => `${costName()}이 ${AS.s.thr}%p 넘게 오르고 매출은 늘었지만 CM율이 떨어진 항목` },
+  ];
+  // groups that hit, plus groups whose lower levels hold a hit (shown muted so the hit can be reached)
+  function chkBuild(C, gs, d, rest, test, depth) {
+    const out = [];
+    for (const g of gs) {
+      const hit = !!test(g);
+      let kids = [];
+      if (rest.length && depth < 6) {
+        let r = rest, dd = r[0], sub = groupsOf(C, g.leaves, dd);
+        while (sub.length < 2 && r.length > 1) { r = r.slice(1); dd = r[0]; sub = groupsOf(C, g.leaves, dd); }
+        if (sub.length >= 2) kids = chkBuild(C, sub, dd, r.slice(1), test, depth + 1);
+      }
+      if (hit || kids.length) out.push({ g, code: g.code, leaves: g.leaves, name: g.name, s: g.s, d, hit, kids, rc: recov(g.s), ex: g._ex, nh: kids.reduce((t, k) => t + (k.hit ? 1 : 0) + k.nh, 0) });
+    }
+    return out;
+  }
+  function chkLim(rows, size) {
+    const rs = rows.slice().sort((a, b) => (b.hit - a.hit) || size(b) - size(a));
+    const shown = rs.slice(0, TREE_LIMIT), rest = rs.slice(TREE_LIMIT);
+    if (rest.length) shown.push({ name: `기타 ${rest.length}개`, other: true, more: rest, lim: x => chkLim(x, size) });
+    return shown;
+  }
+  function chkHtml(C, I, k, tk) {
+    const M = AS.model, dl = belowDims(I.dim), rows = chkBuild(C, I.subs, I.dim, dl, k.test, 0);
+    const tops = rows.filter(r => r.hit), nAll = rows.reduce((t, r) => t + (r.hit ? 1 : 0) + r.nh, 0);
+    const addSum = tops.reduce((t, r) => t + (r.rc.st === 'go' ? r.rc.add : 0), 0), gapSum = k.tr ? tops.reduce((t, r) => t + (r.ex ? r.ex.exp - r.s.S1 : 0), 0) : 0;
+    const both = M.has.C && M.has.V;
+    const dcell = (v, f, cls) => `<td class="n ${v == null || !fin2(v) ? '' : cls(v)}" data-v="${nv(v)}">${v == null || !fin2(v) ? '' : f(v)}</td>`;
+    const cells = r => {
+      if (r.other) return '<td></td>'.repeat(ncol - 1);
+      const t = r.s, c0 = M.has.C ? t.c0 : t.v0, c1 = M.has.C ? t.c1 : t.v1, rc = r.rc;
+      let h = `<td class="n" data-v="${nv(t.S1)}">${fN(t.S0)}→${fN(t.S1)}</td><td class="n ${sg(t.dS)}" data-v="${nv(t.dS)}">${fD(t.dS)}${fin2(t.gS) ? ` <small>(${fG(t.gS)})</small>` : ''}</td>`;
+      if (k.tr) { const e = r.ex ? r.ex.exp : null, gap = e != null ? e - t.S1 : null; h += `<td class="n" data-v="${nv(e)}">${e != null ? fN(e) : ''}</td>${dcell(gap, fN, v => v > 0 ? 'neg' : 'pos')}${dcell(e > 0 ? gap / e : null, v => (v * 100).toFixed(1) + '%', v => v > 0 ? 'neg' : 'pos')}`; }
+      h += `<td class="n" data-v="${nv(c1)}">${fP(c0)}→${fP(c1)}</td>${dcell(costD(t), v => fPP(v, 2), sgc)}`;
+      if (both) h += dcell(t.dv, v => fPP(v, 2), sgc);
+      h += `<td class="n" data-v="${nv(t.m1)}">${fP(t.m0)}→${fP(t.m1)}</td>${dcell(t.dm, v => fPP(v, 2), sg)}<td class="n" data-v="${nv(t.M1)}">${fN(t.M0)}→${fN(t.M1)}</td>${dcell(t.dM, fD, sg)}`;
+      if (rc.st === 'go') h += `<td class="n" data-v="${nv(rc.need)}"><b>${fN(rc.need)}</b></td><td class="n neg bad" data-v="${nv(rc.add)}"><b>+${fN(rc.add)}</b></td><td class="n neg" data-v="${nv(rc.g)}">${fG(rc.g)}</td>`;
+      else if (rc.st === 'ok') h += `<td class="n" data-v="${nv(t.S1)}">${fN(t.S1)}</td><td class="n pos" data-v="0">이미 기준 CM 이상</td><td class="n" data-v="0"></td>`;
+      else h += `<td class="n" data-v="">${rc.st === 'neg' ? '회복 불가' : ''}</td><td class="n" data-v="">${rc.st === 'neg' ? 'CM율 ≤ 0' : ''}</td><td class="n" data-v=""></td>`;
+      return h;
+    };
+    const head = [[I.dn, '이름순'], [`매출 ${yLab()}`, '비교 기간 값 기준'], ['매출 증감', ''],
+      ...(k.tr ? [['흐름상 예상 매출', '기준 기간 추세를 비교 기간에 이어 그린 값'], ['과소 금액', '예상 − 비교 기간 매출'], ['과소율', '과소 금액 ÷ 예상']] : []),
+      [costName(), '비교 기간 값 기준'], [`${costName()} 증감`, ''], ...(both ? [['원가율 증감', '']] : []),
+      ['CM율', '비교 기간 값 기준'], ['CM율 증감', ''], [`CM ${yLab()}`, '비교 기간 값 기준'], ['CM 증감', ''],
+      ['회복 필요 매출', '기준 기간 CM ÷ 비교 기간 CM율'], ['추가 필요 매출', '회복 필요 매출 − 비교 기간 매출'], ['필요 증가율', '추가 필요 ÷ 비교 기간 매출']];
+    const ncol = head.length;
+    const kidsOf = r => r.kids && r.kids.length ? { rows: chkLim(r.kids, k.size) } : null;
+    const nameOf = (r, depth) => r.other ? esc(r.name) : `${depth ? `<small class="muted">${esc(M.dims[r.d])}</small> ` : ''}${r.hit ? `<b>${esc(r.name)}</b>` : `<span class="muted">${esc(r.name)}</span>`}${r.nh ? ` <small class="muted">· 아래 ${r.nh}개 해당</small>` : ''}`;
+    const levels = dl.length ? `${esc(I.dn)} → ${dl.map(d => esc(M.dims[d])).join(' → ')}` : esc(I.dn);
+    let h = `<h4>${k.no} ${esc(k.title())} <small class="muted">${levels} · 해당 ${nAll}개 (맨 위 ${tops.length}개)</small>${dl.length ? ' <button type="button" class="btn small" data-tall="1">모두 펼치기</button> <button type="button" class="btn small" data-tall="0">모두 접기</button>' : ''} ${TF_BTN}</h4>
+      <p class="muted">${esc(k.note())}.${tops.length ? ` 맨 위 단계 해당 항목 합계: ${k.tr ? `과소 금액 <b>${fN(gapSum)}</b>, ` : ''}기준 CM 회복을 위한 추가 필요 매출 <b>+${fN(addSum)}</b> (${divName()}).` : ''}${dl.length ? ' 굵은 글씨 = 해당 항목, 흐린 글씨 = 그 자체는 아니지만 아래 단계에 해당 항목이 있음 (▸로 펼치기).' : ''}</p>`;
+    if (!rows.length) return h.replace(/ <button[^]*?<\/h4>/, '</h4>') + '<p class="muted">해당 항목이 없습니다.</p>';
+    h += `<div class="tw"><table class="at" data-tk="${esc(tk)}"><thead><tr>${thc(head)}</tr></thead><tbody>`;
+    h += treeRowsHtml(chkLim(rows, k.size), 0, null, kidsOf, cells, nameOf);
+    return h + '</tbody></table></div>';
+  }
+  function chkSection(C, I, tk) {
+    const d = el('div', 'chk');
+    d.innerHTML = `<h4 class="sech">💡 이익 회복 점검 <small class="muted">${esc(I.dn)} 기준 · 기준 기간 CM을 되찾으려면 비교 기간 ${costName()}·원가율 그대로 매출이 얼마나 더 필요한지 역산 (회복 필요 매출 = 기준 CM ÷ 비교 기간 CM율)</small></h4>` +
+      CHK.map(k => chkHtml(C, I, k, tk + k.id)).join('');
+    return d;
+  }
+  // Excel: every level, indented
+  function chkSheetRows(C, I, r1, pc, pp) {
+    const M = AS.model, out = [], dl = belowDims(I.dim);
+    for (const k of CHK) {
+      const rows = chkBuild(C, I.subs, I.dim, dl, k.test, 0);
+      out.push([`${k.no} ${k.title()} — ${k.note()}`]);
+      out.push(['이름', '단계', '해당', `매출 ${yrs()[0]}`, `매출 ${yrs()[1]}`, '흐름상 예상 매출', '과소 금액', `${costName()} ${yrs()[0]}`, `${costName()} ${yrs()[1]}`, `${costName()} 증감`, `CM율 ${yrs()[0]}`, `CM율 ${yrs()[1]}`, `CM ${yrs()[0]}`, `CM ${yrs()[1]}`, '회복 필요 매출', '추가 필요 매출', '필요 증가율']);
+      const walk = (rs, depth) => {
+        for (const r of rs.slice().sort((a, b) => (b.hit - a.hit) || k.size(b) - k.size(a))) {
+          const t = r.s, rc = r.rc, e = k.tr && r.ex ? r.ex.exp : null;
+          out.push([' '.repeat(depth * 4) + r.name, M.dims[r.d], r.hit ? 'O' : '', r1(t.S0), r1(t.S1), e != null ? r1(e) : '', e != null ? r1(e - t.S1) : '', pc(M.has.C ? t.c0 : t.v0), pc(M.has.C ? t.c1 : t.v1), pp(costD(t)), pc(t.m0), pc(t.m1), r1(t.M0), r1(t.M1),
+            rc.st === 'go' ? r1(rc.need) : rc.st === 'ok' ? r1(t.S1) : rc.st === 'neg' ? '회복 불가' : '', rc.st === 'go' ? r1(rc.add) : rc.st === 'ok' ? 0 : '', rc.st === 'go' ? pc(rc.g) : '']);
+          walk(r.kids, depth + 1);
+        }
+      };
+      walk(rows, 0);
+      if (!rows.length) out.push(['해당 항목 없음']);
+      out.push([]);
+    }
+    return out;
+  }
   function drawIns(C) {
     const M = AS.model, { list, more } = targets(C), host = $('vIns');
     host.innerHTML = '';
@@ -1887,6 +2003,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         if (I.pv) { const d = el('div'); d.innerHTML = puzzleHtml(C, I.pv, '원가율', I.dn, I.dim, tk + 'pv'); two.appendChild(d); }
         card.appendChild(two);
         const cb = el('div'); cb.style.display = 'contents'; cb.innerHTML = contribHtml(C, I, tk + 'cb'); card.appendChild(cb);
+        card.appendChild(chkSection(C, I, tk));
       }
       wrap.appendChild(card);
     }
@@ -1917,9 +2034,10 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const hq = M.has.Q, q0 = x => fin2(x) ? Math.round(x) : '';
     sheets.push({ name: '판정표', header: true, rows: [['판정', lvName, `매출 ${Y0}`, `매출 ${Y1}`, '매출 증감률', ...(hq ? [`수량 ${Y0}`, `수량 ${Y1}`, '수량 증감률', `ASP ${Y0}`, `ASP ${Y1}`, 'ASP 증감률', '판매액 수량효과', '판매액 ASP효과'] : []), `비용율 ${Y0}`, `비용율 ${Y1}`, '비용율 Δ', `원가율 ${Y0}`, `원가율 ${Y1}`, '원가율 Δ', `CM ${Y0}`, `CM ${Y1}`, 'CM Δ', '매출효과', '비용율효과', '원가율효과'],
       ...jr.map(g => { const t = g.s; return [JL[t.k], g.name, r1(t.S0), r1(t.S1), pc(t.gS), ...(hq ? [q0(t.Q0), q0(t.Q1), pc(t.gQ), q0(t.a0), q0(t.a1), pc(t.gA), r1(t.eQ), r1(t.eA)] : []), pc(t.c0), pc(t.c1), pp(t.dc), pc(t.v0), pc(t.v1), pp(t.dv), r1(t.M0), r1(t.M1), r1(t.dM), r1(t.eS), r1(t.eC), r1(t.eV)]; })] });
-    const ins = [], pz = [];
+    const ins = [], pz = [], ck = [];
     for (const t of targets(C).list) {
       const I = insight(C, t);
+      if (I.subs.length > 1) { ck.push([`■ ${t.name} · 이익 회복 점검 (${I.dn} 이하 모두 펼침, 들여쓰기 = 하위 · 회복 필요 매출 = 기준 CM ÷ 비교 기간 CM율 · 금액 ${divName()})`]); ck.push(...chkSheetRows(C, I, r1, pc, pp)); }
       ins.push([`■ ${t.name} (${I.dn} 기준) · ${JL[t.s.k]}`]); for (const p of I.plain) ins.push(['· ' + p]); ins.push([]);
       for (const [p, nm] of [[I.pc, '비용율'], [I.pv, '원가율']]) {
         if (!p || I.subs.length < 2) continue;
@@ -1930,6 +2048,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     }
     sheets.push({ name: 'INSIGHT', rows: ins, wrap: [0], widths: [150] });
     if (pz.length) sheets.push({ name: '증감 퍼즐', rows: pz });
+    if (ck.length) sheets.push({ name: '이익 회복 점검', rows: ck });
     return sheets;
   }
 
