@@ -1111,7 +1111,9 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
           if (n && y / n > 0.8 && dist.size <= 12) { yearCol = c; break; }
         }
       }
-      for (let c = 0; c < valCol; c++) if (c !== yearCol && H[c]) { dimCols.push(c); dimNames.push(H[c]); }
+      // opts.names { '제품번호': '제품번호 Name' }: the name column is not a level of its own, it labels the ID; opts.rename renames a level
+      const nameCols = new Set(Object.values(opts.names || {}).map(n => colAt(H, n)).filter(c => c >= 0));
+      for (let c = 0; c < valCol; c++) if (c !== yearCol && H[c] && !nameCols.has(c)) { dimCols.push(c); dimNames.push((opts.rename && opts.rename[H[c]]) || H[c]); nmCols.push(opts.names && opts.names[H[c]] ? colAt(H, opts.names[H[c]]) : -1); fixes.push(opts.fix && opts.fix[H[c]] || null); }
       // period columns after 값. Without a 연 column, a year row above the header gives each column its year,
       // or the column headers themselves are years (26년 / 27년 / 총합계).
       const above = h > 0 ? rows[h - 1] : [];
@@ -1136,7 +1138,8 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         if (labelCols.some(c => r[c] && SUBT.test(r[c]))) continue;
         const m = measOf(r[valCol]); if (!m) continue;
         const s = slotOf(m); if (s < 0) continue;
-        const leaf = leafOf(dimCols.map(c => fill[c] || '(빈칸)'));
+        const leaf = leafOf(dimCols.map((c, i) => { const v = fill[c] || '(빈칸)'; return fixes[i] && fixes[i][v] || v; }));
+        nmCols.forEach((nc, i) => { if (nc < 0 || !r[nc]) return; const v = fill[dimCols[i]] || '(빈칸)', mp = nmBest[i] || (nmBest[i] = new Map()); if (!mp.has(v)) mp.set(v, { t: 0, n: r[nc] }); });
         for (const p of use) {
           const x = num(r[p.c], m.rate); if (!isFinite(x)) continue;
           if (colYears) push(leaf, p.label, '전체', s, x);
@@ -1205,6 +1208,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       let D = fin(g(1)) ? g(1) : fin(g(6)) ? g(6) * S : NaN;
       let G = fin(g(2)) ? g(2) : fin(g(7)) ? g(7) * S : NaN;
       let C = fin(g(3)) ? g(3) : fin(g(8)) ? g(8) * S : fin(D) && fin(G) ? D + G : NaN;
+      if (!fin(G) && uix[2] < 0 && uix[7] < 0 && fin(C) && fin(D)) G = C - D;   // no 판관비 in the upload (광고선전비·수수료… instead): 판관비 = 비용 − 차감
       const Mv = fin(g(5)) ? g(5) : fin(g(10)) ? g(10) * S : NaN;
       let V = fin(g(4)) ? g(4) : fin(g(9)) ? g(9) * S : fin(C) && fin(Mv) ? S - C - Mv : NaN;
       if (!fin(C) && fin(V) && fin(Mv)) C = S - V - Mv;
