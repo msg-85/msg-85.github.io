@@ -54,7 +54,17 @@ button:disabled { opacity: .6; cursor: wait; }
       let raw;
       try { raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(box.iv) }, key, unb64(box.ct)); }
       catch (x) { throw new Error('비밀번호가 맞지 않습니다.'); }
-      const html = box.gz ? await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).text() : new TextDecoder().decode(raw);
+      let html = box.gz ? await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).text() : new TextDecoder().decode(raw);
+      if (html.charAt(0) === '{') {
+        // ③ 조작 가능: open the analysis page itself, read-only, with the decrypted data handed over in window.__LIVE
+        say('분석표를 여는 중…');
+        const r = await fetch('../index.html', { cache: 'no-store' });
+        if (!r.ok) throw new Error('분석표 화면을 불러오지 못했습니다 (' + r.status + ').');
+        const page = await r.text(), live = '<script>window.__LIVE = ' + html.replace(/</g, '\\u003c') + ';</' + 'script>\n';
+        const at = page.indexOf('<script>');
+        if (at < 0) throw new Error('분석표 화면이 올바르지 않습니다.');
+        html = page.slice(0, at) + live + page.slice(at);
+      }
       document.open(); document.write(html); document.close();
     } catch (x) { say(x.message || String(x), true); $('go').disabled = false; $('pw').select(); }
   });
