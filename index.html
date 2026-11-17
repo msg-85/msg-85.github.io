@@ -157,6 +157,8 @@ td.num { text-align: right; font-family: var(--mono); }
 .tg { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; padding: 0; font-size: 12px; }
 .tg:hover { color: var(--fg); }
 .tg0 { display: inline-block; width: 20px; }
+/* tree labels keep a fixed width; long names are cut with … and shown whole on hover */
+.at .nm { display: inline-block; max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .at tr.lv1 td { background: color-mix(in srgb, var(--head) 35%, var(--sheet)); }
 .at tr.lv2 td { background: color-mix(in srgb, var(--head) 60%, var(--sheet)); }
 .at tr.lv3 td { background: var(--head); }
@@ -1222,7 +1224,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const nd = dimNames.length, vals = dimNames.map(() => []), vmap = dimNames.map(() => new Map());
     const leafDim = dimNames.map(() => new Int32Array(nL));
     leafDims.forEach((dims, l) => dims.forEach((v, d) => { let k = vmap[d].get(v); if (k == null) { k = vals[d].length; vmap[d].set(v, k); vals[d].push(v); } leafDim[d][l] = k; }));
-    nmBest.forEach((mp, d) => { if (mp && mp.size) vals[d] = vals[d].map(v => mp.has(v) ? `${mp.get(v).n} (${v})` : v); });
+    nmBest.forEach((mp, d) => { if (mp && mp.size) vals[d] = vals[d].map(v => mp.has(v) ? `${v} ${mp.get(v).n}` : v); });   // 번호 이름
     if (!nd) { dimNames.push('전체'); vals.push(['전체']); leafDim.push(new Int32Array(nL)); }
     return { dims: dimNames, vals, leafDim, years, periods, isMonth, nL, nY, nP, data, has, lab: Object.assign({ C: '비용 (차감+판관비)', V: '변동원가', P: '판매액' }, opts.labels || {}), kind: flat ? '목록형 표' : '피벗' };
   }
@@ -1758,7 +1760,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       if (r.more) { ch = { rows: r.lim(r.more) }; for (const c of ch.rows) { if (c._dl === undefined) c._dl = r._dl; if (c._path === undefined && r._path) c._path = r._path; } }
       else if (!r.other) ch = kidsOf(r);
       const id = 't' + (++treeSeq);
-      h += `<tr data-t="${id}" data-o="${i}" data-n="${esc(r.name)}"${r.other ? ' data-fix="1"' : ''}${parentId ? ` data-tp="${parentId}" hidden` : ''} class="lv${depth}"><td class="l"><span style="padding-left:${depth * 16}px"></span>${twisty(ch && ch.rows.length)}${nameOf(r, depth)}</td>${cells(r)}</tr>`;
+      h += `<tr data-t="${id}" data-o="${i}" data-n="${esc(r.name)}"${r.other ? ' data-fix="1"' : ''}${parentId ? ` data-tp="${parentId}" hidden` : ''} class="lv${depth}"><td class="l"><span style="padding-left:${depth * 16}px"></span>${twisty(ch && ch.rows.length)}<span class="nm" title="${esc(r.name)}">${nameOf(r, depth)}</span></td>${cells(r)}</tr>`;
       if (ch && ch.rows.length) h += treeRowsHtml(ch.rows, depth + 1, id, kidsOf, cells, nameOf);
     });
     return h;
