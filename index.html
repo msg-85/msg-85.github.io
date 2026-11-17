@@ -1586,7 +1586,9 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   $('vSum').addEventListener('click', e => { const t = e.target.closest('[data-drill]'); if (t) { const [d, k] = t.dataset.drill.split(':').map(Number); drill(d, k); } });
 
   // ---------- ② 판정표 ----------
-  const JCOLS = [['k', '판정'], ['name', '이름'], ['S1', '매출'], ['gQ', '수량'], ['gA', 'ASP'], ['dc', '비용율'], ['dv', '원가율'], ['dM', 'CM'], ['eS', '매출효과'], ['eC', '비용율효과'], ['eV', '원가율효과']];
+  const JCOLS = [['k', '판정'], ['name', '이름'], ['S1', '매출'], ['gQ', '수량'], ['gA', 'ASP'], ['dc', '비용율'], ['dv', '원가율'], ['dM', 'CM'], ['eS', '매출효과'], ['eC', '비용율효과'], ['eV', '원가율효과'], ['rN', '기준 CM 달성 필요 매출'], ['rA', '추가 필요 매출'], ['rG', '필요 신장율']];
+  // 회복 칸 값 (기준 기간 CM ÷ 비교 기간 CM율); 이미 달성 = 0, 회복 불가 = null
+  const rcv = (g, k) => { const r = g.rc || (g.rc = recov(g.s)); return r.st === 'go' || r.st === 'ok' ? { rN: r.need, rA: r.add, rG: r.g }[k] : null; };
   function judgeRows(C) {
     const s = AS.s, lvl = s.jl, q = s.q.trim().toLowerCase();
     let rows = groupsOf(C, C.sel, lvl === AS.model.dims.length ? -1 : lvl);
@@ -1594,7 +1596,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     if (want) rows = rows.filter(g => want.includes(g.s.k));
     if (q) rows = rows.filter(g => g.name.toLowerCase().includes(q));
     const so = s.sort || { k: 'k', d: 1 };
-    const val = g => so.k === 'k' ? SEV[g.s.k] * 1e15 + g.s.dM : so.k === 'name' ? g.name : g.s[so.k] == null ? -Infinity : g.s[so.k];
+    const val = g => so.k === 'k' ? SEV[g.s.k] * 1e15 + g.s.dM : so.k === 'name' ? g.name : so.k[0] === 'r' ? (rcv(g, so.k) ?? -Infinity) : g.s[so.k] == null ? -Infinity : g.s[so.k];
     rows.sort((a, b) => { const x = val(a), y = val(b); return (typeof x === 'string' ? x.localeCompare(y, 'ko', { numeric: true }) : x - y) * so.d; });
     return rows;
   }
@@ -1622,10 +1624,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         dM: `<td class="n">${fN(t.M0)} → ${fN(t.M1)} <span class="${sg(t.dM)}">(${fD(t.dM)})</span></td>`,
         eS: `<td class="n ${sg(t.eS)}">${fD(t.eS)}</td>`, eC: `<td class="n ${sg(t.eC)}">${fD(t.eC)}</td>`, eV: `<td class="n ${sg(t.eV)}">${fD(t.eV)}</td>`,
       };
+      { const r = g.rc || (g.rc = recov(t));
+        if (r.st === 'go') Object.assign(cell, { rN: `<td class="n">${fN(r.need)}</td>`, rA: `<td class="n neg bad"><b>+${fN(r.add)}</b></td>`, rG: `<td class="n neg">${fG(r.g)}</td>` });
+        else if (r.st === 'ok') Object.assign(cell, { rN: `<td class="n">${fN(t.S1)}</td>`, rA: '<td class="n pos">이미 달성</td>', rG: '<td class="n"></td>' });
+        else Object.assign(cell, { rN: `<td class="n muted">${r.st === 'neg' ? '회복 불가' : ''}</td>`, rA: `<td class="n muted">${r.st === 'neg' ? 'CM율 ≤ 0' : ''}</td>`, rG: '<td class="n"></td>' }); }
       h += `<tr class="dr" data-g="${g.code}">${head.map(([k]) => cell[k]).join('')}</tr>`;
     }
     h += '</tbody></table></div>';
-    h += `<p class="muted">${rows.length.toLocaleString()}개${rows.length > 1500 ? ' 중 1,500개만 표시' : ''} · 머리글 클릭 = 정렬 · 행 클릭 = 그 항목만 골라 INSIGHT 보기 · CM 증감 = 매출효과(매출 증감 × 전년 CM율) + 비용율효과(−비용율 증감 × 올해 매출) + 원가율효과(−원가율 증감 × 올해 매출)</p>`;
+    h += `<p class="muted">${rows.length.toLocaleString()}개${rows.length > 1500 ? ' 중 1,500개만 표시' : ''} · 머리글 클릭 = 정렬 · 행 클릭 = 그 항목만 골라 INSIGHT 보기 · 기준 CM 달성 필요 매출 = 기준 기간 CM ÷ 비교 기간 CM율 (비교 기간 비용율·원가율 그대로일 때), 추가 필요 매출 = 그 값 − 비교 기간 매출, 필요 신장율 = 추가 필요 ÷ 비교 기간 매출 · CM 증감 = 매출효과(매출 증감 × 전년 CM율) + 비용율효과(−비용율 증감 × 올해 매출) + 원가율효과(−원가율 증감 × 올해 매출)</p>`;
     $('vJudge').innerHTML = h;
     AS.jrows = rows;
   }
@@ -2283,8 +2289,8 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     sheets.push({ name: '요약표', rows: sum, header: true });
     const jr = judgeRows(C), lvName = s.jl === M.dims.length ? '조합' : M.dims[s.jl];
     const hq = M.has.Q, q0 = x => fin2(x) ? Math.round(x) : '';
-    sheets.push({ name: '판정표', header: true, rows: [['판정', lvName, `매출 ${Y0}`, `매출 ${Y1}`, '매출 증감률', ...(hq ? [`수량 ${Y0}`, `수량 ${Y1}`, '수량 증감률', `ASP ${Y0}`, `ASP ${Y1}`, 'ASP 증감률', '판매액 수량효과', '판매액 ASP효과'] : []), `비용율 ${Y0}`, `비용율 ${Y1}`, '비용율 Δ', `원가율 ${Y0}`, `원가율 ${Y1}`, '원가율 Δ', `CM ${Y0}`, `CM ${Y1}`, 'CM Δ', '매출효과', '비용율효과', '원가율효과'],
-      ...jr.map(g => { const t = g.s; return [JL[t.k], g.name, r1(t.S0), r1(t.S1), pc(t.gS), ...(hq ? [q0(t.Q0), q0(t.Q1), pc(t.gQ), q0(t.a0), q0(t.a1), pc(t.gA), r1(t.eQ), r1(t.eA)] : []), pc(t.c0), pc(t.c1), pp(t.dc), pc(t.v0), pc(t.v1), pp(t.dv), r1(t.M0), r1(t.M1), r1(t.dM), r1(t.eS), r1(t.eC), r1(t.eV)]; })] });
+    sheets.push({ name: '판정표', header: true, rows: [['판정', lvName, `매출 ${Y0}`, `매출 ${Y1}`, '매출 증감률', ...(hq ? [`수량 ${Y0}`, `수량 ${Y1}`, '수량 증감률', `ASP ${Y0}`, `ASP ${Y1}`, 'ASP 증감률', '판매액 수량효과', '판매액 ASP효과'] : []), `비용율 ${Y0}`, `비용율 ${Y1}`, '비용율 Δ', `원가율 ${Y0}`, `원가율 ${Y1}`, '원가율 Δ', `CM ${Y0}`, `CM ${Y1}`, 'CM Δ', '매출효과', '비용율효과', '원가율효과', '기준 CM 달성 필요 매출', '추가 필요 매출', '필요 신장율'],
+      ...jr.map(g => { const t = g.s; return [JL[t.k], g.name, r1(t.S0), r1(t.S1), pc(t.gS), ...(hq ? [q0(t.Q0), q0(t.Q1), pc(t.gQ), q0(t.a0), q0(t.a1), pc(t.gA), r1(t.eQ), r1(t.eA)] : []), pc(t.c0), pc(t.c1), pp(t.dc), pc(t.v0), pc(t.v1), pp(t.dv), r1(t.M0), r1(t.M1), r1(t.dM), r1(t.eS), r1(t.eC), r1(t.eV), ...(r => r.st === 'go' ? [r1(r.need), r1(r.add), pc(r.g)] : r.st === 'ok' ? [r1(t.S1), 0, ''] : r.st === 'neg' ? ['회복 불가', '', ''] : ['', '', ''])(g.rc || (g.rc = recov(t)))]; })] });
     const ins = [], pz = [], ck = [];
     for (const t of targets(C).list) {
       const I = insight(C, t);
