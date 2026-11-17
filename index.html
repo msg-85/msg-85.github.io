@@ -178,6 +178,8 @@ td.num { text-align: right; font-family: var(--mono); }
 .shd .shh { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .shd h2 { font-size: 17px; margin: 0; } .shd h3 { font-size: 15px; margin: 0 0 4px; } .shd p { margin: 4px 0; font-size: 13px; }
 .shd .sho { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+.shd .shm { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin: 4px 0; }
+.shd .shm label { display: block; cursor: pointer; }
 .shd .shf { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 6px; }
 .shd .shf .field { min-width: 180px; }
 .shd .at td { white-space: normal; vertical-align: top; } .shd .at a { word-break: break-all; }
@@ -331,8 +333,12 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     <div><button type="button" class="btn" id="shFile">① HTML 파일로 받기</button></div>
   </section>
   <section class="sho">
-    <h3>② 비밀번호 링크로 공유</h3>
+    <h3>비밀번호 링크로 공유</h3>
     <p class="muted">비밀번호로 암호화해서 msg-85.github.io에 올립니다. 링크를 열고 비밀번호를 쳐야 보입니다. 비밀번호는 저장되지 않으니 직접 기억해 두세요 (10자 이상, 영문+숫자).</p>
+    <div class="shm">
+      <label><input type="radio" name="shMode" id="shModeFixed" checked> <b>② 화면 고정</b> <span class="muted">— 지금 화면의 결과만. 받는 사람은 펼치기·정렬만 할 수 있습니다.</span></label>
+      <label><input type="radio" name="shMode" id="shModeLive"> <b>③ 조작 가능 (원본 포함)</b> <span class="muted">— 분석표와 똑같이 열려 필터·기간·기준을 바꿀 수 있습니다. ⚠️ 비밀번호를 아는 사람은 이 분석표의 <b>원본 데이터 전체</b>를 볼 수 있습니다.</span></label>
+    </div>
     <div class="shf"><label class="field">비밀번호<input type="password" id="shPw" autocomplete="new-password"></label><label class="field">비밀번호 확인<input type="password" id="shPw2" autocomplete="new-password"></label><button type="button" class="btn primary" id="shMake">링크 만들기</button></div>
     <div class="shf" id="shOut" hidden><label class="field" style="flex:1">공유 링크<input type="text" id="shUrl" readonly></label><button type="button" class="btn" id="shCopy">복사</button></div>
   </section>
@@ -2163,13 +2169,22 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     return { v: 1, kdf: 'PBKDF2-SHA256', it: KDF_IT, salt: toBase64(salt), iv: toBase64(iv), gz: true, ct: toBase64(ct) };
   }
   const utf8b64 = s => toBase64(new TextEncoder().encode(s));
-  async function shareLink(pw) {
+  // mode 'fixed': the frozen page (② 화면 고정). mode 'live': the source data + settings, opened in this page read-only (③ 조작 가능)
+  async function shareLink(pw, mode) {
     const sh = await buildShare(), id = b64u(crypto.getRandomValues(new Uint8Array(15)));
-    const sealed = await sealShare(sh.html, pw);
+    let payload = sh.html;
+    if (mode === 'live') {
+      const st = AS.st; if (!st || !st.full) throw new Error('원본 데이터를 아직 읽지 못했습니다.');
+      const { text, cut } = await st.full;
+      const ana = { ...(cur.extra || {}) }; delete ana.analysis;
+      payload = JSON.stringify({ kind: 'live', v: 1, id, title: cur.title, ana, state: stateOut(), text, cut: !!cut });
+    }
+    const sealed = await sealShare(payload, pw);
+    if (sealed.ct.length > 60e6) throw new Error('데이터가 너무 커서 링크로 올릴 수 없습니다. 필터로 범위를 줄이거나 ② 화면 고정을 쓰세요.');
     // public: only the sealed box (the commit message carries no title)
     await apiSite(`/contents/s/d/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(sealed)), author: SITE_AUTHOR, committer: SITE_AUTHOR }) });
     // private: what it was, for the list
-    const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: cur.name };
+    const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: cur.name, mode };
     try { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); } catch (e) { console.error(e); }
     return meta;
   }
@@ -2205,7 +2220,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     const host = $('shList'); host.innerHTML = '<p class="muted">목록을 불러오는 중…</p>';
     try {
       const L = await listShares();
-      host.innerHTML = L.length ? `<table class="at"><thead><tr><th class="l">만든 시각</th><th class="l">제목 · 범위</th><th class="l">링크</th><th></th></tr></thead><tbody>${L.map(m => `<tr><td class="l">${esc(m.made)}</td><td class="l">${esc(m.title)}<br><small class="muted">${esc(m.scope || '')}</small></td><td class="l"><a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">${esc(m.url)}</a></td><td><button type="button" class="btn small" data-shcopy="${esc(m.url)}">복사</button> <button type="button" class="btn small" data-shdel="${esc(m.id)}">삭제</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">공유한 링크가 없습니다.</p>';
+      host.innerHTML = L.length ? `<table class="at"><thead><tr><th class="l">만든 시각</th><th class="l">제목 · 범위</th><th class="l">링크</th><th></th></tr></thead><tbody>${L.map(m => `<tr><td class="l">${esc(m.made)}</td><td class="l">${esc(m.title)} <small>${m.mode === 'live' ? '③ 조작 가능' : '② 화면 고정'}</small><br><small class="muted">${esc(m.scope || '')}</small></td><td class="l"><a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">${esc(m.url)}</a></td><td><button type="button" class="btn small" data-shcopy="${esc(m.url)}">복사</button> <button type="button" class="btn small" data-shdel="${esc(m.id)}">삭제</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">공유한 링크가 없습니다.</p>';
     } catch (e) { host.innerHTML = `<p class="err">${esc(explain(e))}</p>`; }
   }
   async function copyText(t) { try { await navigator.clipboard.writeText(t); return true; } catch (e) { const x = el('textarea'); x.value = t; document.body.appendChild(x); x.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {} x.remove(); return ok; } }
@@ -2218,12 +2233,12 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
   $('shClose').addEventListener('click', () => $('shDlg').close());
   $('shFile').addEventListener('click', () => downloadShare($('shFile')));
   $('shMake').addEventListener('click', async () => {
-    const pw = $('shPw').value, b = $('shMake');
+    const pw = $('shPw').value, b = $('shMake'), mode = $('shModeLive').checked ? 'live' : 'fixed';
     if (pw.length < 10 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) { shMsg('비밀번호는 10자 이상, 영문과 숫자를 섞어 주세요.', true); return; }
     if (pw !== $('shPw2').value) { shMsg('비밀번호 두 칸이 서로 다릅니다.', true); return; }
     b.disabled = true; b.textContent = '암호화해서 올리는 중…'; shMsg(''); $('shOut').hidden = true;
     try {
-      const m = await shareLink(pw);
+      const m = await shareLink(pw, mode);
       $('shUrl').value = m.url; $('shOut').hidden = false; $('shPw').value = ''; $('shPw2').value = '';
       shMsg('링크를 만들었습니다. GitHub이 반영하는 데 1~2분 걸릴 수 있습니다. 링크와 비밀번호는 따로 전달하세요.');
       drawShareList();
@@ -2332,7 +2347,32 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
   }
   $('refreshBtn').addEventListener('click', loadList);
 
-  const saved = store.get();
-  if (saved) connect(saved, false, true);
+  // ---------- 보기 전용 (조작 가능 공유 링크): the viewer page decrypts { title, ana, state, text } into window.__LIVE ----------
+  function startLive(L) {
+    document.body.classList.add('live');
+    document.querySelector('.top h1').textContent = '공유된 분석표 (보기 전용)';
+    $('loginPane').hidden = true; $('sendPane').hidden = true; $('readPane').hidden = false;
+    $('listBar').hidden = true; $('list').hidden = true;
+    $('rHead').hidden = false; $('rTitle').hidden = false; $('rTitle').textContent = L.title || '분석표';
+    $('anaSel').hidden = true; $('anaRefresh').hidden = true; $('shareBtn').hidden = true; for (const [id] of EXTRA_FILES) $(id).hidden = true;
+    const ana = L.ana || {};
+    cur = { name: 'live-' + (L.id || 'x'), title: L.title || '분석표', note: ana.note || '', body: '', extra: { ...ana, analysis: L.state || ana.analysis }, ana: true };
+    srcState = { stamp: '', loaded: true };
+    showTabs('ana'); for (const b of $('rTabs').children) if (b.dataset.v === 'vReq' || b.dataset.v === 'vSrc') b.hidden = true;
+    const my = AS = { c: cur, st: srcState, model: null, error: '', loading: null, s: null };
+    my.loading = (async () => {
+      await wait(30);
+      try {
+        const m = buildModel(L.text || '', ana.model);
+        if (m.error) throw new Error(m.error);
+        if (L.cut) m.cut = true;
+        my.model = m; my.s = initState(m, cur);
+      } catch (e) { my.error = e.message || String(e); }
+      view(curView);
+    })();
+    view('vSum');
+  }
+  if (window.__LIVE) { const L = window.__LIVE; window.__LIVE = null; startLive(L); }
+  else { const saved = store.get(); if (saved) connect(saved, false, true); }
 })();
 </script>
