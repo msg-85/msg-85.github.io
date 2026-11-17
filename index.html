@@ -1450,12 +1450,21 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     }
     if (s.filt[d]) for (const k of s.filt[d]) seen.add(k);
     const list = [...seen].sort((a, b) => M.vals[d][a].localeCompare(M.vals[d][b], 'ko', { numeric: true }));
-    const pop = el('div', 'msp');
-    pop.innerHTML = `<input type="search" placeholder="찾기 (${list.length.toLocaleString()}개)"><div class="msl">${list.slice(0, 3000).map(k => `<label><input type="checkbox" value="${k}"${!s.filt[d] || s.filt[d].has(k) ? ' checked' : ''}> ${esc(M.vals[d][k])}</label>`).join('')}</div>${list.length > 3000 ? '<span class="muted">앞 3,000개만 보입니다. 찾기로 좁혀 주세요.</span>' : ''}<div class="msa"><button type="button" class="btn small" data-ms="clear">전체 해제</button><button type="button" class="btn small" data-ms="vis">전체 선택</button><button type="button" class="btn small primary" data-ms="ok">적용</button></div>`;
+    const pop = el('div', 'msp'), MAXL = 3000;
+    pop._list = list; pop._chk = new Set(s.filt[d] ? list.filter(k => s.filt[d].has(k)) : list); pop._hit = list;
+    pop.innerHTML = `<input type="search" placeholder="찾기 (${list.length.toLocaleString()}개)"><div class="msl"></div><span class="muted" hidden></span><div class="msa"><button type="button" class="btn small" data-ms="clear">전체 해제</button><button type="button" class="btn small" data-ms="vis">전체 선택</button><button type="button" class="btn small primary" data-ms="ok">적용</button></div>`;
     det.appendChild(pop);
-    const q = pop.querySelector('input[type=search]');
-    q.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); for (const lb of pop.querySelectorAll('.msl label')) lb.hidden = t && !lb.textContent.toLowerCase().includes(t); });
-    q.focus();
+    const q = pop.querySelector('input[type=search]'), box = pop.querySelector('.msl'), note = pop.querySelector('.msp > .muted');
+    const draw = () => {
+      const t = q.value.trim().toLowerCase();
+      pop._q = t; pop._hit = t ? list.filter(k => String(M.vals[d][k]).toLowerCase().includes(t)) : list;
+      box.innerHTML = pop._hit.slice(0, MAXL).map(k => `<label><input type="checkbox" value="${k}"${pop._chk.has(k) ? ' checked' : ''}> ${esc(M.vals[d][k])}</label>`).join('');
+      note.hidden = pop._hit.length <= MAXL && !t;
+      note.textContent = pop._hit.length > MAXL ? `앞 ${MAXL.toLocaleString()}개만 보입니다. 찾기로 좁혀 주세요.` : t ? `찾은 ${pop._hit.length.toLocaleString()}개 · 적용하면 찾은 항목 중 체크한 것만 봅니다.` : '';
+    };
+    box.addEventListener('change', e => { const c = e.target; if (c.type !== 'checkbox') return; if (c.checked) pop._chk.add(+c.value); else pop._chk.delete(+c.value); });
+    q.addEventListener('input', draw);
+    draw(); q.focus();
   }
   $('aBar').addEventListener('toggle', e => {
     const det = e.target; if (!det.classList || !det.classList.contains('ms')) return;
@@ -1464,12 +1473,12 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   $('aBar').addEventListener('click', e => {
     const b = e.target.closest('[data-ms]'); if (!b) return;
     const det = b.closest('details.ms'), d = +det.dataset.d, pop = det.querySelector('.msp');
-    if (b.dataset.ms === 'clear') { for (const c of pop.querySelectorAll('.msl input')) c.checked = false; return; }
-    if (b.dataset.ms === 'vis') { for (const lb of pop.querySelectorAll('.msl label')) if (!lb.hidden) lb.querySelector('input').checked = true; return; }
-    const set = new Set([...pop.querySelectorAll('.msl input:checked')].map(c => +c.value));
+    if (b.dataset.ms === 'clear') { if (pop._q) for (const k of pop._hit) pop._chk.delete(k); else pop._chk.clear(); for (const c of pop.querySelectorAll('.msl input')) c.checked = false; return; }
+    if (b.dataset.ms === 'vis') { for (const k of pop._hit) pop._chk.add(k); for (const c of pop.querySelectorAll('.msl input')) c.checked = true; return; }
+    // while searching, 적용 = only the found items that are checked (like Excel's filter search)
+    const set = new Set((pop._q ? pop._hit : pop._list).filter(k => pop._chk.has(k)));
     // nothing checked or every option checked = no filter (전체)
-    const all = pop.querySelectorAll('.msl input').length, more = !!pop.querySelector('.msp > .muted, .muted');
-    AS.s.filt[d] = set.size && (set.size < all || more) ? set : null;
+    AS.s.filt[d] = set.size && set.size < pop._list.length ? set : null;
     changed();
   });
   document.addEventListener('click', e => { for (const o of document.querySelectorAll('details.ms[open]')) if (!o.contains(e.target)) o.open = false; });
@@ -1800,7 +1809,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       const boxes = [...pop.querySelectorAll('.msl input')];
       if (b.dataset.tfa === 'clear') { for (const c of boxes) c.checked = false; return; }
       if (b.dataset.tfa === 'all') { for (const lb of pop.querySelectorAll('.msl label')) if (!lb.hidden) lb.querySelector('input').checked = true; return; }
-      const hide = new Set(boxes.filter(c => !c.checked).map(c => c.value));
+      const hide = new Set(boxes.filter(c => !c.checked || (q.value.trim() && c.parentNode.hidden)).map(c => c.value));
       st.hide = hide.size && hide.size < boxes.length ? hide : null;
       tblState.set(table.dataset.tk, st); pop.remove(); tblApply(table);
     });
