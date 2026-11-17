@@ -277,7 +277,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <button class="btn" id="refreshBtn" type="button">새로고침</button>
     </div>
     <div class="list" id="list"></div>
-    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><select id="anaSel" aria-label="분석표 고르기" hidden></select><button class="btn" id="anaRefresh" type="button" hidden>새로고침</button><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button><button class="btn" id="linkedBtn" type="button" hidden>연동형 엑셀 받기</button><button class="btn" id="reportBtn" type="button" hidden>보고서 받기 (pptx)</button></div>
+    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><select id="anaSel" aria-label="분석표 고르기" hidden></select><button class="btn" id="anaRefresh" type="button" hidden>새로고침</button><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn" id="shareBtn" type="button" hidden title="지금 고른 조건 그대로 요약표·판정표·INSIGHT만 담은 HTML 파일 하나를 만듭니다. 받는 사람은 브라우저로 열기만 하면 됩니다.">공유용 파일 만들기</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button><button class="btn" id="linkedBtn" type="button" hidden>연동형 엑셀 받기</button><button class="btn" id="reportBtn" type="button" hidden>보고서 받기 (pptx)</button></div>
     <div class="sub" role="tablist" id="rTabs" hidden>
       <button type="button" role="tab" data-v="vNote" data-m="reply">답장</button>
       <button type="button" role="tab" data-v="vSum" data-m="ana">요약표</button>
@@ -636,7 +636,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       $('rTabs').hidden = false;
       drawTable(f.body);
       cur = { name, title: f.title || name.replace(/\.txt$/, ''), note: f.note, body: f.body, extra };
-      $('xlsxBtn').textContent = '엑셀로 내려받기'; $('xlsxBtn').disabled = false;
+      $('xlsxBtn').textContent = '엑셀로 내려받기'; $('xlsxBtn').disabled = false; $('shareBtn').hidden = true;
       for (const [id, ext, label] of EXTRA_FILES) { const b = $(id), fn = name.replace(/\.txt$/, ext); b.hidden = !outFiles.has(fn); b.dataset.file = fn; b.textContent = label; b.disabled = false; }
       const m =/^(\d{8}-\d{6})/.exec(name);
       srcState = { stamp: (extra && extra.source) || (m && m[1]) || '', loaded: false };
@@ -685,6 +685,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       drawTable('');
       cur = { name, title: j.title || name.replace(/\.json$/, ''), note: j.note || '', body: '', extra: j, ana: true };
       $('xlsxBtn').textContent = '엑셀로 내려받기'; $('xlsxBtn').disabled = false;
+      $('shareBtn').hidden = false; $('shareBtn').disabled = false; $('shareBtn').textContent = '공유용 파일 만들기';
       for (const [id] of EXTRA_FILES) $(id).hidden = true;
       srcState = { stamp, loaded: false };
       $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
@@ -2018,6 +2019,108 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     for (const [d, k] of pairs.slice(0, -1)) AS.s.filt[d] = new Set([k]);
     const [d, k] = pairs[pairs.length - 1]; drill(d, k);
   });
+
+  // ---------- 공유용 파일: 요약표 · 판정표 · INSIGHT as one self-contained HTML (numbers frozen, no data access) ----------
+  function scrubShare(d) {
+    for (const n of d.querySelectorAll('.abar label, .tip, .msp, script')) n.remove();
+    for (const a of d.querySelectorAll('a[data-drill]')) a.replaceWith(document.createTextNode(a.textContent));
+    for (const n of d.querySelectorAll('[data-drill]')) { n.removeAttribute('data-drill'); const m = n.querySelector('th > .muted'); if (m) m.remove(); }
+    for (const n of d.querySelectorAll('tr[data-g]')) { n.removeAttribute('data-g'); n.classList.remove('dr'); }
+    for (const n of d.querySelectorAll('th[data-sort]')) { n.removeAttribute('data-sort'); n.classList.remove('s'); }
+    for (const n of d.querySelectorAll('th.l small')) if (/내려가기/.test(n.textContent)) n.remove();
+    return d.innerHTML.replace(/ · 행 클릭 = 그 항목만 골라 INSIGHT 보기/g, '').replace(/ · 머리글 클릭 = 정렬/g, '').replace(/ · 이름 클릭 = 그 항목만 보기/g, '');
+  }
+  const SHARE_JS = `(() => {
+  const tblState = new Map();
+  const el = ${String((tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; })};
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  ${String(setOpen)}
+  ${String(tblApply)}
+  ${String(tblOf)}
+  ${String(tblPicker)}
+  document.addEventListener('click', e => { for (const p of document.querySelectorAll('.tfw .msp')) if (!p.parentNode.contains(e.target)) p.remove(); });
+  for (const b of document.querySelectorAll('#tabs button')) b.addEventListener('click', () => {
+    for (const x of document.querySelectorAll('#tabs button')) x.setAttribute('aria-selected', String(x === b));
+    for (const v of document.querySelectorAll('.view')) v.hidden = v.id !== b.dataset.v;
+  });
+  document.addEventListener('click', e => {
+    const tg = e.target.closest('.tg');
+    if (tg) { const tr = tg.closest('tr'); setOpen(tr.parentNode, tr.dataset.t, tg.getAttribute('aria-expanded') !== 'true'); return; }
+    const all = e.target.closest('[data-tall]');
+    if (all) {
+      const tb = all.closest('h4').nextElementSibling; const table = (tb.matches('.tw') ? tb : tb.nextElementSibling).querySelector('tbody');
+      const open = all.dataset.tall === '1';
+      for (const tr of table.querySelectorAll('tr[data-t]')) { if (open) { tr.hidden = false; const b = tr.querySelector('.tg'); if (b) { b.textContent = '▾'; b.setAttribute('aria-expanded', 'true'); } } else if (!tr.dataset.tp) setOpen(table, tr.dataset.t, false); }
+      if (open) tblApply(table.parentNode);
+      return;
+    }
+    const tf = e.target.closest('[data-tf]');
+    if (tf) { tblPicker(tf); return; }
+    const th = e.target.closest('th[data-c]');
+    if (th) {
+      const table = th.closest('table'), k = table.dataset.tk, st = tblState.get(k) || {}, c = +th.dataset.c, first = c ? -1 : 1;
+      if (st.c !== c || !st.dir) { st.c = c; st.dir = first; } else if (st.dir === first) st.dir = -first; else st.dir = 0;
+      tblState.set(k, st); tblApply(table);
+    }
+  });
+})();`;
+  async function downloadShare() {
+    const c = cur, btn = $('shareBtn');
+    if (!c || !c.ana || !AS) return;
+    btn.disabled = true; btn.textContent = '만드는 중…';
+    try {
+      if (AS.loading) await AS.loading;
+      if (c !== cur || !AS.model) throw new Error(AS.error || '분석을 아직 계산하지 못했습니다.');
+      drawBar(); drawCrumb();
+      const C = compute(); if (!C.sel.length) throw new Error('고른 범위에 숫자가 없습니다.');
+      const parts = [];
+      try {
+        for (const [id, name, fn] of [['vSum', '요약표', drawSum], ['vJudge', '판정표', drawJudge], ['vIns', 'INSIGHT', drawIns]]) {
+          fn(C); parts.push([id, name, scrubShare($(id).cloneNode(true))]);
+        }
+      } finally { drawAnalysis(); }   // put the screen back as it was
+      const cr = $('aCrumb').cloneNode(true); for (const b of cr.querySelectorAll('button')) b.replaceWith(document.createTextNode(b.dataset.cr === 'all' ? '전체' : ''));
+      const now = new Date(), p2 = n => String(n).padStart(2, '0');
+      const made = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
+      const css = [...document.querySelectorAll('style')].map(s => s.textContent).join('\n');
+      const html = `<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>${esc(c.title)} · 공유용</title>
+<style>${css}
+html, body { height: auto; }
+.view { overflow: visible; flex: none; }
+.share { display: flex; flex-direction: column; gap: 10px; max-width: 1600px; margin: 0 auto; }
+.share header h1 { font-size: 19px; margin: 0; }
+.share header p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.share .abar { color: var(--muted); font-size: 13px; }
+</style>
+<body>
+<div class="share">
+<header><h1>${esc(c.title)}</h1><p>공유용 파일 · ${esc(made)} 기준으로 고정된 숫자입니다 · 금액 ${esc(divName())} · ${esc(costName())} 상승 기준 ${esc(String(AS.s.thr))}%p</p></header>
+<div class="crumb">${cr.innerHTML}</div>
+<div class="sub" role="tablist" id="tabs">${parts.map(([id, name], i) => `<button type="button" role="tab" data-v="${id}" aria-selected="${i === 0}">${name}</button>`).join('')}</div>
+${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}>${h}</div>`).join('\n')}
+<p class="muted">▸ 펼치기 · 머리글 눌러 정렬 · 「항목 고르기」를 쓸 수 있습니다. 필터나 기간을 바꾸려면 원본 분석표에서 다시 만들어야 합니다.</p>
+</div>
+<script>${SHARE_JS}</` + `script>
+</body>
+</html>`;
+      const a = document.createElement('a'), url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+      a.href = url; a.download = (c.title.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'analysis') + ` (공유용 ${made.slice(0, 10)}).html`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      btn.textContent = '내려받았습니다';
+    } catch (e) {
+      btn.textContent = '공유용 파일 만들기';
+      $('rErr').textContent = '공유용 파일을 만들지 못했습니다. ' + (e.message || ''); $('rErr').hidden = false;
+    } finally { btn.disabled = false; }
+  }
+  $('shareBtn').addEventListener('click', downloadShare);
 
   // ---------- Excel: the analysis as it is selected on screen ----------
   function exportSheets() {
