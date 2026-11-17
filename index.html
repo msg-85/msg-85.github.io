@@ -173,6 +173,14 @@ td.num { text-align: right; font-family: var(--mono); }
 .icard h3 { margin: 0; font-size: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .icard h3 small { font-size: 12px; font-weight: 400; color: var(--muted); }
 .icard h4 { margin: 0; font-size: 14px; }
+.shd { border: 1px solid var(--line); background: var(--panel); color: var(--fg); padding: 14px 16px; width: min(920px, calc(100vw - 32px)); max-height: calc(100vh - 40px); }
+.shd::backdrop { background: rgba(0, 0, 0, .45); }
+.shd .shh { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shd h2 { font-size: 17px; margin: 0; } .shd h3 { font-size: 15px; margin: 0 0 4px; } .shd p { margin: 4px 0; font-size: 13px; }
+.shd .sho { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+.shd .shf { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 6px; }
+.shd .shf .field { min-width: 180px; }
+.shd .at td { white-space: normal; vertical-align: top; } .shd .at a { word-break: break-all; }
 .chk { display: flex; flex-direction: column; gap: 6px; min-width: 0; border-top: 2px solid var(--line); padding-top: 10px; margin-top: 4px; }
 .chk h4.sech { font-size: 15px; }
 .chk > h4:not(.sech) { margin-top: 8px; }
@@ -277,7 +285,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <button class="btn" id="refreshBtn" type="button">새로고침</button>
     </div>
     <div class="list" id="list"></div>
-    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><select id="anaSel" aria-label="분석표 고르기" hidden></select><button class="btn" id="anaRefresh" type="button" hidden>새로고침</button><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn" id="shareBtn" type="button" hidden title="지금 고른 조건 그대로 요약표·판정표·INSIGHT만 담은 HTML 파일 하나를 만듭니다. 받는 사람은 브라우저로 열기만 하면 됩니다.">공유용 파일 만들기</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button><button class="btn" id="linkedBtn" type="button" hidden>연동형 엑셀 받기</button><button class="btn" id="reportBtn" type="button" hidden>보고서 받기 (pptx)</button></div>
+    <div class="dh bar" id="rHead" hidden><h2 id="rTitle"></h2><select id="anaSel" aria-label="분석표 고르기" hidden></select><button class="btn" id="anaRefresh" type="button" hidden>새로고침</button><button class="btn" id="printBtn" type="button">인쇄</button><button class="btn" id="shareBtn" type="button" hidden title="지금 고른 조건 그대로 요약표·판정표·INSIGHT를 HTML 파일이나 비밀번호 링크로 공유합니다.">공유하기</button><button class="btn primary" id="xlsxBtn" type="button">엑셀로 내려받기</button><button class="btn" id="linkedBtn" type="button" hidden>연동형 엑셀 받기</button><button class="btn" id="reportBtn" type="button" hidden>보고서 받기 (pptx)</button></div>
     <div class="sub" role="tablist" id="rTabs" hidden>
       <button type="button" role="tab" data-v="vNote" data-m="reply">답장</button>
       <button type="button" role="tab" data-v="vSum" data-m="ana">요약표</button>
@@ -313,6 +321,28 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     <p class="err" id="rErr" hidden></p>
   </section>
 </div>
+
+<dialog id="shDlg" class="shd" aria-labelledby="shTitle">
+  <div class="shh"><h2 id="shTitle">공유하기</h2><button type="button" class="btn small" id="shClose">닫기</button></div>
+  <p class="muted">지금 고른 조건 그대로 <b>요약표 · 판정표 · INSIGHT</b>를 공유합니다. 숫자는 만든 시점 그대로 고정되고, 원본 데이터는 들어가지 않습니다.<br><span id="shScope"></span></p>
+  <section class="sho">
+    <h3>① HTML 파일로 받기</h3>
+    <p class="muted">파일 하나를 내려받아 메일·메신저로 보냅니다. 받는 쪽 PC에서 파일 열기가 막혀 있으면 ②를 쓰세요.</p>
+    <div><button type="button" class="btn" id="shFile">① HTML 파일로 받기</button></div>
+  </section>
+  <section class="sho">
+    <h3>② 비밀번호 링크로 공유</h3>
+    <p class="muted">비밀번호로 암호화해서 msg-85.github.io에 올립니다. 링크를 열고 비밀번호를 쳐야 보입니다. 비밀번호는 저장되지 않으니 직접 기억해 두세요 (10자 이상, 영문+숫자).</p>
+    <div class="shf"><label class="field">비밀번호<input type="password" id="shPw" autocomplete="new-password"></label><label class="field">비밀번호 확인<input type="password" id="shPw2" autocomplete="new-password"></label><button type="button" class="btn primary" id="shMake">링크 만들기</button></div>
+    <div class="shf" id="shOut" hidden><label class="field" style="flex:1">공유 링크<input type="text" id="shUrl" readonly></label><button type="button" class="btn" id="shCopy">복사</button></div>
+  </section>
+  <p id="shMsg" hidden></p>
+  <section class="sho">
+    <h3>공유한 링크 목록</h3>
+    <p class="muted">삭제하면 링크가 막힙니다 (GitHub 캐시 때문에 최대 10분 걸릴 수 있음).</p>
+    <div class="tw" id="shList"></div>
+  </section>
+</dialog>
 
 <script>
 (() => {
@@ -685,7 +715,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       drawTable('');
       cur = { name, title: j.title || name.replace(/\.json$/, ''), note: j.note || '', body: '', extra: j, ana: true };
       $('xlsxBtn').textContent = '엑셀로 내려받기'; $('xlsxBtn').disabled = false;
-      $('shareBtn').hidden = false; $('shareBtn').disabled = false; $('shareBtn').textContent = '공유용 파일 만들기';
+      $('shareBtn').hidden = false; $('shareBtn').disabled = false;
       for (const [id] of EXTRA_FILES) $(id).hidden = true;
       srcState = { stamp, loaded: false };
       $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
@@ -2064,11 +2094,11 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     }
   });
 })();`;
-  async function downloadShare() {
-    const c = cur, btn = $('shareBtn');
-    if (!c || !c.ana || !AS) return;
-    btn.disabled = true; btn.textContent = '만드는 중…';
-    try {
+  // the share page as one HTML string: { html, title, made, scope }
+  async function buildShare() {
+    const c = cur;
+    if (!c || !c.ana || !AS) throw new Error('분석표를 먼저 열어 주세요.');
+    {
       if (AS.loading) await AS.loading;
       if (c !== cur || !AS.model) throw new Error(AS.error || '분석을 아직 계산하지 못했습니다.');
       drawBar(); drawCrumb();
@@ -2110,17 +2140,105 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
 <script>${SHARE_JS}</` + `script>
 </body>
 </html>`;
+      return { html, title: c.title, made, scope: scopeText() };
+    }
+  }
+  const SITE = '/repos/msg-85/msg-85.github.io', SITE_URL = 'https://msg-85.github.io/s/';
+  const SITE_AUTHOR = { name: 'msg-85', email: '353143044+msg-85@users.noreply.github.com' };
+  async function apiSite(path, opts = {}) {
+    const res = await fetch('https://api.github.com' + SITE + path, { cache: 'no-store', ...opts, headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
+    if (!res.ok) { let msg = ''; try { msg = (await res.json()).message || ''; } catch (e) {} throw new ApiError(res.status, msg); }
+    return res;
+  }
+  const siteErr = e => (e.status === 403 || e.status === 404) ? '토큰에 msg-85.github.io 저장소 쓰기 권한이 없습니다. GitHub 토큰 설정(Edit)에서 Repository access에 msg-85.github.io를 추가하고 Contents를 Read and write로 바꿔 주세요.' : explain(e);
+  const b64u = u8 => toBase64(u8).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  async function gzipBytes(s) { return new Uint8Array(await new Response(new Blob([new TextEncoder().encode(s)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); }
+  const KDF_IT = 600000;
+  // password → AES-GCM key (PBKDF2-SHA256); the page is gzipped then encrypted, nothing readable is uploaded
+  async function sealShare(html, pw) {
+    const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: KDF_IT }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await gzipBytes(html)));
+    return { v: 1, kdf: 'PBKDF2-SHA256', it: KDF_IT, salt: toBase64(salt), iv: toBase64(iv), gz: true, ct: toBase64(ct) };
+  }
+  const utf8b64 = s => toBase64(new TextEncoder().encode(s));
+  async function shareLink(pw) {
+    const sh = await buildShare(), id = b64u(crypto.getRandomValues(new Uint8Array(15)));
+    const sealed = await sealShare(sh.html, pw);
+    // public: only the sealed box (the commit message carries no title)
+    await apiSite(`/contents/s/d/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(sealed)), author: SITE_AUTHOR, committer: SITE_AUTHOR }) });
+    // private: what it was, for the list
+    const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: cur.name };
+    try { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); } catch (e) { console.error(e); }
+    return meta;
+  }
+  async function listShares() {
+    let items = [];
+    try { items = await (await api('/contents/shares')).json(); } catch (e) { if (e.status === 404) return []; throw e; }
+    const out = await Promise.all(items.filter(f => f.type === 'file' && f.name.endsWith('.json')).map(async f => {
+      try { return await (await api('/contents/shares/' + encodeURIComponent(f.name), { accept: 'application/vnd.github.raw+json' })).json(); } catch (e) { return null; }
+    }));
+    return out.filter(Boolean).sort((a, b) => String(b.made).localeCompare(String(a.made)));
+  }
+  async function deleteShare(id) {
+    try {
+      const f = await (await apiSite(`/contents/s/d/${id}.json`)).json();
+      await apiSite(`/contents/s/d/${id}.json`, { method: 'DELETE', body: JSON.stringify({ message: 'unshare ' + id, sha: f.sha, author: SITE_AUTHOR, committer: SITE_AUTHOR }) });
+    } catch (e) { if (e.status !== 404) throw e; }
+    try { const f = await (await api(`/contents/shares/${id}.json`)).json(); await api(`/contents/shares/${id}.json`, { method: 'DELETE', body: JSON.stringify({ message: 'unshare ' + id, sha: f.sha }) }); } catch (e) { if (e.status !== 404) throw e; }
+  }
+  async function downloadShare(btn) {
+    btn.disabled = true; const t = btn.textContent; btn.textContent = '만드는 중…';
+    try {
+      const { html, title, made } = await buildShare();
       const a = document.createElement('a'), url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
-      a.href = url; a.download = (c.title.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'analysis') + ` (공유용 ${made.slice(0, 10)}).html`;
+      a.href = url; a.download = (title.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'analysis') + ` (공유용 ${made.slice(0, 10)}).html`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-      btn.textContent = '내려받았습니다';
-    } catch (e) {
-      btn.textContent = '공유용 파일 만들기';
-      $('rErr').textContent = '공유용 파일을 만들지 못했습니다. ' + (e.message || ''); $('rErr').hidden = false;
-    } finally { btn.disabled = false; }
+      btn.textContent = '내려받았습니다 ✓';
+    } catch (e) { btn.textContent = t; shMsg('파일을 만들지 못했습니다. ' + (e.message || ''), true); return; }
+    finally { btn.disabled = false; }
   }
-  $('shareBtn').addEventListener('click', downloadShare);
+  const shMsg = (t, err) => { const m = $('shMsg'); m.textContent = t; m.className = err ? 'err' : 'muted'; m.hidden = !t; };
+  async function drawShareList() {
+    const host = $('shList'); host.innerHTML = '<p class="muted">목록을 불러오는 중…</p>';
+    try {
+      const L = await listShares();
+      host.innerHTML = L.length ? `<table class="at"><thead><tr><th class="l">만든 시각</th><th class="l">제목 · 범위</th><th class="l">링크</th><th></th></tr></thead><tbody>${L.map(m => `<tr><td class="l">${esc(m.made)}</td><td class="l">${esc(m.title)}<br><small class="muted">${esc(m.scope || '')}</small></td><td class="l"><a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">${esc(m.url)}</a></td><td><button type="button" class="btn small" data-shcopy="${esc(m.url)}">복사</button> <button type="button" class="btn small" data-shdel="${esc(m.id)}">삭제</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">공유한 링크가 없습니다.</p>';
+    } catch (e) { host.innerHTML = `<p class="err">${esc(explain(e))}</p>`; }
+  }
+  async function copyText(t) { try { await navigator.clipboard.writeText(t); return true; } catch (e) { const x = el('textarea'); x.value = t; document.body.appendChild(x); x.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {} x.remove(); return ok; } }
+  $('shareBtn').addEventListener('click', () => {
+    if (!cur || !cur.ana) return;
+    $('shScope').textContent = AS && AS.model ? scopeText() : '';
+    $('shPw').value = ''; $('shPw2').value = ''; $('shOut').hidden = true; shMsg('');
+    $('shFile').textContent = '① HTML 파일로 받기'; $('shDlg').showModal(); drawShareList();
+  });
+  $('shClose').addEventListener('click', () => $('shDlg').close());
+  $('shFile').addEventListener('click', () => downloadShare($('shFile')));
+  $('shMake').addEventListener('click', async () => {
+    const pw = $('shPw').value, b = $('shMake');
+    if (pw.length < 10 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) { shMsg('비밀번호는 10자 이상, 영문과 숫자를 섞어 주세요.', true); return; }
+    if (pw !== $('shPw2').value) { shMsg('비밀번호 두 칸이 서로 다릅니다.', true); return; }
+    b.disabled = true; b.textContent = '암호화해서 올리는 중…'; shMsg(''); $('shOut').hidden = true;
+    try {
+      const m = await shareLink(pw);
+      $('shUrl').value = m.url; $('shOut').hidden = false; $('shPw').value = ''; $('shPw2').value = '';
+      shMsg('링크를 만들었습니다. GitHub이 반영하는 데 1~2분 걸릴 수 있습니다. 링크와 비밀번호는 따로 전달하세요.');
+      drawShareList();
+    } catch (e) { shMsg(e.status ? siteErr(e) : '링크를 만들지 못했습니다. ' + (e.message || ''), true); }
+    finally { b.disabled = false; b.textContent = '링크 만들기'; }
+  });
+  $('shCopy').addEventListener('click', async () => { $('shCopy').textContent = await copyText($('shUrl').value) ? '복사됨 ✓' : '복사 실패'; setTimeout(() => { $('shCopy').textContent = '복사'; }, 1500); });
+  $('shList').addEventListener('click', async e => {
+    const c = e.target.closest('[data-shcopy]');
+    if (c) { c.textContent = await copyText(c.dataset.shcopy) ? '복사됨 ✓' : '복사 실패'; setTimeout(() => { c.textContent = '복사'; }, 1500); return; }
+    const d = e.target.closest('[data-shdel]'); if (!d) return;
+    if (!confirm('이 링크를 삭제할까요? 받은 사람도 더 이상 열 수 없습니다 (반영까지 최대 10분).')) return;
+    d.disabled = true; d.textContent = '삭제 중…';
+    try { await deleteShare(d.dataset.shdel); drawShareList(); } catch (e2) { d.disabled = false; d.textContent = '삭제'; shMsg(e2.status ? siteErr(e2) : (e2.message || ''), true); }
+  });
 
   // ---------- Excel: the analysis as it is selected on screen ----------
   function exportSheets() {
