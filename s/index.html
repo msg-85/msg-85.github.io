@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>공유된 분석표</title>
+<style>
+/* Holds no data. The analysis is fetched as an encrypted box and opened only with the password. */
+:root { --bg: #eef2f0; --panel: #fbfcfb; --line: #d2dad6; --fg: #17211d; --muted: #5b6a63; --in: #0f6b4f; --warn: #a3341f; --on: #fff; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121715; --panel: #181f1c; --line: #333f3a; --fg: #e6ece9; --muted: #98a7a0; --in: #4fc29b; --warn: #f09a86; --on: #10231c; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 "Malgun Gothic", "Segoe UI", sans-serif; display: grid; place-items: center; min-height: 100vh; padding: 16px; }
+form { background: var(--panel); border: 1px solid var(--line); padding: 20px; width: min(420px, 100%); display: flex; flex-direction: column; gap: 10px; }
+h1 { font-size: 18px; margin: 0; }
+p { margin: 0; font-size: 13px; color: var(--muted); }
+input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); padding: 8px 10px; width: 100%; }
+button { font: inherit; font-weight: 600; border: 1px solid var(--in); background: var(--in); color: var(--on); padding: 8px 12px; cursor: pointer; }
+button:disabled { opacity: .6; cursor: wait; }
+.err { color: var(--warn); }
+[hidden] { display: none !important; }
+</style>
+<body>
+<form id="f" autocomplete="off">
+  <h1>공유된 분석표</h1>
+  <p>비밀번호를 받은 분만 볼 수 있습니다.</p>
+  <input type="password" id="pw" placeholder="비밀번호" aria-label="비밀번호" autofocus>
+  <button type="submit" id="go">열기</button>
+  <p id="msg" hidden></p>
+</form>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const id = new URLSearchParams(location.search).get('id') || '';
+  const say = (t, err) => { $('msg').textContent = t; $('msg').className = err ? 'err' : ''; $('msg').hidden = !t; };
+  const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  let box = null;
+  async function load() {
+    if (!/^[A-Za-z0-9_-]{10,40}$/.test(id)) throw new Error('링크 주소가 올바르지 않습니다. 받은 링크를 그대로 열어 주세요.');
+    const r = await fetch('d/' + id + '.json', { cache: 'no-store' });
+    if (r.status === 404) throw new Error('이 링크는 아직 준비 중이거나 삭제되었습니다. 방금 만든 링크라면 1~2분 뒤 새로고침해 주세요.');
+    if (!r.ok) throw new Error('불러오지 못했습니다 (' + r.status + '). 잠시 뒤 다시 시도해 주세요.');
+    return r.json();
+  }
+  $('f').addEventListener('submit', async e => {
+    e.preventDefault();
+    const pw = $('pw').value; if (!pw) return;
+    $('go').disabled = true; say('여는 중…');
+    try {
+      if (!box) box = await load();
+      const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+      const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64(box.salt), iterations: box.it }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+      let raw;
+      try { raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(box.iv) }, key, unb64(box.ct)); }
+      catch (x) { throw new Error('비밀번호가 맞지 않습니다.'); }
+      const html = box.gz ? await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).text() : new TextDecoder().decode(raw);
+      document.open(); document.write(html); document.close();
+    } catch (x) { say(x.message || String(x), true); $('go').disabled = false; $('pw').select(); }
+  });
+})();
+</script>
+</body>
+</html>
