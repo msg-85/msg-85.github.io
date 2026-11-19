@@ -185,6 +185,10 @@ td.num { text-align: right; font-family: var(--mono); }
 .msl { max-height: 300px; overflow: auto; display: flex; flex-direction: column; font-size: 13px; }
 .msl label { display: flex; gap: 6px; align-items: center; padding: 1px 2px; color: var(--fg); cursor: pointer; }
 .msa { display: flex; gap: 6px; justify-content: flex-end; }
+.msl .msg { font-size: 12px; font-weight: 600; color: var(--muted); padding: 5px 2px 1px; cursor: pointer; }
+.msl .msg:hover { color: var(--fg); }
+.trk-ms > summary { max-width: 240px; font-size: 14px; }
+.trk-ms .msp { width: 320px; }
 .crumb { font-size: 13px; color: var(--muted); background: var(--sheet); border: 1px solid var(--line); padding: 5px 10px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; flex-shrink: 0; }
 .crumb b { color: var(--fg); }
 .crumb .x { border: 1px solid var(--line); background: var(--panel); padding: 0 7px; cursor: pointer; font-size: 12px; color: var(--fg); }
@@ -394,12 +398,13 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <div class="trk-right">
         <h3 class="trk-h">판매가 시계열 흐름</h3>
         <div class="trk-ctl">
-          <select id="trkCG" aria-label="그래프 제품"></select>
+          <details class="ms trk-ms" id="trkCGms"><summary id="trkCGsum" title="그래프에 그릴 제품 (여러 개 고르기)">제품</summary></details>
+          <details class="ms trk-ms" id="trkCHms"><summary id="trkCHsum" title="그래프에 그릴 채널 (여러 개 고르기)">채널</summary></details>
           <span id="trkModeBox">
-            <label><input type="radio" name="trkMode" value="ch" checked> 입수량 하나 · 채널별 비교</label>
-            <label><input type="radio" name="trkMode" value="q"> 채널 하나 · 입수량별 개당 가격</label>
+            <label><input type="radio" name="trkMode" value="ch" checked> 가격 (입수량 하나)</label>
+            <label><input type="radio" name="trkMode" value="q"> 개당 가격 (입수량별)</label>
           </span>
-          <select id="trkPick" aria-label="그래프 기준"></select>
+          <select id="trkPick" aria-label="그래프 입수량"></select>
           <span>기간 <select id="trkFrom" aria-label="그래프 시작일"></select> ~ <select id="trkTo" aria-label="그래프 종료일"></select></span>
         </div>
         <div id="trkChart"></div>
@@ -1092,7 +1097,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const series = ch.series || [];
     if (series.length > 1) {
       const lg = el('div', 'legend');
-      series.forEach((s, i) => { const sp = el('span'); const sw = el('i', ch.type === 'bar' ? 'box' : ''); sw.style.background = COLORS[i % COLORS.length]; sp.append(sw, s.name); lg.appendChild(sp); });
+      series.forEach((s, i) => { const sp = el('span'); const sw = el('i', ch.type === 'bar' ? 'box' : ''); const c = COLORS[i % COLORS.length]; sw.style.background = i >= COLORS.length ? `repeating-linear-gradient(90deg, ${c} 0 4px, transparent 4px 6px)` : c; if (i >= COLORS.length) sw.style.width = '16px'; sp.append(sw, s.name); lg.appendChild(sp); });
       card.appendChild(lg);
     }
     const tip = el('div', 'tip'); tip.hidden = true;
@@ -1128,7 +1133,9 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     series.forEach((s, si) => {
       const c = COLORS[si % COLORS.length]; let d = '';
       s.values.forEach((v, i) => { if (v == null) return; d += (d && s.values[i - 1] != null ? 'L' : 'M') + px(i) + ' ' + py(v); });
-      sv('path', { d, fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+      const pa = { d, fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' };
+      if (si >= COLORS.length) pa['stroke-dasharray'] = '6 4';
+      sv('path', pa, svg);
       s.values.forEach((v, i) => { if (v != null) sv('circle', { cx: px(i), cy: py(v), r: dot, fill: c, stroke: 'var(--sheet)', 'stroke-width': dot > 2 ? 2 : 1 }, svg); });
     });
     const hit = sv('rect', { x: L - 20, y: 0, width: W - L - R + 40, height: H, fill: 'transparent' }, svg);
@@ -1152,7 +1159,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(10시 01분/23시 31분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고 「유사 상품」 시트에 따로 모았습니다. ★ = 정해진 시간 사이 6시간마다 감시해서 잡은 새 최저가. ⤴N = 지정 입수량을 파는 곳이 없어 바로 위 입수량(N) 가격을 넣은 칸.';
   const TRK_KEY = 'data-window-trk';
   try { Object.assign(TRK, JSON.parse(localStorage.getItem(TRK_KEY) || '{}'), { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [] }); } catch (e) {}
-  const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay })); } catch (e) {} };
+  const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay, cg: TRK.cg, cch: TRK.cch })); } catch (e) {} };
   const won = v => v == null ? '–' : Math.round(v).toLocaleString() + '원';
   function trkFlatten(cfg) {
     // old layout (groups[]) becomes one brand per group
@@ -1242,7 +1249,7 @@ html, body { height: auto; }
   }
   // ③ 조작 가능: settings + all records, opened read-only in this page
   function trkLivePayload(id) {
-    return { kind: 'live', v: 1, view: 'trk', id, title: '가격 추적', cfg: TRK.cfg, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip },
+    return { kind: 'live', v: 1, view: 'trk', id, title: '가격 추적', cfg: TRK.cfg, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch },
       rows: TRK.rows.map(r => [r.at, r.group, r.qty, r.ch, r.price, r.listings, r.trend, r.name, r.flag || '']) };
   }
   function startTrkLive(L) {
@@ -1252,7 +1259,7 @@ html, body { height: auto; }
     $('trkRefresh').hidden = true; $('trkShare').hidden = true; $('trkReq').hidden = true;
     TRK.cfg = L.cfg; Object.assign(TRK, trkFlatten(L.cfg));
     TRK.rows = (L.rows || []).map(r => ({ at: r[0], group: r[1], qty: r[2], ch: r[3], price: r[4], listings: r[5], trend: r[6], name: r[7], flag: r[8] || '' }));
-    if (L.state) { TRK.by = L.state.by || 'prod'; TRK.sel = L.state.sel || {}; TRK.chip = L.state.chip || {}; }
+    if (L.state) { TRK.by = L.state.by || 'prod'; TRK.sel = L.state.sel || {}; TRK.chip = L.state.chip || {}; TRK.cg = L.state.cg || []; TRK.cch = L.state.cch || null; }
     trkIndex(); trkRender();
   }
   const trkLabel = at => { const [d, t] = at.split(' '); const [, m, dd] = d.split('-'); return `${+m}/${+dd} ${+t.slice(0, 2)}시`; };
@@ -1288,8 +1295,8 @@ html, body { height: auto; }
   }
   // product cell: click = show it in the chart
   function trkProdTh(g, text, cls) {
-    const th = el('th', 'trk-prod' + (cls ? ' ' + cls : '') + (g.id === $('trkCG').value ? ' on' : ''), text);
-    th.dataset.g = g.id; th.title = '누르면 오른쪽 그래프에 표시';
+    const th = el('th', 'trk-prod' + (cls ? ' ' + cls : '') + ((TRK.cg || []).includes(g.id) ? ' on' : ''), text);
+    th.dataset.g = g.id; th.title = '누르면 그래프에 추가 · 다시 누르면 빼기';
     return th;
   }
   // 제품 기준: one table, rows = 제품 × 입수량, columns = channels + 로켓 제외 최저가
@@ -1388,7 +1395,7 @@ html, body { height: auto; }
     const last = shown[shown.length - 1];
     $('trkAsOf').textContent = last ? `${last} 기록` : '';
     $('trkInfo').textContent = last ? `${TRK.date ? TRK.date + ' 기준' : '최근 기준'} · 표는 ${last} 기록 · 매일 10시 01분·23시 31분 자동 기록` : '이 날짜까지 기록이 없습니다. 매일 10시 01분·23시 31분에 기록됩니다.';
-    trkChartRender(); trkMarkProd(); trkStatus();
+    trkChartSel(); trkChartRender(); trkMarkProd(); trkStatus();
   }
   // 요청 · 수정: requests saved to price-data requests/tracker/<stamp>.json; Claude answers in <stamp>.answer.json
   let trkReqBusy = null;
@@ -1456,52 +1463,140 @@ html, body { height: auto; }
     t.appendChild(tb);
     const body = $('trkStatBody'); body.replaceChildren(t, el('p', 'muted', '잡힘 = 추적 채널 중 한 곳 이상에서 그 입수량 가격이 기록됨. 안 잡힌 줄은 그 묶음을 파는 곳이 없거나, 이름이 달라 규칙에 안 걸린 경우입니다. 이상하면 Claude에게 "추적 안 된 거 확인해줘"라고 보내주세요.'));
   }
+  // chart selection: TRK.cg = product ids (several), TRK.cch = channels (null = every channel of those products).
+  // A single picked product/channel follows the table when the table's brand/channel changes; several stay put.
+  function trkChartSel() {
+    const vg = trkViewGroups(), ids = new Set(TRK.groups.map(g => g.id));
+    const vk = [TRK.by, TRK.sel.prod, TRK.chip[TRK.sel.prod] || '', TRK.sel.ch].join('|');
+    const moved = TRK._vk !== undefined && TRK._vk !== vk, byMoved = TRK._by !== undefined && TRK._by !== TRK.by;
+    TRK._vk = vk; TRK._by = TRK.by;
+    let cg = (Array.isArray(TRK.cg) ? TRK.cg : []).filter(id => ids.has(id));
+    if (!cg.length || (moved && TRK.by === 'prod' && cg.length === 1 && !vg.some(g => g.id === cg[0]))) cg = vg.length ? [vg[0].id] : [];
+    TRK.cg = cg;
+    if (!Array.isArray(TRK.cch) || !TRK.cch.length) TRK.cch = null;
+    if (moved && TRK.by === 'ch' && (!TRK.cch || TRK.cch.length === 1)) TRK.cch = [TRK.sel.ch];
+    else if (byMoved && TRK.by === 'prod' && TRK.cch && TRK.cch.length === 1) TRK.cch = null;
+  }
+  const trkChartGroups = () => (TRK.cg || []).map(id => TRK.groups.find(g => g.id === id)).filter(Boolean);
+  const trkChAll = gs => [...new Set(gs.flatMap(g => g.channels))];
+  // multi-select popup inside <details class="ms">: items [{v, t, g (group header)}]; click a header = toggle its items
+  function trkPicker(det, items, chosen, apply) {
+    const pop = el('div', 'msp'), chk = new Set(chosen);
+    pop.innerHTML = `<input type="search" placeholder="찾기 (${items.length}개)"><div class="msl"></div><div class="msa"><button type="button" class="btn small" data-tp="clear">전체 해제</button><button type="button" class="btn small" data-tp="vis">전체 선택</button><button type="button" class="btn small primary" data-tp="ok">적용</button></div>`;
+    det.appendChild(pop);
+    const q = pop.querySelector('input'), box = pop.querySelector('.msl');
+    const hits = () => { const t = q.value.trim().toLowerCase(); return t ? items.filter(it => ((it.g || '') + ' ' + it.t).toLowerCase().includes(t)) : items; };
+    const draw = () => {
+      let h = '', lg = null;
+      for (const it of hits()) {
+        if (it.g && it.g !== lg) h += `<div class="msg" data-g="${esc(it.g)}" title="누르면 이 묶음 전체 선택/해제">${esc(it.g)}</div>`;
+        lg = it.g;
+        h += `<label><input type="checkbox" value="${esc(it.v)}"${chk.has(it.v) ? ' checked' : ''}> ${esc(it.t)}</label>`;
+      }
+      box.innerHTML = h || '<span class="muted">찾은 항목이 없습니다.</span>';
+    };
+    const sync = () => { for (const c of box.querySelectorAll('input')) c.checked = chk.has(c.value); };
+    box.addEventListener('change', e => { const c = e.target; if (c.type !== 'checkbox') return; if (c.checked) chk.add(c.value); else chk.delete(c.value); });
+    pop.addEventListener('click', e => {
+      const hd = e.target.closest('.msg');
+      if (hd) { const its = hits().filter(it => it.g === hd.dataset.g), on = its.every(it => chk.has(it.v)); for (const it of its) on ? chk.delete(it.v) : chk.add(it.v); sync(); return; }
+      const b = e.target.closest('[data-tp]'); if (!b) return;
+      if (b.dataset.tp === 'clear') { for (const it of hits()) chk.delete(it.v); sync(); return; }
+      if (b.dataset.tp === 'vis') { for (const it of hits()) chk.add(it.v); sync(); return; }
+      det.open = false;
+      apply(items.map(it => it.v).filter(v => chk.has(v)));
+    });
+    q.addEventListener('input', draw);
+    draw(); q.focus();
+  }
+  function trkOpenPicker(det) {
+    for (const o of document.querySelectorAll('details.ms[open]')) if (o !== det) o.open = false;
+    const gs = trkChartGroups();
+    if (det.id === 'trkCGms') {
+      const items = [];
+      for (const b of TRK.brands) for (const v of b.variants) {
+        const g = TRK.groups.find(x => x.id === v.id); if (!g) continue;
+        const multi = b.variants.length > 1;
+        items.push({ v: g.id, t: multi ? g.name : g.title + (b.maker ? ` (${b.maker})` : ''), g: multi ? (b.group ? b.group + ' · ' : '') + b.name : b.group || '' });
+      }
+      trkPicker(det, items, gs.map(g => g.id), ids => { if (!ids.length) return; TRK.cg = ids; trkSave(); trkChartRender(); trkMarkProd(); });
+    } else {
+      const all = trkChAll(gs), items = [...all, OTHER].map(c => ({ v: c, t: c === OTHER ? OTHER + ' (로켓배송 뺀 채널 중 최저)' : c, g: '' }));
+      trkPicker(det, items, TRK.cch || all, cs => {
+        TRK.cch = !cs.length || (cs.length === all.length && cs.every(c => all.includes(c))) ? null : cs;
+        trkSave(); trkChartRender();
+      });
+    }
+  }
+  for (const det of [$('trkCGms'), $('trkCHms')]) det.addEventListener('toggle', () => {
+    const old = det.querySelector('.msp'); if (old) old.remove();
+    if (det.open && TRK.cfg) trkOpenPicker(det);
+  });
   function trkChartRender() {
-    const gs = trkViewGroups(), cg = $('trkCG');
-    const want = cg.value;
-    cg.replaceChildren(...gs.map(g => { const o = el('option', '', g.title); o.value = g.id; return o; }));
-    if (gs.some(g => g.id === want)) cg.value = want;
-    cg.hidden = gs.length < 2;
-    const g = gs.find(x => x.id === cg.value) || gs[0], box = $('trkChart');
-    box.replaceChildren();
-    if (!g) return;
-    const isCh = TRK.by === 'ch';
-    $('trkModeBox').hidden = isCh;
-    const mode = isCh ? 'q' : document.querySelector('input[name="trkMode"]:checked').value;
-    const pick = $('trkPick'), key = mode + '|' + g.id;
-    pick.hidden = isCh;
+    const box = $('trkChart'); box.replaceChildren();
+    if (!TRK.cfg) return;
+    if (!trkChartGroups().length) trkChartSel();
+    const gs = trkChartGroups();
+    if (!gs.length) return;
+    const all = trkChAll(gs);
+    let chs = TRK.cch ? TRK.cch.filter(c => c === OTHER || all.includes(c)) : all;
+    if (!chs.length) chs = all;
+    const cs = $('trkCGsum'), hs = $('trkCHsum');
+    cs.textContent = gs.length === 1 ? '제품: ' + gs[0].title : `제품 ${gs.length}개 ▾`;
+    cs.title = gs.map(g => g.title).join('\n') + '\n(눌러서 여러 개 고르기)';
+    hs.textContent = !TRK.cch ? '채널: 전체 ▾' : chs.length === 1 ? '채널: ' + chs[0] : `채널 ${chs.length}개 ▾`;
+    hs.title = chs.join('\n') + '\n(눌러서 여러 개 고르기)';
+    $('trkCGms').classList.toggle('on', gs.length > 1); $('trkCHms').classList.toggle('on', !!TRK.cch);
+    const mode = document.querySelector('input[name="trkMode"]:checked').value;
+    const units = new Set(gs.map(g => g.unit)), u = units.size === 1 ? gs[0].unit : '개';
+    const qsAll = [...new Set(gs.flatMap(g => g.qtys))].sort((a, b) => a - b);
+    const pick = $('trkPick'), key = qsAll.join(',') + '|' + u;
+    pick.hidden = mode !== 'ch';
     if (pick.dataset.key !== key) {
-      const opts = mode === 'ch' ? g.qtys.map(q => [String(q), q + g.unit]) : g.channels.map(c => [c, c]);
       const keep = pick.value;
-      pick.replaceChildren(...opts.map(([v, t]) => { const o = el('option', '', t); o.value = v; return o; }));
-      if (opts.some(([v]) => v === keep)) pick.value = keep;
+      pick.replaceChildren(...qsAll.map(q => { const o = el('option', '', q + u); o.value = String(q); return o; }));
+      if (qsAll.some(q => String(q) === keep)) pick.value = keep;
       pick.dataset.key = key;
     }
-    const v = isCh ? TRK.sel.ch : pick.value;
-    const x = TRK.idx[g.id], days = trkDays();
+    const v = pick.value, days = trkDays();
     const fs0 = $('trkFrom'), fs1 = $('trkTo');
     for (const [sel, v] of [[fs0, TRK.from], [fs1, TRK.to]]) { sel.replaceChildren(...days.map(d => { const o = el('option', '', d); o.value = d; return o; })); }
     fs0.value = days.includes(TRK.from) ? TRK.from : days[0] || '';
     fs1.value = days.includes(TRK.to) ? TRK.to : days[days.length - 1] || '';
     if (fs0.value > fs1.value) [fs0.value, fs1.value] = [fs1.value, fs0.value];
-    const times = x.times.filter(t => t.slice(0, 10) >= fs0.value && t.slice(0, 10) <= fs1.value);
-    if (!times.length) return;
-    const at = (t, q, ch) => {
+    const times = [...new Set(gs.flatMap(g => TRK.idx[g.id].times))].filter(t => t.slice(0, 10) >= fs0.value && t.slice(0, 10) <= fs1.value).sort();
+    if (!times.length) { box.appendChild(el('p', 'muted', '이 기간에 기록이 없습니다.')); return; }
+    const at = (g, t, q, ch) => {
+      const x = TRK.idx[g.id];
       if (ch !== OTHER) return x.cell.get(t + '|' + q + '|' + ch)?.price ?? null;
       const ps = g.channels.filter(c => c !== '로켓배송').map(c => x.cell.get(t + '|' + q + '|' + c)?.price).filter(p => p != null);
       return ps.length ? Math.min(...ps) : null;
     };
-    const series = mode === 'ch'
-      ? g.channels.map(ch => ({ name: ch, values: times.map(t => at(t, +v, ch)) }))
-      : g.qtys.map(q => ({ name: q + g.unit, values: times.map(t => { const p = at(t, q, v); return p == null ? null : Math.round(p / q); }) }));
-    const shown = series.filter(s => s.values.some(y => y != null)).slice(0, 6);
-    if (!shown.length) { box.appendChild(el('p', 'muted', '이 조건으로 기록된 가격이 없습니다.')); return; }
+    const multiG = gs.length > 1, multiC = chs.length > 1, multiQ = mode === 'q' && gs.some(g => g.qtys.length > 1);
+    const nm = (g, ch, q) => [multiG && g.title, multiC && ch, q != null && q + g.unit].filter(Boolean).join(' · ') || g.title;
+    const series = [], noQty = [];
+    for (const g of gs) {
+      if (mode === 'ch' && !g.qtys.includes(+v)) { noQty.push(g.title); continue; }
+      for (const ch of chs) {
+        if (ch !== OTHER && !g.channels.includes(ch)) continue;
+        if (mode === 'ch') series.push({ name: nm(g, ch, null), values: times.map(t => at(g, t, +v, ch)) });
+        else for (const q of g.qtys) series.push({ name: nm(g, ch, multiQ ? q : null), values: times.map(t => { const p = at(g, t, q, ch); return p == null ? null : Math.round(p / q); }) });
+      }
+    }
+    const MAXS = 12, has = series.filter(s => s.values.some(y => y != null)), shown = has.slice(0, MAXS);
+    if (!shown.length) { box.appendChild(el('p', 'muted', '이 조건으로 기록된 가격이 없습니다.' + (noQty.length ? ` (${v}${u} 묶음이 없는 제품: ${noQty.join(', ')})` : ''))); return; }
+    const notes = [];
+    if (has.length > MAXS) notes.push(`선이 ${has.length}개라 앞 ${MAXS}개만 그렸습니다. 제품·채널을 줄여 보세요.`);
+    if (noQty.length) notes.push(`${v}${u} 묶음이 없어 빠진 제품: ${noQty.join(', ')}`);
+    if (series.length > has.length) notes.push(`기록이 없는 조합 ${series.length - has.length}개는 뺐습니다.`);
+    if (times.length < 2) notes.push('기록이 2회 이상 쌓이면 선으로 이어집니다.');
+    const what = multiG ? `제품 ${gs.length}개` : gs[0].title, chW = chs.length === 1 ? ' · ' + chs[0] : '';
     const cw = box.clientWidth || 560, wantH = TRK.lay === 'v' ? 300 : 340;
     box.appendChild(chart({
       w: Math.max(560, Math.round(cw * 240 / wantH)),
       type: 'line', zero: false, unit: '원', x: times.map(trkLabel), series: shown,
-      title: mode === 'ch' ? `${g.title} ${v}${g.unit} · 채널별 가격` : `${g.title} · ${v} · 입수량별 ${g.unit}당 가격`,
-      note: times.length < 2 ? '기록이 2회 이상 쌓이면 선으로 이어집니다.' : '',
+      title: mode === 'ch' ? `${what} ${v}${u}${chW} · ${multiC ? '채널별 ' : ''}가격` : `${what}${chW} · 입수량별 ${u}당 가격`,
+      note: notes.join(' · '),
     }));
   }
   async function trkXlsx() {
@@ -1580,9 +1675,14 @@ html, body { height: auto; }
     btn.disabled = false;
   }
   $('trkList').addEventListener('click', trkListXlsx);
-  $('trkCG').addEventListener('change', () => { trkChartRender(); trkMarkProd(); });
-  const trkMarkProd = () => { for (const th of document.querySelectorAll('#trkTables th.trk-prod')) th.classList.toggle('on', th.dataset.g === $('trkCG').value); };
-  $('trkTables').addEventListener('click', e => { const th = e.target.closest('th.trk-prod'); if (!th) return; $('trkCG').value = th.dataset.g; trkChartRender(); trkMarkProd(); });
+  const trkMarkProd = () => { const on = new Set(TRK.cg || []); for (const th of document.querySelectorAll('#trkTables th.trk-prod')) th.classList.toggle('on', on.has(th.dataset.g)); };
+  // product cell click: add to / remove from the chart (the last one stays)
+  $('trkTables').addEventListener('click', e => {
+    const th = e.target.closest('th.trk-prod'); if (!th) return;
+    const cg = (TRK.cg || []).slice(), i = cg.indexOf(th.dataset.g);
+    if (i < 0) cg.push(th.dataset.g); else if (cg.length > 1) cg.splice(i, 1);
+    TRK.cg = cg; trkSave(); trkChartRender(); trkMarkProd();
+  });
   $('trkPick').addEventListener('change', trkChartRender);
   for (const r of document.querySelectorAll('input[name="trkMode"]')) r.addEventListener('change', trkChartRender);
 
@@ -2754,7 +2854,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     // private: what it was, for the list
     const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: shareCtx === 'trk' ? 'tracker' : cur.name, mode: auto ? 'live-auto' : mode };
     // 매일 자동 갱신: the private meta keeps the AES key (not the password) so the workflow can re-seal the same id after each run
-    if (auto) meta.auto = { key: sealed.key, salt: sealed.salt, it: sealed.it, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip }, title: '가격 추적' };
+    if (auto) meta.auto = { key: sealed.key, salt: sealed.salt, it: sealed.it, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch }, title: '가격 추적' };
     if (auto) { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); return meta; }
     try { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); } catch (e) { console.error(e); }
     return meta;
