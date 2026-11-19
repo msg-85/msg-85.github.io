@@ -46,6 +46,7 @@ a { color: var(--out); }
 .trk-t .up { color: var(--warn); } .trk-t .dn { color: var(--s1); }
 .trk-ctl { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 14px; }
 .trk-ctl select { font: inherit; padding: 3px 6px; background: var(--sheet); color: var(--fg); border: 1px solid var(--line); }
+#trkDate { font: inherit; font-weight: 700; padding: 4px 6px; background: var(--sheet); color: var(--fg); border: 1px solid var(--s2); }
 #trkSel { font-size: 16px; font-weight: 700; border-color: var(--s2); max-width: 100%; font-family: inherit; padding: 4px 6px; background: var(--sheet); color: var(--fg); border: 1px solid var(--s2); }
 .trk-seg { display: inline-flex; align-items: center; gap: 0; }
 .trk-seg .muted { margin-right: 6px; font-size: 13px; }
@@ -360,7 +361,9 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
 
   <section class="pane" id="trackPane" hidden>
     <div class="bar">
-      <span class="trk-seg" role="group" aria-label="조회 기준"><span class="muted">조회 기준</span><button type="button" class="btn" data-by="prod" aria-pressed="true">제품</button><button type="button" class="btn" data-by="ch" aria-pressed="false">채널</button></span>
+      <span class="muted" style="font-size:13px">조회 기준</span>
+      <select id="trkDate" aria-label="기준 날짜"></select>
+      <span class="trk-seg" role="group" aria-label="조회 기준"><button type="button" class="btn" data-by="prod" aria-pressed="true">제품</button><button type="button" class="btn" data-by="ch" aria-pressed="false">채널</button></span>
       <select id="trkSel" aria-label="브랜드 또는 채널 고르기"></select>
       <span class="grow" id="trkInfo"></span>
       <button class="btn" id="trkRefresh" type="button">새로고침</button>
@@ -371,7 +374,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     <div class="trk-split" id="trkView">
       <div class="trk-left">
         <div id="trkTables" class="trk-tables"></div>
-        <p class="cn muted" id="trkNote" style="margin:0;font-size:13px"></p>
+        <p class="cn muted" id="trkNote" style="margin:0;font-size:13px;white-space:pre-line"></p>
       </div>
       <div class="trk-right">
       <div class="trk-ctl">
@@ -382,6 +385,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
           <label><input type="radio" name="trkMode" value="q"> 채널 하나 · 입수량별 개당 가격</label>
         </span>
         <select id="trkPick" aria-label="그래프 기준"></select>
+        <span>기간 <select id="trkFrom" aria-label="그래프 시작일"></select> ~ <select id="trkTo" aria-label="그래프 종료일"></select></span>
       </div>
       <div id="trkChart"></div>
       </div>
@@ -1120,6 +1124,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   //           채널 = one channel → rows = products (brand › variant), columns = 입수량.
   const TRK = { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [], by: 'prod', sel: {}, chip: {} };
   const OTHER = '로켓 제외 최저가';
+  const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(0시 20분/9시 30분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요.';
   const TRK_KEY = 'data-window-trk';
   try { Object.assign(TRK, JSON.parse(localStorage.getItem(TRK_KEY) || '{}'), { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [] }); } catch (e) {}
   const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip })); } catch (e) {} };
@@ -1227,8 +1232,14 @@ html, body { height: auto; }
   const trkLabel = at => { const [d, t] = at.split(' '); const [, m, dd] = d.split('-'); return `${+m}/${+dd} ${+t.slice(0, 2)}시`; };
   const trkChannels = () => [...new Set(TRK.groups.flatMap(g => g.channels))];
   // price of (group, qty, channel) at the group's last and previous runs; channel OTHER = lowest non-rocket channel
+  // index of the last run on or before the chosen date (TRK.date '' = latest)
+  function trkCut(x) {
+    if (!TRK.date) return x.times.length - 1;
+    let i = x.times.length - 1; while (i >= 0 && x.times[i].slice(0, 10) > TRK.date) i--; return i;
+  }
+  const trkDays = () => [...new Set(TRK.rows.map(r => r.at.slice(0, 10)))].sort();
   function trkCell(g, q, ch, back = 0) {
-    const x = TRK.idx[g.id], t = x.times[x.times.length - 1 - back];
+    const x = TRK.idx[g.id], t = x.times[trkCut(x) - back];
     if (!t) return null;
     if (ch !== OTHER) { const r = x.cell.get(t + '|' + q + '|' + ch); return r && r.price != null ? { ...r, ch } : null; }
     let best = null;
@@ -1325,18 +1336,22 @@ html, body { height: auto; }
       }
       const gs = trkViewGroups();
       box.appendChild(trkProdTable(gs));
-      $('trkNote').textContent = '칸마다 그 채널에서 같은 입수량 상품 중 가장 싼 가격입니다 (폴센트 검색 기준). 초록 칸 = 그 줄 최저가, ▲▼ = 직전 기록 대비. 칸에 마우스를 올리면 상품명과 기록 최저·최고가가 보입니다. – = 검색에 안 잡힘.';
+      $('trkNote').textContent = '칸마다 그 채널에서 같은 입수량 상품 중 가장 싼 가격입니다 (폴센트 검색 기준). 초록 칸 = 그 줄 최저가, ▲▼ = 직전 기록 대비. 칸에 마우스를 올리면 상품명과 기록 최저·최고가가 보입니다. – = 검색에 안 잡힘.' + TRK_DL;
     } else {
       const chs = [...trkChannels(), OTHER];
       sel.replaceChildren(...chs.map(c => { const o = el('option', '', c); o.value = c; return o; }));
       if (!chs.includes(TRK.sel.ch)) TRK.sel.ch = chs[0];
       sel.value = TRK.sel.ch;
       box.appendChild(trkChTable(TRK.sel.ch, TRK.groups));
-      $('trkNote').textContent = `${TRK.sel.ch === OTHER ? '로켓배송을 뺀 채널 중 가장 싼 가격 (칸 아래에 채널 이름)' : TRK.sel.ch + '에서 같은 입수량 상품 중 가장 싼 가격'}입니다 (폴센트 검색 기준). 초록 칸 = 그 제품에서 개당 가격이 가장 싼 입수량, ▲▼ = 직전 기록 대비. – = 검색에 안 잡힘.`;
+      $('trkNote').textContent = `${TRK.sel.ch === OTHER ? '로켓배송을 뺀 채널 중 가장 싼 가격 (칸 아래에 채널 이름)' : TRK.sel.ch + '에서 같은 입수량 상품 중 가장 싼 가격'}입니다 (폴센트 검색 기준). 초록 칸 = 그 제품에서 개당 가격이 가장 싼 입수량, ▲▼ = 직전 기록 대비. – = 검색에 안 잡힘.` + TRK_DL;
     }
-    const times = [...new Set(trkViewGroups().flatMap(g => TRK.idx[g.id].times))].sort();
-    const last = times[times.length - 1];
-    $('trkInfo').textContent = last ? `마지막 기록 ${last} · 매일 0시 20분·9시 30분 자동 기록` : '아직 기록이 없습니다. 매일 0시 20분·9시 30분에 기록됩니다.';
+    const days = trkDays(), ds = $('trkDate');
+    if (TRK.date && !days.includes(TRK.date)) TRK.date = '';
+    ds.replaceChildren(...[['', '최근 (' + (days[days.length - 1] || '-') + ')'], ...days.slice().reverse().map(d => [d, d])].map(([v, t]) => { const o = el('option', '', t); o.value = v; return o; }));
+    ds.value = TRK.date;
+    const shown = trkViewGroups().map(g => { const x = TRK.idx[g.id]; return x.times[trkCut(x)]; }).filter(Boolean).sort();
+    const last = shown[shown.length - 1];
+    $('trkInfo').textContent = last ? `${TRK.date ? TRK.date + ' 기준' : '최근 기준'} · 표는 ${last} 기록 · 매일 0시 20분·9시 30분 자동 기록` : '이 날짜까지 기록이 없습니다. 매일 0시 20분·9시 30분에 기록됩니다.';
     trkChartRender(); trkMarkProd();
   }
   function trkChartRender() {
@@ -1361,7 +1376,13 @@ html, body { height: auto; }
       pick.dataset.key = key;
     }
     const v = isCh ? TRK.sel.ch : pick.value;
-    const x = TRK.idx[g.id], times = x.times;
+    const x = TRK.idx[g.id], days = trkDays();
+    const fs0 = $('trkFrom'), fs1 = $('trkTo');
+    for (const [sel, v] of [[fs0, TRK.from], [fs1, TRK.to]]) { sel.replaceChildren(...days.map(d => { const o = el('option', '', d); o.value = d; return o; })); }
+    fs0.value = days.includes(TRK.from) ? TRK.from : days[0] || '';
+    fs1.value = days.includes(TRK.to) ? TRK.to : days[days.length - 1] || '';
+    if (fs0.value > fs1.value) [fs0.value, fs1.value] = [fs1.value, fs0.value];
+    const times = x.times.filter(t => t.slice(0, 10) >= fs0.value && t.slice(0, 10) <= fs1.value);
     if (!times.length) return;
     const at = (t, q, ch) => {
       if (ch !== OTHER) return x.cell.get(t + '|' + q + '|' + ch)?.price ?? null;
@@ -1388,12 +1409,12 @@ html, body { height: auto; }
       for (const g of gs) for (const q of g.qtys) {
         const o = trkCell(g, q, OTHER);
         now.push([g.bname, g.name, q + g.unit, ...chs.flatMap(c => { const r = g.channels.includes(c) && trkCell(g, q, c); return r ? [r.price, Math.round(r.price / q)] : ['', '']; }),
-          o ? o.price : '', o ? o.ch : '', TRK.idx[g.id].times.slice(-1)[0] || '']);
+          o ? o.price : '', o ? o.ch : '', TRK.idx[g.id].times[trkCut(TRK.idx[g.id])] || '']);
       }
       const all = [['기록 시각', '브랜드', '구분', '입수량', '채널', '가격', '개당', '같은 조건 상품 수', '폴센트 표시', '상품명']];
       for (const g of gs) for (const r of TRK.idx[g.id].rows) if (r.price != null)
         all.push([r.at, g.bname, g.name, r.qty, r.ch, r.price, Math.round(r.price / r.qty), r.listings, r.trend === 'up' ? '상승' : r.trend === 'down' ? '하락' : '', r.name]);
-      const blob = await buildXlsx([{ name: '지금 가격', rows: now, header: true }, { name: '전체 기록', rows: all, header: true }]);
+      const blob = await buildXlsx([{ name: TRK.date ? TRK.date + ' 기준 가격' : '최근 가격', rows: now, header: true }, { name: '전체 기록', rows: all, header: true }]);
       const what = TRK.by === 'ch' ? '전체 제품' : (TRK.brands.find(b => b.id === TRK.sel.prod) || {}).name || '';
       const a = document.createElement('a'), url = URL.createObjectURL(blob);
       a.href = url; a.download = `가격 추적 - ${what}.xlsx`.replace(/[\\/:*?"<>|]+/g, ' ');
@@ -1405,6 +1426,9 @@ html, body { height: auto; }
   for (const bt of document.querySelectorAll('.trk-seg .btn')) bt.addEventListener('click', () => { TRK.by = bt.dataset.by; trkSave(); trkRender(); });
   $('trkSel').addEventListener('change', () => { TRK.sel[TRK.by] = $('trkSel').value; trkSave(); trkRender(); });
   $('trkRefresh').addEventListener('click', () => trkLoad(true));
+  $('trkDate').addEventListener('change', () => { TRK.date = $('trkDate').value; trkRender(); });
+  $('trkFrom').addEventListener('change', () => { TRK.from = $('trkFrom').value; trkChartRender(); });
+  $('trkTo').addEventListener('change', () => { TRK.to = $('trkTo').value; trkChartRender(); });
   $('trkXlsx').addEventListener('click', trkXlsx);
   $('trkCG').addEventListener('change', () => { trkChartRender(); trkMarkProd(); });
   const trkMarkProd = () => { for (const th of document.querySelectorAll('#trkTables th.trk-prod')) th.classList.toggle('on', th.dataset.g === $('trkCG').value); };
