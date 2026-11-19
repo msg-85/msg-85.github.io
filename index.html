@@ -376,6 +376,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <span class="trk-seg" id="trkLay" role="group" aria-label="배치"><span class="muted" style="font-size:13px;margin-right:6px">배치</span><button type="button" class="btn" data-lay="h" aria-pressed="true">좌우</button><button type="button" class="btn" data-lay="v" aria-pressed="false">위아래</button></span>
       <button class="btn" id="trkRefresh" type="button">새로고침</button>
       <button class="btn" id="trkShare" type="button" title="지금 보는 화면 그대로 HTML 파일이나 비밀번호 링크로 공유합니다.">공유하기</button>
+      <button class="btn" id="trkList" type="button" title="지금 수집 중인 품목을 정리된 양식(브랜드·구분·용량·입수·입수량)으로 받습니다. 이 양식으로 품목을 추가해서 올리면 됩니다.">품목 리스트 받기</button>
       <button class="btn primary" id="trkXlsx" type="button">엑셀로 내려받기</button>
     </div>
     <div class="trk-chips" id="trkChips" role="group" aria-label="세부 구분"></div>
@@ -1462,6 +1463,38 @@ html, body { height: auto; }
   $('trkFrom').addEventListener('change', () => { TRK.from = $('trkFrom').value; trkChartRender(); });
   $('trkTo').addEventListener('change', () => { TRK.to = $('trkTo').value; trkChartRender(); });
   $('trkXlsx').addEventListener('click', trkXlsx);
+  // 수집 품목 리스트: the item list as the tracker actually uses it (standard columns), to reuse as the upload form
+  async function trkListXlsx() {
+    if (!TRK.cfg) return;
+    const btn = $('trkList'); btn.disabled = true;
+    try {
+      const head = ['번호', '품목군', '구분자', '제조사', '브랜드', '구분(맛·단계·특성)', '용량', '입수(개입·T)', '입수량', '입수량 단위', '로켓직구조사필요',
+        '(참고) 추적 채널', '(참고) 검색어', '(참고) 이름에 꼭 있어야 할 말', '(참고) 이름에 있으면 제외', '(참고) 비교 방식', '(참고) ID'];
+      const rows = [head]; let no = 0;
+      for (const b of TRK.cfg.brands || []) for (const v of b.variants) {
+        const s = v.std || { brand: b.name, kind: v.name === b.name ? '' : v.name, size: v.size || '', pack: '' };
+        for (const q of v.qtys) rows.push([++no, b.group || '', v.sub || '', b.maker || '', s.brand, s.kind, s.size, s.pack, q, v.unit || '개',
+          (v.channels || []).includes('로켓직구') ? '필요' : '', (v.channels || []).join(', '), (v.keywords || []).join(' / '), (v.must || []).join(' + ').replace(/\|/g, ' 또는 '),
+          (v.exclude || '').replace(/\\/g, '').replace(/\|/g, ', '), v.mode === 'exact' ? `한 박스 ${v.per}T × 입수량 박스` : (v.per || 1) > 1 ? `총 ${v.per}×입수량 개` : '입수량 = 총 개수', v.id]);
+      }
+      const guide = [['항목', '설명'],
+        ['양식', '이 시트 그대로 품목을 추가·수정해서 데이터 창구로 올려주세요. 앞 11칸(번호~로켓직구조사필요)만 채우면 됩니다. (참고) 칸은 Claude가 정한 수집 규칙이라 비워도 됩니다.'],
+        ['브랜드', '용량·입수 숫자를 뺀 제품 이름 (예: 서울우유 우유, 맥심 모카골드 마일드, 앱솔루트 명작)'],
+        ['구분', '맛·단계·제품 성격 (예: 1단계, 초코, 저지방, 무가당 플레인, 락토프리, A 담백한)'],
+        ['용량', '한 개의 용량 (예: 800g, 190ml, 1L, 2.3L)'],
+        ['입수(개입·T)', '한 묶음 안의 개수. 커피는 스틱 수(160T), 요구르트는 묶음 입수(10입). 해당 없으면 비움'],
+        ['입수량', '판매 단위 수량. 분유·우유는 캔/병 수, 커피는 박스 수, 두유·음료는 팩 수 (예: 24)'],
+        ['로켓직구조사필요', '로켓직구도 볼 품목만 "필요"'],
+        ['채널', '로켓배송 · 로켓프레시 · G마켓 · 11번가 · N배송 · 슈팅배송 (+로켓직구). 판매자배송은 추적하지 않음']];
+      const blob = await buildXlsx([{ name: '수집 품목 리스트', rows, header: true }, { name: '작성 안내', rows: guide, header: true, wrap: [1], widths: [16, 100] }]);
+      const a = document.createElement('a'), url = URL.createObjectURL(blob);
+      a.href = url; a.download = `가격 추적 수집 품목 리스트 (${rows.length - 1}개).xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { $('trkErr').textContent = '품목 리스트를 만들지 못했습니다. ' + (e.message || ''); $('trkErr').hidden = false; }
+    btn.disabled = false;
+  }
+  $('trkList').addEventListener('click', trkListXlsx);
   $('trkCG').addEventListener('change', () => { trkChartRender(); trkMarkProd(); });
   const trkMarkProd = () => { for (const th of document.querySelectorAll('#trkTables th.trk-prod')) th.classList.toggle('on', th.dataset.g === $('trkCG').value); };
   $('trkTables').addEventListener('click', e => { const th = e.target.closest('th.trk-prod'); if (!th) return; $('trkCG').value = th.dataset.g; trkChartRender(); trkMarkProd(); });
