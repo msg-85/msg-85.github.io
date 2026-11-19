@@ -62,7 +62,12 @@ a { color: var(--out); }
 .trk-t tbody tr.trk-brand th { background: var(--panel); color: var(--s2); font-weight: 700; }
 .trk-t tbody th.trk-sub { padding-left: 18px; font-weight: 500; }
 #trkModeBox { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
-.trk-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(300px, 1fr); gap: 12px; }
+.trk-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(360px, 1fr) minmax(0, 1.5fr); gap: 14px; }
+.trk-split.v { display: flex; flex-direction: column; overflow: auto; }
+.trk-split.v .trk-left, .trk-split.v .trk-right { overflow: visible; flex-shrink: 0; }
+.trk-h { font-size: 15px; margin: 0; padding-bottom: 4px; border-bottom: 2px solid var(--s2); }
+.trk-h small { font-weight: 400; font-size: 12px; margin-left: 6px; }
+.trk-seg [data-lay][aria-pressed="true"] { background: var(--s2); border-color: var(--s2); color: #fff; font-weight: 700; }
 .trk-left, .trk-right { min-height: 0; min-width: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
 .trk-left .tw { flex-shrink: 0; overflow: visible; }
 .trk-t th, .trk-t td { padding: 3px 6px; }
@@ -366,28 +371,30 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <span class="trk-seg" role="group" aria-label="조회 기준"><button type="button" class="btn" data-by="prod" aria-pressed="true">제품</button><button type="button" class="btn" data-by="ch" aria-pressed="false">채널</button></span>
       <select id="trkSel" aria-label="브랜드 또는 채널 고르기"></select>
       <span class="grow" id="trkInfo"></span>
+      <span class="trk-seg" id="trkLay" role="group" aria-label="배치"><span class="muted" style="font-size:13px;margin-right:6px">배치</span><button type="button" class="btn" data-lay="h" aria-pressed="true">좌우</button><button type="button" class="btn" data-lay="v" aria-pressed="false">위아래</button></span>
       <button class="btn" id="trkRefresh" type="button">새로고침</button>
       <button class="btn" id="trkShare" type="button" title="지금 보는 화면 그대로 HTML 파일이나 비밀번호 링크로 공유합니다.">공유하기</button>
       <button class="btn primary" id="trkXlsx" type="button">엑셀로 내려받기</button>
     </div>
     <div class="trk-chips" id="trkChips" role="group" aria-label="세부 구분"></div>
     <div class="trk-split" id="trkView">
+      <div class="trk-right">
+        <h3 class="trk-h">판매가 시계열 흐름</h3>
+        <div class="trk-ctl">
+          <select id="trkCG" aria-label="그래프 제품"></select>
+          <span id="trkModeBox">
+            <label><input type="radio" name="trkMode" value="ch" checked> 입수량 하나 · 채널별 비교</label>
+            <label><input type="radio" name="trkMode" value="q"> 채널 하나 · 입수량별 개당 가격</label>
+          </span>
+          <select id="trkPick" aria-label="그래프 기준"></select>
+          <span>기간 <select id="trkFrom" aria-label="그래프 시작일"></select> ~ <select id="trkTo" aria-label="그래프 종료일"></select></span>
+        </div>
+        <div id="trkChart"></div>
+      </div>
       <div class="trk-left">
+        <h3 class="trk-h">특정일 판매현황 <small class="muted" id="trkAsOf"></small></h3>
         <div id="trkTables" class="trk-tables"></div>
         <p class="cn muted" id="trkNote" style="margin:0;font-size:13px;white-space:pre-line"></p>
-      </div>
-      <div class="trk-right">
-      <div class="trk-ctl">
-        <b>그래프</b>
-        <select id="trkCG" aria-label="그래프 제품"></select>
-        <span id="trkModeBox">
-          <label><input type="radio" name="trkMode" value="ch" checked> 입수량 하나 · 채널별 비교</label>
-          <label><input type="radio" name="trkMode" value="q"> 채널 하나 · 입수량별 개당 가격</label>
-        </span>
-        <select id="trkPick" aria-label="그래프 기준"></select>
-        <span>기간 <select id="trkFrom" aria-label="그래프 시작일"></select> ~ <select id="trkTo" aria-label="그래프 종료일"></select></span>
-      </div>
-      <div id="trkChart"></div>
       </div>
     </div>
     <p class="err" id="trkErr" hidden></p>
@@ -1089,7 +1096,8 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     return { vx: (e.clientX - r.left) * W / r.width, cx: e.clientX - cr.left, cy: e.clientY - cr.top };
   }
   function lineChart(ch, series, tip, card) {
-    const W = 560, H = 240, L = 54, R = 14, T = 10, B = 26, x = ch.x || [];
+    const W = ch.w || 560, H = 240, L = 54, R = 14, T = 10, B = 26, x = ch.x || [];
+    const step = Math.max(1, Math.ceil(x.length / Math.max(2, Math.floor((W - L - R) / 72)))), dot = x.length > 30 ? 2 : x.length > 15 ? 3 : 4;
     const all = series.flatMap(s => s.values).filter(v => v != null);
     let lo = Math.min(...all), hi = Math.max(...all);
     if (ch.zero !== false && lo >= 0 && lo < hi * 0.5) lo = 0;
@@ -1098,13 +1106,13 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const py = v => T + (hi - v) * (H - T - B) / (hi - lo);
     const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': ch.title || '' });
     for (const v of tk) { sv('line', { x1: L, x2: W - R, y1: py(v), y2: py(v), stroke: 'var(--grid)' }, svg); sv('text', { x: L - 6, y: py(v) + 4, 'text-anchor': 'end' }, svg).textContent = fmt(v); }
-    x.forEach((lab, i) => { sv('text', { x: px(i), y: H - 8, 'text-anchor': x.length > 1 && i === x.length - 1 ? 'end' : 'middle' }, svg).textContent = lab; });
+    x.forEach((lab, i) => { const lastI = x.length - 1; if (i % step && i !== lastI) return; if (i === lastI && i % step && i % step < step / 2) return; sv('text', { x: px(i), y: H - 8, 'text-anchor': x.length > 1 && i === lastI ? 'end' : i === 0 && x.length > 1 ? 'start' : 'middle' }, svg).textContent = lab; });
     const cross = sv('line', { y1: T, y2: H - B, stroke: 'var(--muted)', 'stroke-dasharray': '3 3', visibility: 'hidden' }, svg);
     series.forEach((s, si) => {
       const c = COLORS[si % COLORS.length]; let d = '';
       s.values.forEach((v, i) => { if (v == null) return; d += (d && s.values[i - 1] != null ? 'L' : 'M') + px(i) + ' ' + py(v); });
       sv('path', { d, fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
-      s.values.forEach((v, i) => { if (v != null) sv('circle', { cx: px(i), cy: py(v), r: 4, fill: c, stroke: 'var(--sheet)', 'stroke-width': 2 }, svg); });
+      s.values.forEach((v, i) => { if (v != null) sv('circle', { cx: px(i), cy: py(v), r: dot, fill: c, stroke: 'var(--sheet)', 'stroke-width': dot > 2 ? 2 : 1 }, svg); });
     });
     const hit = sv('rect', { x: L - 20, y: 0, width: W - L - R + 40, height: H, fill: 'transparent' }, svg);
     const move = e => {
@@ -1127,7 +1135,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(0시 20분/9시 30분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요.';
   const TRK_KEY = 'data-window-trk';
   try { Object.assign(TRK, JSON.parse(localStorage.getItem(TRK_KEY) || '{}'), { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [] }); } catch (e) {}
-  const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip })); } catch (e) {} };
+  const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay })); } catch (e) {} };
   const won = v => v == null ? '–' : Math.round(v).toLocaleString() + '원';
   function trkFlatten(cfg) {
     // old layout (groups[]) becomes one brand per group
@@ -1317,7 +1325,7 @@ html, body { height: auto; }
   }
   function trkRender() {
     if (!TRK.cfg) return;
-    for (const bt of document.querySelectorAll('.trk-seg .btn')) bt.setAttribute('aria-pressed', String(bt.dataset.by === TRK.by));
+    for (const bt of document.querySelectorAll('.trk-seg .btn[data-by]')) bt.setAttribute('aria-pressed', String(bt.dataset.by === TRK.by));
     const sel = $('trkSel'), chips = $('trkChips'), box = $('trkTables');
     chips.replaceChildren(); box.replaceChildren();
     if (!TRK.brands.length) { $('trkInfo').textContent = '추적 중인 제품이 없습니다.'; return; }
@@ -1348,9 +1356,10 @@ html, body { height: auto; }
     const days = trkDays(), ds = $('trkDate');
     if (TRK.date && !days.includes(TRK.date)) TRK.date = '';
     ds.replaceChildren(...[['', '최근 (' + (days[days.length - 1] || '-') + ')'], ...days.slice().reverse().map(d => [d, d])].map(([v, t]) => { const o = el('option', '', t); o.value = v; return o; }));
-    ds.value = TRK.date;
+    ds.value = TRK.date || "";
     const shown = trkViewGroups().map(g => { const x = TRK.idx[g.id]; return x.times[trkCut(x)]; }).filter(Boolean).sort();
     const last = shown[shown.length - 1];
+    $('trkAsOf').textContent = last ? `${last} 기록` : '';
     $('trkInfo').textContent = last ? `${TRK.date ? TRK.date + ' 기준' : '최근 기준'} · 표는 ${last} 기록 · 매일 0시 20분·9시 30분 자동 기록` : '이 날짜까지 기록이 없습니다. 매일 0시 20분·9시 30분에 기록됩니다.';
     trkChartRender(); trkMarkProd();
   }
@@ -1394,7 +1403,9 @@ html, body { height: auto; }
       : g.qtys.map(q => ({ name: q + g.unit, values: times.map(t => { const p = at(t, q, v); return p == null ? null : Math.round(p / q); }) }));
     const shown = series.filter(s => s.values.some(y => y != null)).slice(0, 6);
     if (!shown.length) { box.appendChild(el('p', 'muted', '이 조건으로 기록된 가격이 없습니다.')); return; }
+    const cw = box.clientWidth || 560, wantH = TRK.lay === 'v' ? 300 : 340;
     box.appendChild(chart({
+      w: Math.max(560, Math.round(cw * 240 / wantH)),
       type: 'line', zero: false, unit: '원', x: times.map(trkLabel), series: shown,
       title: mode === 'ch' ? `${g.title} ${v}${g.unit} · 채널별 가격` : `${g.title} · ${v} · 입수량별 ${g.unit}당 가격`,
       note: times.length < 2 ? '기록이 2회 이상 쌓이면 선으로 이어집니다.' : '',
@@ -1423,9 +1434,16 @@ html, body { height: auto; }
     } catch (e) { $('trkErr').textContent = '엑셀 파일을 만들지 못했습니다. ' + (e.message || ''); $('trkErr').hidden = false; }
     btn.disabled = false;
   }
-  for (const bt of document.querySelectorAll('.trk-seg .btn')) bt.addEventListener('click', () => { TRK.by = bt.dataset.by; trkSave(); trkRender(); });
+  for (const bt of document.querySelectorAll('.trk-seg .btn[data-by]')) bt.addEventListener('click', () => { TRK.by = bt.dataset.by; trkSave(); trkRender(); });
   $('trkSel').addEventListener('change', () => { TRK.sel[TRK.by] = $('trkSel').value; trkSave(); trkRender(); });
   $('trkRefresh').addEventListener('click', () => trkLoad(true));
+  function trkLayApply() {
+    $('trkView').classList.toggle('v', TRK.lay === 'v');
+    for (const b of document.querySelectorAll('#trkLay .btn')) b.setAttribute('aria-pressed', String(b.dataset.lay === (TRK.lay || 'h')));
+  }
+  trkLayApply();
+  for (const b of document.querySelectorAll('#trkLay .btn')) b.addEventListener('click', () => { TRK.lay = b.dataset.lay; trkSave(); trkLayApply(); trkChartRender(); });
+  window.addEventListener('resize', () => { if (TRK.cfg && !$('trackPane').hidden) { clearTimeout(TRK.rz); TRK.rz = setTimeout(trkChartRender, 200); } });
   $('trkDate').addEventListener('change', () => { TRK.date = $('trkDate').value; trkRender(); });
   $('trkFrom').addEventListener('change', () => { TRK.from = $('trkFrom').value; trkChartRender(); });
   $('trkTo').addEventListener('change', () => { TRK.to = $('trkTo').value; trkChartRender(); });
