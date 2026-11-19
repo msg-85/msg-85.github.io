@@ -1132,7 +1132,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   //           채널 = one channel → rows = products (brand › variant), columns = 입수량.
   const TRK = { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [], by: 'prod', sel: {}, chip: {} };
   const OTHER = '로켓 제외 최저가';
-  const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(0시 20분/9시 30분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고 「유사 상품」 시트에 따로 모았습니다.';
+  const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(0시 20분/13시 30분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고 「유사 상품」 시트에 따로 모았습니다.';
   const TRK_KEY = 'data-window-trk';
   try { Object.assign(TRK, JSON.parse(localStorage.getItem(TRK_KEY) || '{}'), { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [] }); } catch (e) {}
   const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay })); } catch (e) {} };
@@ -1359,7 +1359,7 @@ html, body { height: auto; }
     const shown = trkViewGroups().map(g => { const x = TRK.idx[g.id]; return x.times[trkCut(x)]; }).filter(Boolean).sort();
     const last = shown[shown.length - 1];
     $('trkAsOf').textContent = last ? `${last} 기록` : '';
-    $('trkInfo').textContent = last ? `${TRK.date ? TRK.date + ' 기준' : '최근 기준'} · 표는 ${last} 기록 · 매일 0시 20분·9시 30분 자동 기록` : '이 날짜까지 기록이 없습니다. 매일 0시 20분·9시 30분에 기록됩니다.';
+    $('trkInfo').textContent = last ? `${TRK.date ? TRK.date + ' 기준' : '최근 기준'} · 표는 ${last} 기록 · 매일 0시 20분·13시 30분 자동 기록` : '이 날짜까지 기록이 없습니다. 매일 0시 20분·13시 30분에 기록됩니다.';
     trkChartRender(); trkMarkProd();
   }
   function trkChartRender() {
