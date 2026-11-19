@@ -1132,7 +1132,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   //           채널 = one channel → rows = products (brand › variant), columns = 입수량.
   const TRK = { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [], by: 'prod', sel: {}, chip: {} };
   const OTHER = '로켓 제외 최저가';
-  const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(0시 20분/9시 30분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요.';
+  const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(0시 20분/9시 30분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고 「유사 상품」 시트에 따로 모았습니다.';
   const TRK_KEY = 'data-window-trk';
   try { Object.assign(TRK, JSON.parse(localStorage.getItem(TRK_KEY) || '{}'), { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [] }); } catch (e) {}
   const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay })); } catch (e) {} };
@@ -1166,9 +1166,9 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
           const t = split(clean(csvText), ',');
           const h = t.shift() || [];
           const ix = n => h.indexOf(n);
-          for (const r of t) if (r.length >= h.length) TRK.rows.push({
+          for (const r of t) if (r.length >= 8) TRK.rows.push({
             at: r[ix('at')], group: r[ix('group')], qty: +r[ix('qty')], ch: r[ix('channel')],
-            price: r[ix('price')] === '' ? null : +r[ix('price')], listings: +r[ix('listings')] || 0, trend: r[ix('trend')], name: r[ix('name')],
+            price: r[ix('price')] === '' ? null : +r[ix('price')], listings: +r[ix('listings')] || 0, trend: r[ix('trend')], name: r[ix('name')], flag: ix('flag') >= 0 ? r[ix('flag')] || '' : '',
           });
         }
         trkIndex();
@@ -1183,8 +1183,8 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   // index: group → { times[], rows[], cell Map(at|qty|ch → row) }
   function trkIndex() {
     TRK.idx = {};
-    for (const g of TRK.groups) TRK.idx[g.id] = { times: [], cell: new Map(), rows: [] };
-    for (const r of TRK.rows) { const x = TRK.idx[r.group]; if (!x) continue; x.rows.push(r); x.cell.set(r.at + '|' + r.qty + '|' + r.ch, r); }
+    for (const g of TRK.groups) TRK.idx[g.id] = { times: [], cell: new Map(), rows: [], sim: [] };
+    for (const r of TRK.rows) { const x = TRK.idx[r.group]; if (!x) continue; if (r.flag) { x.sim.push(r); continue; } x.rows.push(r); x.cell.set(r.at + '|' + r.qty + '|' + r.ch, r); }
     for (const id in TRK.idx) TRK.idx[id].times = [...new Set(TRK.idx[id].rows.map(r => r.at))].sort();
   }
   const trkScope = () => TRK.by === 'ch' ? `채널 기준 · ${TRK.sel.ch}` : (() => { const b = TRK.brands.find(x => x.id === TRK.sel.prod) || TRK.brands[0]; const v = b && b.variants.find(x => x.id === TRK.chip[b.id]); return `제품 기준 · ${b ? b.name : ''}${v ? ' ' + v.name : b && b.variants.length > 1 ? ' 전체' : ''}`; })();
@@ -1420,10 +1420,15 @@ html, body { height: auto; }
         now.push([g.bname, g.name, q + g.unit, ...chs.flatMap(c => { const r = g.channels.includes(c) && trkCell(g, q, c); return r ? [r.price, Math.round(r.price / q)] : ['', '']; }),
           TRK.idx[g.id].times[trkCut(TRK.idx[g.id])] || '']);
       }
-      const all = [['기록 시각', '브랜드', '구분', '입수량', '채널', '가격', '개당', '같은 조건 상품 수', '폴센트 표시', '상품명']];
-      for (const g of gs) for (const r of TRK.idx[g.id].rows) if (r.price != null)
-        all.push([r.at, g.bname, g.name, r.qty, r.ch, r.price, Math.round(r.price / r.qty), r.listings, r.trend === 'up' ? '상승' : r.trend === 'down' ? '하락' : '', r.name]);
-      const blob = await buildXlsx([{ name: TRK.date ? TRK.date + ' 기준 가격' : '최근 가격', rows: now, header: true }, { name: '전체 기록', rows: all, header: true }]);
+      const head = ['기록 시각', '브랜드', '구분', '입수량', '채널', '가격', '개당', '같은 조건 상품 수', '폴센트 표시', '상품명', '기준/유사'];
+      const line = (g, r) => [r.at, g.bname, g.name, r.qty, r.ch, r.price, Math.round(r.price / r.qty), r.listings, r.trend === 'up' ? '상승' : r.trend === 'down' ? '하락' : '', r.name, r.flag ? '유사 상품' : '기준'];
+      const all = [head], sim = [head];
+      for (const g of gs) {
+        const x = TRK.idx[g.id];
+        for (const r of [...x.rows, ...x.sim].sort((a, b) => a.at.localeCompare(b.at) || a.qty - b.qty || a.ch.localeCompare(b.ch) || (a.flag ? 1 : -1))) if (r.price != null) all.push(line(g, r));
+        for (const r of x.sim) if (r.price != null) sim.push(line(g, r));
+      }
+      const blob = await buildXlsx([{ name: TRK.date ? TRK.date + ' 기준 가격' : '최근 가격', rows: now, header: true }, { name: '전체 기록', rows: all, header: true }, { name: '유사 상품', rows: sim.length > 1 ? sim : [['유사 상품으로 분류된 기록이 없습니다. (이름이 비슷하지만 다른 상품 — 예: 직구판 PRE·어드밴스 HMO — 은 여기에 따로 모입니다.)']], header: sim.length > 1 }]);
       const what = TRK.by === 'ch' ? '전체 제품' : (TRK.brands.find(b => b.id === TRK.sel.prod) || {}).name || '';
       const a = document.createElement('a'), url = URL.createObjectURL(blob);
       a.href = url; a.download = `가격 추적 - ${what}.xlsx`.replace(/[\\/:*?"<>|]+/g, ' ');
