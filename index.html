@@ -386,6 +386,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <button class="btn" id="trkList" type="button" title="지금 수집 중인 품목을 정리된 양식(브랜드·구분·용량·입수·입수량)으로 받습니다. 이 양식으로 품목을 추가해서 올리면 됩니다.">품목 리스트 받기</button>
       <button class="btn primary" id="trkXlsx" type="button">엑셀로 내려받기</button>
     </div>
+    <details class="trk-stat" id="trkReq"><summary id="trkReqSum">요청 · 수정</summary><div id="trkReqBody"></div></details>
     <details class="trk-stat" id="trkStat"><summary id="trkStatSum">추적 현황</summary><div id="trkStatBody"></div></details>
     <div class="trk-chips" id="trkChips" role="group" aria-label="세부 구분"></div>
     <div class="trk-split" id="trkView">
@@ -1184,6 +1185,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         }
         trkIndex();
         trkRender();
+        trkReqLoad();
       } catch (e) {
         $('trkInfo').textContent = '';
         $('trkErr').textContent = e.status === 404 ? '아직 추적 설정이 없습니다.' : '불러오지 못했습니다. ' + (e.status ? explain(e) : (e.message || '')); $('trkErr').hidden = false;
@@ -1242,7 +1244,7 @@ html, body { height: auto; }
     document.body.classList.add('live');
     document.querySelector('.top h1').textContent = '공유된 가격 추적 (보기 전용)';
     $('loginPane').hidden = true; $('sendPane').hidden = true; $('readPane').hidden = true; $('trackPane').hidden = false;
-    $('trkRefresh').hidden = true; $('trkShare').hidden = true;
+    $('trkRefresh').hidden = true; $('trkShare').hidden = true; $('trkReq').hidden = true;
     TRK.cfg = L.cfg; Object.assign(TRK, trkFlatten(L.cfg));
     TRK.rows = (L.rows || []).map(r => ({ at: r[0], group: r[1], qty: r[2], ch: r[3], price: r[4], listings: r[5], trend: r[6], name: r[7] }));
     if (L.state) { TRK.by = L.state.by || 'prod'; TRK.sel = L.state.sel || {}; TRK.chip = L.state.chip || {}; }
@@ -1381,6 +1383,44 @@ html, body { height: auto; }
     $('trkAsOf').textContent = last ? `${last} 기록` : '';
     $('trkInfo').textContent = last ? `${TRK.date ? TRK.date + ' 기준' : '최근 기준'} · 표는 ${last} 기록 · 매일 10시 01분·23시 31분 자동 기록` : '이 날짜까지 기록이 없습니다. 매일 10시 01분·23시 31분에 기록됩니다.';
     trkChartRender(); trkMarkProd(); trkStatus();
+  }
+  // 요청 · 수정: requests saved to price-data requests/tracker/<stamp>.json; Claude answers in <stamp>.answer.json
+  let trkReqBusy = null;
+  async function trkReqLoad() {
+    const my = trkReqBusy = {};
+    const body = $('trkReqBody');
+    let who = ''; try { who = localStorage.getItem('data-window-who') || ''; } catch (e) {}
+    body.innerHTML = '<div class="req"><p class="muted" style="margin:0">품목 추가·수정, 안 잡히는 품목 확인 등 요청을 적어 저장하세요. 저장 후 디스코드에 <b>"요청 넣음"</b>이라고 보내주시면 Claude가 반영하고 여기에 답을 답니다.</p>' +
+      '<div class="bar"><label class="field" style="flex:0 0 160px">작성자<input id="trkReqWho" type="text" maxlength="20" placeholder="예: 김대리"></label><span class="grow"></span></div>' +
+      '<textarea id="trkReqText" maxlength="4000" rows="3" style="width:100%" placeholder="예: 앱솔루트 산양 5캔은 빼고 4캔으로 바꿔줘 / 카누 라떼 30T 안 잡히는 이유 확인해줘"></textarea>' +
+      '<div class="bar"><span class="grow" id="trkReqInfo"></span><button type="button" class="btn primary" id="trkReqSend">요청 저장</button></div></div><div class="ins" id="trkReqList"><p class="muted">불러오는 중…</p></div>';
+    $('trkReqWho').value = who;
+    $('trkReqSend').addEventListener('click', trkReqSend);
+    try {
+      let items = [];
+      try { items = await (await api('/contents/requests/tracker')).json(); } catch (e) { if (e.status !== 404) throw e; }
+      const names = new Set(items.filter(i => i.type === 'file').map(i => i.name));
+      const qs = [...names].filter(n => /^\d{8}-\d{6}\.json$/.test(n)).sort().reverse().slice(0, 30);
+      const get = async n => JSON.parse(await (await api('/contents/requests/tracker/' + n, { accept: 'application/vnd.github.raw+json' })).text());
+      const out = await Promise.all(qs.map(async n => ({ n, q: await get(n), a: names.has(n.replace(/\.json$/, '.answer.json')) ? await get(n.replace(/\.json$/, '.answer.json')) : null })));
+      if (my !== trkReqBusy) return;
+      const wait = out.filter(x => !x.a).length;
+      $('trkReqSum').innerHTML = '<b>요청 · 수정</b> · ' + out.length + '건' + (wait ? ' · <span class="ng">답 대기 ' + wait + '건</span>' : '') + ' <span class="muted">(눌러서 펼치기)</span>';
+      $('trkReqList').innerHTML = out.length ? out.map(({ n, q, a }) => '<div class="qa"><div class="muted">' + esc(n.slice(0, 13).replace(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/, '$1-$2-$3 $4:$5')) + (q.who ? ' · ' + esc(q.who) : '') + '</div><div class="q">' + esc(q.text || '') + '</div>' + (a ? ansHtml(a) : '<div class="a muted">답 기다리는 중 (디스코드에 "요청 넣음"을 보냈는지 확인해 주세요)</div>') + '</div>').join('') : '<p class="muted">아직 요청이 없습니다.</p>';
+    } catch (e) { if (my === trkReqBusy) $('trkReqList').innerHTML = '<p class="err">' + esc(explain(e)) + '</p>'; }
+  }
+  async function trkReqSend() {
+    const text = $('trkReqText').value.trim(); if (!text) { $('trkReqInfo').textContent = '요청을 적어주세요.'; return; }
+    const who = $('trkReqWho').value.trim(); try { localStorage.setItem('data-window-who', who); } catch (e) {}
+    const p2 = n => String(n).padStart(2, '0'), d = new Date();
+    const stamp = '' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '-' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds());
+    const body = { text, who, scope: trkScope(), date: TRK.date || '최근', createdAt: d.toISOString() };
+    $('trkReqSend').disabled = true; $('trkReqInfo').textContent = '저장하는 중…';
+    try {
+      await put('requests/tracker/' + stamp + '.json', toBase64(new TextEncoder().encode(JSON.stringify(body, null, 2))), 'tracker request ' + stamp);
+      await trkReqLoad();
+      $('trkReqInfo').textContent = '저장했습니다 (' + stamp + '). 디스코드에 "요청 넣음"이라고 보내주세요.';
+    } catch (e) { $('trkReqInfo').textContent = '저장하지 못했습니다. ' + explain(e); $('trkReqSend').disabled = false; }
   }
   // 추적 현황: per 품목군, how many (product × 입수량) rows have a price in the record shown in the table
   function trkStatus() {
