@@ -62,6 +62,13 @@ a { color: var(--out); }
 .trk-t tbody tr.trk-brand th { background: var(--panel); color: var(--s2); font-weight: 700; }
 .trk-t tbody th.trk-sub { padding-left: 18px; font-weight: 500; }
 #trkModeBox { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
+.trk-stat { background: var(--sheet); border: 1px solid var(--line); padding: 6px 10px; font-size: 14px; flex-shrink: 0; }
+.trk-stat > summary { cursor: pointer; }
+.trk-stat .ok { color: var(--s3); font-weight: 600; } .trk-stat .ng { color: var(--warn); font-weight: 600; cursor: pointer; }
+.trk-stat table { margin-top: 6px; width: auto; }
+.trk-stat td, .trk-stat th { vertical-align: top; }
+.trk-stat ul { margin: 4px 0 2px; padding-left: 18px; font-size: 13px; white-space: normal; }
+.trk-stat p { margin: 4px 0 0; font-size: 12px; }
 .trk-star { font-size: 13px; background: var(--sheet); border: 1px solid var(--s4); padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
 .trk-star b { color: var(--s4); }
 .trk-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(400px, 1.15fr) minmax(0, 1.2fr); gap: 14px; }
@@ -379,6 +386,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <button class="btn" id="trkList" type="button" title="지금 수집 중인 품목을 정리된 양식(브랜드·구분·용량·입수·입수량)으로 받습니다. 이 양식으로 품목을 추가해서 올리면 됩니다.">품목 리스트 받기</button>
       <button class="btn primary" id="trkXlsx" type="button">엑셀로 내려받기</button>
     </div>
+    <details class="trk-stat" id="trkStat"><summary id="trkStatSum">추적 현황</summary><div id="trkStatBody"></div></details>
     <div class="trk-chips" id="trkChips" role="group" aria-label="세부 구분"></div>
     <div class="trk-split" id="trkView">
       <div class="trk-right">
@@ -1146,7 +1154,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const groups = [];
     for (const b of brands) for (const v of b.variants) groups.push({
       id: v.id, brand: b, bname: b.name, name: v.name, title: b.variants.length > 1 || v.name !== b.name ? `${b.name} ${v.name}` : b.name,
-      unit: v.unit || b.unit || '개', qtys: v.qtys || b.qtys, channels: v.channels || b.channels,
+      unit: v.unit || b.unit || '개', qtys: v.qtys || b.qtys, channels: v.channels || b.channels, std: v.std,
     });
     return { brands, groups };
   }
@@ -1372,7 +1380,35 @@ html, body { height: auto; }
     const last = shown[shown.length - 1];
     $('trkAsOf').textContent = last ? `${last} 기록` : '';
     $('trkInfo').textContent = last ? `${TRK.date ? TRK.date + ' 기준' : '최근 기준'} · 표는 ${last} 기록 · 매일 10시 01분·23시 31분 자동 기록` : '이 날짜까지 기록이 없습니다. 매일 10시 01분·23시 31분에 기록됩니다.';
-    trkChartRender(); trkMarkProd();
+    trkChartRender(); trkMarkProd(); trkStatus();
+  }
+  // 추적 현황: per 품목군, how many (product × 입수량) rows have a price in the record shown in the table
+  function trkStatus() {
+    const by = new Map(); let all = 0, ok = 0;
+    for (const g of TRK.groups) {
+      const k = g.brand.group || '기타'; if (!by.has(k)) by.set(k, { n: 0, ok: 0, cp: 0, miss: [] });
+      const r = by.get(k);
+      for (const q of g.qtys) {
+        const got = g.channels.filter(ch => trkCell(g, q, ch));
+        r.n++; all++;
+        if (got.length) { r.ok++; ok++; if (got.some(c => /로켓/.test(c))) r.cp++; }
+        else r.miss.push(`${g.title}${g.std && g.std.size ? ' ' + g.std.size : ''}${g.std && g.std.pack ? ' ' + g.std.pack : ''} · ${q}${g.unit}`);
+      }
+    }
+    $('trkStatSum').innerHTML = `<b>추적 현황</b> · 전체 ${all}개 중 <span class="ok">${ok}개 잡힘</span> · <span class="ng">${all - ok}개 안 잡힘</span> <span class="muted">(${TRK.date ? TRK.date + ' 기준' : '최근 기록 기준'} · 눌러서 펼치기)</span>`;
+    const t = el('table', 'at'), hd = el('tr');
+    for (const h of ['품목군', '전체', '잡힘', '쿠팡 계열', '안 잡힘 (눌러서 목록)']) hd.appendChild(el('th', '', h));
+    const th = el('thead'); th.appendChild(hd); t.appendChild(th); const tb = el('tbody');
+    for (const [k, r] of by) {
+      const tr = el('tr'); tr.appendChild(el('th', '', k));
+      for (const v of [r.n, r.ok, r.cp]) tr.appendChild(el('td', 'num', String(v)));
+      const td = el('td');
+      if (!r.miss.length) td.appendChild(el('span', 'ok', '0개 ✓'));
+      else { const d = el('details'); d.appendChild(el('summary', 'ng', r.miss.length + '개')); const ul = el('ul'); for (const m of r.miss) ul.appendChild(el('li', '', m)); d.appendChild(ul); td.appendChild(d); }
+      tr.appendChild(td); tb.appendChild(tr);
+    }
+    t.appendChild(tb);
+    const body = $('trkStatBody'); body.replaceChildren(t, el('p', 'muted', '잡힘 = 추적 채널 중 한 곳 이상에서 그 입수량 가격이 기록됨. 안 잡힌 줄은 그 묶음을 파는 곳이 없거나, 이름이 달라 규칙에 안 걸린 경우입니다. 이상하면 Claude에게 "추적 안 된 거 확인해줘"라고 보내주세요.'));
   }
   function trkChartRender() {
     const gs = trkViewGroups(), cg = $('trkCG');
@@ -1452,6 +1488,8 @@ html, body { height: auto; }
   for (const bt of document.querySelectorAll('.trk-seg .btn[data-by]')) bt.addEventListener('click', () => { TRK.by = bt.dataset.by; trkSave(); trkRender(); });
   $('trkSel').addEventListener('change', () => { TRK.sel[TRK.by] = $('trkSel').value; trkSave(); trkRender(); });
   $('trkRefresh').addEventListener('click', () => trkLoad(true));
+  try { $('trkStat').open = localStorage.getItem('data-window-trk-stat') === '1'; } catch (e) {}
+  $('trkStat').addEventListener('toggle', () => { try { localStorage.setItem('data-window-trk-stat', $('trkStat').open ? '1' : '0'); } catch (e) {} });
   function trkLayApply() {
     $('trkView').classList.toggle('v', TRK.lay === 'v');
     for (const b of document.querySelectorAll('#trkLay .btn')) b.setAttribute('aria-pressed', String(b.dataset.lay === (TRK.lay || 'h')));
@@ -1468,14 +1506,15 @@ html, body { height: auto; }
     if (!TRK.cfg) return;
     const btn = $('trkList'); btn.disabled = true;
     try {
-      const head = ['번호', '품목군', '구분자', '제조사', '브랜드', '구분(맛·단계·특성)', '용량', '입수(개입·T)', '입수량', '입수량 단위', '로켓직구조사필요',
+      const head = ['번호', '품목군', '구분자', '제조사', '브랜드', '구분(맛·단계·특성)', '용량', '입수(개입·T)', '입수량', '입수량 단위', '로켓직구조사필요', '조사 상태 (최근 기록)', '잡힌 채널',
         '(참고) 추적 채널', '(참고) 검색어', '(참고) 이름에 꼭 있어야 할 말', '(참고) 이름에 있으면 제외', '(참고) 비교 방식', '(참고) ID'];
       const rows = [head]; let no = 0;
       for (const b of TRK.cfg.brands || []) for (const v of b.variants) {
         const s = v.std || { brand: b.name, kind: v.name === b.name ? '' : v.name, size: v.size || '', pack: '' };
-        for (const q of v.qtys) rows.push([++no, b.group || '', v.sub || '', b.maker || '', s.brand, s.kind, s.size, s.pack, q, v.unit || '개',
-          (v.channels || []).includes('로켓직구') ? '필요' : '', (v.channels || []).join(', '), (v.keywords || []).join(' / '), (v.must || []).join(' + ').replace(/\|/g, ' 또는 '),
-          (v.exclude || '').replace(/\\/g, '').replace(/\|/g, ', '), v.mode === 'exact' ? `한 박스 ${v.per}T × 입수량 박스` : (v.per || 1) > 1 ? `총 ${v.per}×입수량 개` : '입수량 = 총 개수', v.id]);
+        const g = TRK.groups.find(x => x.id === v.id);
+        for (const q of v.qtys) { const got = g ? g.channels.filter(ch => trkCell(g, q, ch)) : []; rows.push([++no, b.group || '', v.sub || '', b.maker || '', s.brand, s.kind, s.size, s.pack, q, v.unit || '개',
+          (v.channels || []).includes('로켓직구') ? '필요' : '', got.length ? `조사됨 (${got.length}곳)` : '안 잡힘', got.join(', '), (v.channels || []).join(', '), (v.keywords || []).join(' / '), (v.must || []).join(' + ').replace(/\|/g, ' 또는 '),
+          (v.exclude || '').replace(/\\/g, '').replace(/\|/g, ', '), v.mode === 'exact' ? `한 박스 ${v.per}T × 입수량 박스` : (v.per || 1) > 1 ? `총 ${v.per}×입수량 개` : '입수량 = 총 개수', v.id]); }
       }
       const guide = [['항목', '설명'],
         ['양식', '이 시트 그대로 품목을 추가·수정해서 데이터 창구로 올려주세요. 앞 11칸(번호~로켓직구조사필요)만 채우면 됩니다. (참고) 칸은 Claude가 정한 수집 규칙이라 비워도 됩니다.'],
