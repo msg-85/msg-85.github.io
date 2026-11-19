@@ -427,6 +427,10 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     <div class="shm">
       <label><input type="radio" name="shMode" id="shModeFixed" checked> <b>② 화면 고정</b> <span class="muted">— 지금 화면의 결과만. 받는 사람은 펼치기·정렬만 할 수 있습니다.</span></label>
       <label><input type="radio" name="shMode" id="shModeLive"> <b>③ 조작 가능 (원본 포함)</b> <span class="muted" id="shLiveNote">— 분석표와 똑같이 열려 필터·기간·기준을 바꿀 수 있습니다. ⚠️ 비밀번호를 아는 사람은 이 분석표의 <b>원본 데이터 전체</b>를 볼 수 있습니다.</span></label>
+      <div id="shAutoBox" hidden style="margin-left:24px;display:flex;flex-direction:column;gap:2px">
+        <label><input type="radio" name="shAutoMode" id="shFixedNow" checked> ③-1 <b>지금까지 고정</b> <span class="muted">— 만든 시점까지의 기록만</span></label>
+        <label><input type="radio" name="shAutoMode" id="shAuto"> ③-2 <b>매일 자동 갱신</b> <span class="muted">— 같은 링크가 수집할 때마다 최신 기록으로 바뀜 (GitHub 설정에 SITE_TOKEN 등록 필요)</span></label>
+      </div>
     </div>
     <div class="shf"><label class="field">비밀번호<input type="password" id="shPw" autocomplete="new-password"></label><label class="field">비밀번호 확인<input type="password" id="shPw2" autocomplete="new-password"></label><button type="button" class="btn primary" id="shMake">링크 만들기</button></div>
     <div class="shf" id="shOut" hidden><label class="field" style="flex:1">공유 링크<input type="text" id="shUrl" readonly></label><button type="button" class="btn" id="shCopy">복사</button></div>
@@ -1238,7 +1242,7 @@ html, body { height: auto; }
   // ③ 조작 가능: settings + all records, opened read-only in this page
   function trkLivePayload(id) {
     return { kind: 'live', v: 1, view: 'trk', id, title: '가격 추적', cfg: TRK.cfg, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip },
-      rows: TRK.rows.map(r => [r.at, r.group, r.qty, r.ch, r.price, r.listings, r.trend, r.name]) };
+      rows: TRK.rows.map(r => [r.at, r.group, r.qty, r.ch, r.price, r.listings, r.trend, r.name, r.flag || '']) };
   }
   function startTrkLive(L) {
     document.body.classList.add('live');
@@ -1246,7 +1250,7 @@ html, body { height: auto; }
     $('loginPane').hidden = true; $('sendPane').hidden = true; $('readPane').hidden = true; $('trackPane').hidden = false;
     $('trkRefresh').hidden = true; $('trkShare').hidden = true; $('trkReq').hidden = true;
     TRK.cfg = L.cfg; Object.assign(TRK, trkFlatten(L.cfg));
-    TRK.rows = (L.rows || []).map(r => ({ at: r[0], group: r[1], qty: r[2], ch: r[3], price: r[4], listings: r[5], trend: r[6], name: r[7] }));
+    TRK.rows = (L.rows || []).map(r => ({ at: r[0], group: r[1], qty: r[2], ch: r[3], price: r[4], listings: r[5], trend: r[6], name: r[7], flag: r[8] || '' }));
     if (L.state) { TRK.by = L.state.by || 'prod'; TRK.sel = L.state.sel || {}; TRK.chip = L.state.chip || {}; }
     trkIndex(); trkRender();
   }
@@ -2718,12 +2722,15 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
   async function gzipBytes(s) { return new Uint8Array(await new Response(new Blob([new TextEncoder().encode(s)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()); }
   const KDF_IT = 600000;
   // password → AES-GCM key (PBKDF2-SHA256); the page is gzipped then encrypted, nothing readable is uploaded
-  async function sealShare(html, pw) {
+  // keepKey: also return the derived AES key (raw, base64) so the tracker workflow can re-seal the same link with new records
+  async function sealShare(html, pw, keepKey) {
     const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
     const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
-    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: KDF_IT }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: KDF_IT }, base, { name: 'AES-GCM', length: 256 }, !!keepKey, ['encrypt']);
     const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await gzipBytes(html)));
-    return { v: 1, kdf: 'PBKDF2-SHA256', it: KDF_IT, salt: toBase64(salt), iv: toBase64(iv), gz: true, ct: toBase64(ct) };
+    const out = { v: 1, kdf: 'PBKDF2-SHA256', it: KDF_IT, salt: toBase64(salt), iv: toBase64(iv), gz: true, ct: toBase64(ct) };
+    if (keepKey) Object.defineProperty(out, 'key', { value: toBase64(new Uint8Array(await crypto.subtle.exportKey('raw', key))), enumerable: false });
+    return out;
   }
   const utf8b64 = s => toBase64(new TextEncoder().encode(s));
   // mode 'fixed': the frozen page (② 화면 고정). mode 'live': the source data + settings, opened in this page read-only (③ 조작 가능)
@@ -2737,12 +2744,16 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
       const ana = { ...(cur.extra || {}) }; delete ana.analysis;
       payload = JSON.stringify({ kind: 'live', v: 1, id, title: cur.title, ana, state: stateOut(), text, cut: !!cut });
     }
-    const sealed = await sealShare(payload, pw);
+    const auto = mode === 'live' && shareCtx === 'trk' && $('shAuto').checked;
+    const sealed = await sealShare(payload, pw, auto);
     if (sealed.ct.length > 60e6) throw new Error('데이터가 너무 커서 링크로 올릴 수 없습니다. 필터로 범위를 줄이거나 ② 화면 고정을 쓰세요.');
     // public: only the sealed box (the commit message carries no title)
     await apiSite(`/contents/s/d/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(sealed)), author: SITE_AUTHOR, committer: SITE_AUTHOR }) });
     // private: what it was, for the list
-    const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: shareCtx === 'trk' ? 'tracker' : cur.name, mode };
+    const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: shareCtx === 'trk' ? 'tracker' : cur.name, mode: auto ? 'live-auto' : mode };
+    // 매일 자동 갱신: the private meta keeps the AES key (not the password) so the workflow can re-seal the same id after each run
+    if (auto) meta.auto = { key: sealed.key, salt: sealed.salt, it: sealed.it, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip }, title: '가격 추적' };
+    if (auto) { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); return meta; }
     try { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); } catch (e) { console.error(e); }
     return meta;
   }
@@ -2778,7 +2789,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     const host = $('shList'); host.innerHTML = '<p class="muted">목록을 불러오는 중…</p>';
     try {
       const L = await listShares();
-      host.innerHTML = L.length ? `<table class="at"><thead><tr><th class="l">만든 시각</th><th class="l">제목 · 범위</th><th class="l">링크</th><th></th></tr></thead><tbody>${L.map(m => `<tr><td class="l">${esc(m.made)}</td><td class="l">${esc(m.title)} <small>${m.mode === 'live' ? '③ 조작 가능' : '② 화면 고정'}</small><br><small class="muted">${esc(m.scope || '')}</small></td><td class="l"><a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">${esc(m.url)}</a></td><td><button type="button" class="btn small" data-shcopy="${esc(m.url)}">복사</button> <button type="button" class="btn small" data-shdel="${esc(m.id)}">삭제</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">공유한 링크가 없습니다.</p>';
+      host.innerHTML = L.length ? `<table class="at"><thead><tr><th class="l">만든 시각</th><th class="l">제목 · 범위</th><th class="l">링크</th><th></th></tr></thead><tbody>${L.map(m => `<tr><td class="l">${esc(m.made)}</td><td class="l">${esc(m.title)} <small>${m.mode === 'live-auto' ? '③ 조작 가능 · 매일 자동 갱신' : m.mode === 'live' ? '③ 조작 가능' : '② 화면 고정'}</small><br><small class="muted">${esc(m.scope || '')}</small></td><td class="l"><a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">${esc(m.url)}</a></td><td><button type="button" class="btn small" data-shcopy="${esc(m.url)}">복사</button> <button type="button" class="btn small" data-shdel="${esc(m.id)}">삭제</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">공유한 링크가 없습니다.</p>';
     } catch (e) { host.innerHTML = `<p class="err">${esc(explain(e))}</p>`; }
   }
   async function copyText(t) { try { await navigator.clipboard.writeText(t); return true; } catch (e) { const x = el('textarea'); x.value = t; document.body.appendChild(x); x.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {} x.remove(); return ok; } }
@@ -2786,10 +2797,10 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     ana: ['지금 고른 조건 그대로 <b>요약표 · 판정표 · INSIGHT</b>를 공유합니다. 숫자는 만든 시점 그대로 고정되고, 원본 데이터는 들어가지 않습니다.',
       '— 분석표와 똑같이 열려 필터·기간·기준을 바꿀 수 있습니다. ⚠️ 비밀번호를 아는 사람은 이 분석표의 <b>원본 데이터 전체</b>를 볼 수 있습니다.'],
     trk: ['지금 보는 <b>가격 추적 화면(표 · 그래프)</b>을 공유합니다. ①·②는 만든 시점 그대로 고정됩니다.',
-      '— 가격 추적 탭과 똑같이 열려 제품/채널 기준, 브랜드·세부 구분, 그래프를 바꿔 볼 수 있습니다. 만든 시점까지의 <b>전체 가격 기록</b>이 들어가고, 이후 기록은 반영되지 않습니다.'],
+      '— 가격 추적 탭과 똑같이 열려 제품/채널 기준, 브랜드·세부 구분, 그래프를 바꿔 볼 수 있습니다. <b>전체 가격 기록</b>이 들어갑니다. ③-1은 만든 시점까지, ③-2는 같은 링크가 수집할 때마다 최신 기록으로 바뀝니다.'],
   };
   function openShare(ctx) {
-    shareCtx = ctx;
+    shareCtx = ctx; $('shAutoBox').hidden = ctx !== 'trk';
     $('shIntro').innerHTML = SH_TEXT[ctx][0]; $('shLiveNote').innerHTML = SH_TEXT[ctx][1];
     $('shPw').value = ''; $('shPw2').value = ''; $('shOut').hidden = true; shMsg('');
     $('shFile').textContent = '① HTML 파일로 받기'; $('shDlg').showModal(); drawShareList();
@@ -2797,7 +2808,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
   $('trkShare').addEventListener('click', () => { if (!TRK.cfg) return; openShare('trk'); $('shScope').textContent = trkScope(); });
   $('shareBtn').addEventListener('click', () => {
     if (!cur || !cur.ana) return;
-    shareCtx = 'ana'; $('shIntro').innerHTML = SH_TEXT.ana[0]; $('shLiveNote').innerHTML = SH_TEXT.ana[1];
+    shareCtx = 'ana'; $('shAutoBox').hidden = true; $('shIntro').innerHTML = SH_TEXT.ana[0]; $('shLiveNote').innerHTML = SH_TEXT.ana[1];
     $('shScope').textContent = AS && AS.model ? scopeText() : '';
     $('shPw').value = ''; $('shPw2').value = ''; $('shOut').hidden = true; shMsg('');
     $('shFile').textContent = '① HTML 파일로 받기'; $('shDlg').showModal(); drawShareList();
