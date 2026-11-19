@@ -355,6 +355,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <select id="trkSel" aria-label="브랜드 또는 채널 고르기"></select>
       <span class="grow" id="trkInfo"></span>
       <button class="btn" id="trkRefresh" type="button">새로고침</button>
+      <button class="btn" id="trkShare" type="button" title="지금 보는 화면 그대로 HTML 파일이나 비밀번호 링크로 공유합니다.">공유하기</button>
       <button class="btn primary" id="trkXlsx" type="button">엑셀로 내려받기</button>
     </div>
     <div class="trk-chips" id="trkChips" role="group" aria-label="세부 구분"></div>
@@ -378,7 +379,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
 
 <dialog id="shDlg" class="shd" aria-labelledby="shTitle">
   <div class="shh"><h2 id="shTitle">공유하기</h2><button type="button" class="btn small" id="shClose">닫기</button></div>
-  <p class="muted">지금 고른 조건 그대로 <b>요약표 · 판정표 · INSIGHT</b>를 공유합니다. 숫자는 만든 시점 그대로 고정되고, 원본 데이터는 들어가지 않습니다.<br><span id="shScope"></span></p>
+  <p class="muted"><span id="shIntro">지금 고른 조건 그대로 <b>요약표 · 판정표 · INSIGHT</b>를 공유합니다. 숫자는 만든 시점 그대로 고정되고, 원본 데이터는 들어가지 않습니다.</span><br><span id="shScope"></span></p>
   <section class="sho">
     <h3>① HTML 파일로 받기</h3>
     <p class="muted">파일 하나를 내려받아 메일·메신저로 보냅니다. 받는 쪽 PC에서 파일 열기가 막혀 있으면 ②를 쓰세요.</p>
@@ -389,7 +390,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     <p class="muted">비밀번호로 암호화해서 msg-85.github.io에 올립니다. 링크를 열고 비밀번호를 쳐야 보입니다. 비밀번호는 저장되지 않으니 직접 기억해 두세요 (10자 이상, 영문+숫자).</p>
     <div class="shm">
       <label><input type="radio" name="shMode" id="shModeFixed" checked> <b>② 화면 고정</b> <span class="muted">— 지금 화면의 결과만. 받는 사람은 펼치기·정렬만 할 수 있습니다.</span></label>
-      <label><input type="radio" name="shMode" id="shModeLive"> <b>③ 조작 가능 (원본 포함)</b> <span class="muted">— 분석표와 똑같이 열려 필터·기간·기준을 바꿀 수 있습니다. ⚠️ 비밀번호를 아는 사람은 이 분석표의 <b>원본 데이터 전체</b>를 볼 수 있습니다.</span></label>
+      <label><input type="radio" name="shMode" id="shModeLive"> <b>③ 조작 가능 (원본 포함)</b> <span class="muted" id="shLiveNote">— 분석표와 똑같이 열려 필터·기간·기준을 바꿀 수 있습니다. ⚠️ 비밀번호를 아는 사람은 이 분석표의 <b>원본 데이터 전체</b>를 볼 수 있습니다.</span></label>
     </div>
     <div class="shf"><label class="field">비밀번호<input type="password" id="shPw" autocomplete="new-password"></label><label class="field">비밀번호 확인<input type="password" id="shPw2" autocomplete="new-password"></label><button type="button" class="btn primary" id="shMake">링크 만들기</button></div>
     <div class="shf" id="shOut" hidden><label class="field" style="flex:1">공유 링크<input type="text" id="shUrl" readonly></label><button type="button" class="btn" id="shCopy">복사</button></div>
@@ -1144,11 +1145,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
             price: r[ix('price')] === '' ? null : +r[ix('price')], listings: +r[ix('listings')] || 0, trend: r[ix('trend')], name: r[ix('name')],
           });
         }
-        // index: group → { times[], cell Map(at|qty|ch → row) }
-        TRK.idx = {};
-        for (const g of TRK.groups) TRK.idx[g.id] = { times: [], cell: new Map(), rows: [] };
-        for (const r of TRK.rows) { const x = TRK.idx[r.group]; if (!x) continue; x.rows.push(r); x.cell.set(r.at + '|' + r.qty + '|' + r.ch, r); }
-        for (const id in TRK.idx) TRK.idx[id].times = [...new Set(TRK.idx[id].rows.map(r => r.at))].sort();
+        trkIndex();
         trkRender();
       } catch (e) {
         $('trkInfo').textContent = '';
@@ -1156,6 +1153,63 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       } finally { TRK.loading = null; }
     })();
     return TRK.loading;
+  }
+  // index: group → { times[], rows[], cell Map(at|qty|ch → row) }
+  function trkIndex() {
+    TRK.idx = {};
+    for (const g of TRK.groups) TRK.idx[g.id] = { times: [], cell: new Map(), rows: [] };
+    for (const r of TRK.rows) { const x = TRK.idx[r.group]; if (!x) continue; x.rows.push(r); x.cell.set(r.at + '|' + r.qty + '|' + r.ch, r); }
+    for (const id in TRK.idx) TRK.idx[id].times = [...new Set(TRK.idx[id].rows.map(r => r.at))].sort();
+  }
+  const trkScope = () => TRK.by === 'ch' ? `채널 기준 · ${TRK.sel.ch}` : (() => { const b = TRK.brands.find(x => x.id === TRK.sel.prod) || TRK.brands[0]; const v = b && b.variants.find(x => x.id === TRK.chip[b.id]); return `제품 기준 · ${b ? b.name : ''}${v ? ' ' + v.name : b && b.variants.length > 1 ? ' 전체' : ''}`; })();
+  // share page (② 화면 고정 / ① 파일): the tables and chart as on screen
+  function buildTrkShare() {
+    if (!TRK.cfg) throw new Error('가격 추적을 먼저 열어 주세요.');
+    const tb = $('trkTables').cloneNode(true), ch = $('trkChart').cloneNode(true);
+    for (const n of ch.querySelectorAll('.tip')) n.remove();
+    const now = new Date(), p2 = n => String(n).padStart(2, '0');
+    const made = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
+    const css = [...document.querySelectorAll('style')].map(s => s.textContent).join('\n');
+    const title = '가격 추적 · ' + trkScope().replace(/^(제품|채널) 기준 · /, '');
+    const html = `<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>${esc(title)} · 공유용</title>
+<style>${css}
+html, body { height: auto; }
+.share { display: flex; flex-direction: column; gap: 10px; max-width: 1400px; margin: 0 auto; }
+.share header h1 { font-size: 19px; margin: 0; }
+.share header p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+</style>
+<body>
+<div class="share">
+<header><h1>${esc(title)}</h1><p>공유용 · ${esc(made)} 기준으로 고정된 화면입니다 · ${esc($('trkInfo').textContent)}</p></header>
+<div class="trk-tables">${tb.innerHTML}</div>
+<p class="muted" style="font-size:13px;margin:0">${esc($('trkNote').textContent.replace(/ 칸에 마우스를 올리면[^.]*\./, ''))}</p>
+<div style="max-width:900px">${ch.innerHTML}</div>
+</div>
+</body>
+</html>`;
+    return { html, title, made, scope: trkScope() };
+  }
+  // ③ 조작 가능: settings + all records, opened read-only in this page
+  function trkLivePayload(id) {
+    return { kind: 'live', v: 1, view: 'trk', id, title: '가격 추적', cfg: TRK.cfg, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip },
+      rows: TRK.rows.map(r => [r.at, r.group, r.qty, r.ch, r.price, r.listings, r.trend, r.name]) };
+  }
+  function startTrkLive(L) {
+    document.body.classList.add('live');
+    document.querySelector('.top h1').textContent = '공유된 가격 추적 (보기 전용)';
+    $('loginPane').hidden = true; $('sendPane').hidden = true; $('readPane').hidden = true; $('trackPane').hidden = false;
+    $('trkRefresh').hidden = true; $('trkShare').hidden = true;
+    TRK.cfg = L.cfg; Object.assign(TRK, trkFlatten(L.cfg));
+    TRK.rows = (L.rows || []).map(r => ({ at: r[0], group: r[1], qty: r[2], ch: r[3], price: r[4], listings: r[5], trend: r[6], name: r[7] }));
+    if (L.state) { TRK.by = L.state.by || 'prod'; TRK.sel = L.state.sel || {}; TRK.chip = L.state.chip || {}; }
+    trkIndex(); trkRender();
   }
   const trkLabel = at => { const [d, t] = at.split(' '); const [, m, dd] = d.split('-'); return `${+m}/${+dd} ${+t.slice(0, 2)}시`; };
   const trkChannels = () => [...new Set(TRK.groups.flatMap(g => g.channels))];
@@ -2410,7 +2464,9 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   });
 })();`;
   // the share page as one HTML string: { html, title, made, scope }
+  let shareCtx = 'ana';   // which screen the 공유하기 dialog shares: 'ana' (분석표) or 'trk' (가격 추적)
   async function buildShare() {
+    if (shareCtx === 'trk') return buildTrkShare();
     const c = cur;
     if (!c || !c.ana || !AS) throw new Error('분석표를 먼저 열어 주세요.');
     {
@@ -2482,7 +2538,8 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
   async function shareLink(pw, mode) {
     const sh = await buildShare(), id = b64u(crypto.getRandomValues(new Uint8Array(15)));
     let payload = sh.html;
-    if (mode === 'live') {
+    if (mode === 'live' && shareCtx === 'trk') payload = JSON.stringify(trkLivePayload(id));
+    else if (mode === 'live') {
       const st = AS.st; if (!st || !st.full) throw new Error('원본 데이터를 아직 읽지 못했습니다.');
       const { text, cut } = await st.full;
       const ana = { ...(cur.extra || {}) }; delete ana.analysis;
@@ -2493,7 +2550,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     // public: only the sealed box (the commit message carries no title)
     await apiSite(`/contents/s/d/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(sealed)), author: SITE_AUTHOR, committer: SITE_AUTHOR }) });
     // private: what it was, for the list
-    const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: cur.name, mode };
+    const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: shareCtx === 'trk' ? 'tracker' : cur.name, mode };
     try { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); } catch (e) { console.error(e); }
     return meta;
   }
@@ -2533,8 +2590,22 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     } catch (e) { host.innerHTML = `<p class="err">${esc(explain(e))}</p>`; }
   }
   async function copyText(t) { try { await navigator.clipboard.writeText(t); return true; } catch (e) { const x = el('textarea'); x.value = t; document.body.appendChild(x); x.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {} x.remove(); return ok; } }
+  const SH_TEXT = {
+    ana: ['지금 고른 조건 그대로 <b>요약표 · 판정표 · INSIGHT</b>를 공유합니다. 숫자는 만든 시점 그대로 고정되고, 원본 데이터는 들어가지 않습니다.',
+      '— 분석표와 똑같이 열려 필터·기간·기준을 바꿀 수 있습니다. ⚠️ 비밀번호를 아는 사람은 이 분석표의 <b>원본 데이터 전체</b>를 볼 수 있습니다.'],
+    trk: ['지금 보는 <b>가격 추적 화면(표 · 그래프)</b>을 공유합니다. ①·②는 만든 시점 그대로 고정됩니다.',
+      '— 가격 추적 탭과 똑같이 열려 제품/채널 기준, 브랜드·세부 구분, 그래프를 바꿔 볼 수 있습니다. 만든 시점까지의 <b>전체 가격 기록</b>이 들어가고, 이후 기록은 반영되지 않습니다.'],
+  };
+  function openShare(ctx) {
+    shareCtx = ctx;
+    $('shIntro').innerHTML = SH_TEXT[ctx][0]; $('shLiveNote').innerHTML = SH_TEXT[ctx][1];
+    $('shPw').value = ''; $('shPw2').value = ''; $('shOut').hidden = true; shMsg('');
+    $('shFile').textContent = '① HTML 파일로 받기'; $('shDlg').showModal(); drawShareList();
+  }
+  $('trkShare').addEventListener('click', () => { if (!TRK.cfg) return; openShare('trk'); $('shScope').textContent = trkScope(); });
   $('shareBtn').addEventListener('click', () => {
     if (!cur || !cur.ana) return;
+    shareCtx = 'ana'; $('shIntro').innerHTML = SH_TEXT.ana[0]; $('shLiveNote').innerHTML = SH_TEXT.ana[1];
     $('shScope').textContent = AS && AS.model ? scopeText() : '';
     $('shPw').value = ''; $('shPw2').value = ''; $('shOut').hidden = true; shMsg('');
     $('shFile').textContent = '① HTML 파일로 받기'; $('shDlg').showModal(); drawShareList();
@@ -2658,6 +2729,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
 
   // ---------- 보기 전용 (조작 가능 공유 링크): the viewer page decrypts { title, ana, state, text } into window.__LIVE ----------
   function startLive(L) {
+    if (L.view === 'trk') { startTrkLive(L); return; }
     document.body.classList.add('live');
     document.querySelector('.top h1').textContent = '공유된 분석표 (보기 전용)';
     $('loginPane').hidden = true; $('sendPane').hidden = true; $('readPane').hidden = false;
