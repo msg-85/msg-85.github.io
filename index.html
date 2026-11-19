@@ -1131,9 +1131,8 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         const opt = p => p.catch(e => { if (e.status === 404) return null; throw e; });
         const months = await opt(api('/contents/tracker/prices').then(r => r.json()));
         const names = (months || []).filter(f => f.type === 'file' && /\.csv$/.test(f.name)).map(f => 'prices/' + f.name).sort();
-        const [cfgText, latestText, ...csvs] = await Promise.all([get('items.json'), opt(get('latest.json')), ...names.map(get)]);
+        const [cfgText, ...csvs] = await Promise.all([get('items.json'), ...names.map(get)]);
         TRK.cfg = JSON.parse(cfgText);
-        TRK.latest = latestText ? JSON.parse(latestText) : null;
         Object.assign(TRK, trkFlatten(TRK.cfg));
         TRK.rows = [];
         for (const csvText of csvs) {
@@ -1159,7 +1158,6 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     return TRK.loading;
   }
   const trkLabel = at => { const [d, t] = at.split(' '); const [, m, dd] = d.split('-'); return `${+m}/${+dd} ${+t.slice(0, 2)}시`; };
-  const trkLinkTo = (href, text) => { if (!href || !/^https:\/\//.test(href)) return document.createTextNode(text); const a = el('a', '', text); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a; };
   const trkChannels = () => [...new Set(TRK.groups.flatMap(g => g.channels))];
   // price of (group, qty, channel) at the group's last and previous runs; channel OTHER = lowest non-rocket channel
   function trkCell(g, q, ch, back = 0) {
@@ -1170,16 +1168,11 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     for (const c of g.channels) if (c !== '로켓배송') { const r = x.cell.get(t + '|' + q + '|' + c); if (r && r.price != null && (!best || r.price < best.price)) best = { ...r, ch: c }; }
     return best;
   }
-  function trkLink(g, q, r) {
-    const L = TRK.latest && TRK.latest.at === TRK.idx[g.id].times.slice(-1)[0] ? TRK.latest.groups?.[g.id] : null;   // links are kept for the latest run only
-    return L?.cells?.[q + '|' + r.ch]?.link;
-  }
   function trkPriceTd(g, q, ch, cls) {
     const r = trkCell(g, q, ch);
     if (!r) return el('td', 'na', '–');
     const td = el('td', cls || '');
-    const href = trkLink(g, q, r);
-    td.append(trkLinkTo(href, won(r.price) + (href && ch === OTHER ? ' ↗' : '')));
+    td.append(won(r.price));
     const sub = el('small', '', (ch === OTHER ? r.ch + ' · ' : '') + `${g.unit}당 ${won(r.price / q)}`);
     const p = trkCell(g, q, ch, 1);
     if (p && p.price !== r.price && p.ch === r.ch) { const d = r.price - p.price; sub.appendChild(el('span', d > 0 ? 'up' : 'dn', ` ${d > 0 ? '▲' : '▼'}${Math.abs(d).toLocaleString()}`)); }
@@ -1256,14 +1249,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       }
       const gs = trkViewGroups();
       for (const g of gs) { if (gs.length > 1 || b.variants.length > 1) box.appendChild(el('h3', '', g.title)); box.appendChild(trkProdTable(g)); }
-      $('trkNote').textContent = '칸마다 그 채널에서 같은 입수량 상품 중 가장 싼 가격입니다 (폴센트 검색 기준). 초록 칸 = 그 줄 최저가, ▲▼ = 직전 기록 대비. 가격을 누르면 상품 페이지가 새 창으로 열립니다. 칸에 마우스를 올리면 상품명과 기록 최저·최고가가 보입니다. – = 검색에 안 잡힘.';
+      $('trkNote').textContent = '칸마다 그 채널에서 같은 입수량 상품 중 가장 싼 가격입니다 (폴센트 검색 기준). 초록 칸 = 그 줄 최저가, ▲▼ = 직전 기록 대비. 칸에 마우스를 올리면 상품명과 기록 최저·최고가가 보입니다. – = 검색에 안 잡힘.';
     } else {
       const chs = [...trkChannels(), OTHER];
       sel.replaceChildren(...chs.map(c => { const o = el('option', '', c); o.value = c; return o; }));
       if (!chs.includes(TRK.sel.ch)) TRK.sel.ch = chs[0];
       sel.value = TRK.sel.ch;
       box.appendChild(trkChTable(TRK.sel.ch, TRK.groups));
-      $('trkNote').textContent = `${TRK.sel.ch === OTHER ? '로켓배송을 뺀 채널 중 가장 싼 가격 (칸 아래에 채널 이름)' : TRK.sel.ch + '에서 같은 입수량 상품 중 가장 싼 가격'}입니다 (폴센트 검색 기준). 초록 칸 = 그 제품에서 개당 가격이 가장 싼 입수량, ▲▼ = 직전 기록 대비. 가격을 누르면 상품 페이지가 열립니다. – = 검색에 안 잡힘.`;
+      $('trkNote').textContent = `${TRK.sel.ch === OTHER ? '로켓배송을 뺀 채널 중 가장 싼 가격 (칸 아래에 채널 이름)' : TRK.sel.ch + '에서 같은 입수량 상품 중 가장 싼 가격'}입니다 (폴센트 검색 기준). 초록 칸 = 그 제품에서 개당 가격이 가장 싼 입수량, ▲▼ = 직전 기록 대비. – = 검색에 안 잡힘.`;
     }
     const times = [...new Set(trkViewGroups().flatMap(g => TRK.idx[g.id].times))].sort();
     const last = times[times.length - 1];
@@ -1315,11 +1308,11 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const btn = $('trkXlsx'); btn.disabled = true;
     try {
       const gs = trkViewGroups(), chs = trkChannels();
-      const now = [['브랜드', '구분', '입수량', ...chs.flatMap(c => [c, c + ' 개당']), OTHER, '채널', '링크', '기록 시각']];
+      const now = [['브랜드', '구분', '입수량', ...chs.flatMap(c => [c, c + ' 개당']), OTHER, '채널', '기록 시각']];
       for (const g of gs) for (const q of g.qtys) {
         const o = trkCell(g, q, OTHER);
         now.push([g.bname, g.name, q + g.unit, ...chs.flatMap(c => { const r = g.channels.includes(c) && trkCell(g, q, c); return r ? [r.price, Math.round(r.price / q)] : ['', '']; }),
-          o ? o.price : '', o ? o.ch : '', o ? (trkLink(g, q, o) || '') : '', TRK.idx[g.id].times.slice(-1)[0] || '']);
+          o ? o.price : '', o ? o.ch : '', TRK.idx[g.id].times.slice(-1)[0] || '']);
       }
       const all = [['기록 시각', '브랜드', '구분', '입수량', '채널', '가격', '개당', '같은 조건 상품 수', '폴센트 표시', '상품명']];
       for (const g of gs) for (const r of TRK.idx[g.id].rows) if (r.price != null)
