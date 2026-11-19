@@ -69,6 +69,7 @@ a { color: var(--out); }
 .trk-stat td, .trk-stat th { vertical-align: top; }
 .trk-stat ul { margin: 4px 0 2px; padding-left: 18px; font-size: 13px; white-space: normal; }
 .trk-stat p { margin: 4px 0 0; font-size: 12px; }
+.trk-t .trk-up { color: var(--s4); font-weight: 600; }
 .trk-star { font-size: 13px; background: var(--sheet); border: 1px solid var(--s4); padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
 .trk-star b { color: var(--s4); }
 .trk-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(400px, 1.15fr) minmax(0, 1.2fr); gap: 14px; }
@@ -1148,7 +1149,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   //           채널 = one channel → rows = products (brand › variant), columns = 입수량.
   const TRK = { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [], by: 'prod', sel: {}, chip: {} };
   const OTHER = '로켓 제외 최저가';
-  const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(10시 01분/23시 31분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고 「유사 상품」 시트에 따로 모았습니다. ★ = 정해진 시간 사이 6시간마다 감시해서 잡은 새 최저가.';
+  const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(10시 01분/23시 31분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고 「유사 상품」 시트에 따로 모았습니다. ★ = 정해진 시간 사이 6시간마다 감시해서 잡은 새 최저가. ⤴N = 지정 입수량을 파는 곳이 없어 바로 위 입수량(N) 가격을 넣은 칸.';
   const TRK_KEY = 'data-window-trk';
   try { Object.assign(TRK, JSON.parse(localStorage.getItem(TRK_KEY) || '{}'), { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [] }); } catch (e) {}
   const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay })); } catch (e) {} };
@@ -1201,7 +1202,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   function trkIndex() {
     TRK.idx = {};
     for (const g of TRK.groups) TRK.idx[g.id] = { times: [], cell: new Map(), rows: [], sim: [], star: [] };
-    for (const r of TRK.rows) { const x = TRK.idx[r.group]; if (!x) continue; if (r.flag === '★') { x.star.push(r); continue; } if (r.flag) { x.sim.push(r); continue; } x.rows.push(r); x.cell.set(r.at + '|' + r.qty + '|' + r.ch, r); }
+    for (const r of TRK.rows) { const x = TRK.idx[r.group]; if (!x) continue; if (r.flag === '★') { x.star.push(r); continue; } if (/^상위/.test(r.flag)) r.upQty = +r.flag.split(':')[1] || 0; else if (r.flag) { x.sim.push(r); continue; } x.rows.push(r); x.cell.set(r.at + '|' + r.qty + '|' + r.ch, r); }
     for (const id in TRK.idx) TRK.idx[id].times = [...new Set(TRK.idx[id].rows.map(r => r.at))].sort();
   }
   const trkScope = () => TRK.by === 'ch' ? `채널 기준 · ${TRK.sel.ch}` : (() => { const b = TRK.brands.find(x => x.id === TRK.sel.prod) || TRK.brands[0]; const v = b && b.variants.find(x => x.id === TRK.chip[b.id]); return `제품 기준 · ${b ? b.name : ''}${v ? ' ' + v.name : b && b.variants.length > 1 ? ' 전체' : ''}`; })();
@@ -1276,7 +1277,8 @@ html, body { height: auto; }
     if (!r) return el('td', 'na', '–');
     const td = el('td', cls || '');
     td.append(won(r.price));
-    const sub = el('small', '', (ch === OTHER ? r.ch + ' · ' : '') + `${g.unit}당 ${won(r.price / q)}`);
+    const sub = el('small', '', (ch === OTHER ? r.ch + ' · ' : '') + `${g.unit}당 ${won(r.price / (r.upQty || q))}`);
+    if (r.upQty) { const b = el('span', 'trk-up', ` ⤴${r.upQty}${g.unit}`); b.title = `${q}${g.unit} 묶음이 없어 상위 입수량 ${r.upQty}${g.unit} 가격`; td.firstChild && td.insertBefore(b, null); sub.prepend(el('span', 'trk-up', `${r.upQty}${g.unit} 기준 · `)); }
     const p = trkCell(g, q, ch, 1);
     if (p && p.price !== r.price && p.ch === r.ch) { const d = r.price - p.price; sub.appendChild(el('span', d > 0 ? 'up' : 'dn', ` ${d > 0 ? '▲' : '▼'}${Math.abs(d).toLocaleString()}`)); }
     td.appendChild(sub);
@@ -1513,7 +1515,7 @@ html, body { height: auto; }
           TRK.idx[g.id].times[trkCut(TRK.idx[g.id])] || '']);
       }
       const head = ['기록 시각', '브랜드', '구분', '입수량', '채널', '가격', '개당', '같은 조건 상품 수', '폴센트 표시', '상품명', '기준/유사/감시'];
-      const line = (g, r) => [r.at, g.bname, g.name, r.qty, r.ch, r.price, Math.round(r.price / r.qty), r.listings, r.trend === 'up' ? '상승' : r.trend === 'down' ? '하락' : '', r.name, r.flag === '★' ? '★ 감시 최저' : r.flag ? '유사 상품' : '기준'];
+      const line = (g, r) => [r.at, g.bname, g.name, r.qty, r.ch, r.price, Math.round(r.price / r.qty), r.listings, r.trend === 'up' ? '상승' : r.trend === 'down' ? '하락' : '', r.name, r.flag === '★' ? '★ 감시 최저' : /^상위/.test(r.flag || '') ? `상위 입수량 대체 (${r.flag.split(':')[1]})` : r.flag ? '유사 상품' : '기준'];
       const all = [head], sim = [head];
       for (const g of gs) {
         const x = TRK.idx[g.id];
