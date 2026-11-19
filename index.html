@@ -62,7 +62,7 @@ a { color: var(--out); }
 .trk-t tbody tr.trk-brand th { background: var(--panel); color: var(--s2); font-weight: 700; }
 .trk-t tbody th.trk-sub { padding-left: 18px; font-weight: 500; }
 #trkModeBox { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
-.trk-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(360px, 1fr) minmax(0, 1.5fr); gap: 14px; }
+.trk-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(400px, 1.15fr) minmax(0, 1.2fr); gap: 14px; }
 .trk-split.v { display: flex; flex-direction: column; overflow: auto; }
 .trk-split.v .trk-left, .trk-split.v .trk-right { overflow: visible; flex-shrink: 0; }
 .trk-h { font-size: 15px; margin: 0; padding-bottom: 4px; border-bottom: 2px solid var(--s2); }
@@ -1106,7 +1106,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const py = v => T + (hi - v) * (H - T - B) / (hi - lo);
     const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': ch.title || '' });
     for (const v of tk) { sv('line', { x1: L, x2: W - R, y1: py(v), y2: py(v), stroke: 'var(--grid)' }, svg); sv('text', { x: L - 6, y: py(v) + 4, 'text-anchor': 'end' }, svg).textContent = fmt(v); }
-    x.forEach((lab, i) => { const lastI = x.length - 1; if (i % step && i !== lastI) return; if (i === lastI && i % step && i % step < step / 2) return; sv('text', { x: px(i), y: H - 8, 'text-anchor': x.length > 1 && i === lastI ? 'end' : i === 0 && x.length > 1 ? 'start' : 'middle' }, svg).textContent = lab; });
+    x.forEach((lab, i) => { const lastI = x.length - 1; if (i !== lastI && (i % step || (i && lastI - i < step * 0.7))) return; sv('text', { x: px(i), y: H - 8, 'text-anchor': x.length > 1 && i === lastI ? 'end' : i === 0 && x.length > 1 ? 'start' : 'middle' }, svg).textContent = lab; });
     const cross = sv('line', { y1: T, y2: H - B, stroke: 'var(--muted)', 'stroke-dasharray': '3 3', visibility: 'hidden' }, svg);
     series.forEach((s, si) => {
       const c = COLORS[si % COLORS.length]; let d = '';
@@ -1278,7 +1278,7 @@ html, body { height: auto; }
     const chs = [...new Set(gs.flatMap(g => g.channels))];
     const tb = el('table', 'at trk-t'), thead = el('thead'), hr = el('tr');
     hr.appendChild(el('th', '', '제품')); hr.appendChild(el('th', '', '입수량'));
-    for (const ch of [...chs, OTHER]) hr.appendChild(el('th', '', ch));
+    for (const ch of chs) hr.appendChild(el('th', '', ch));
     thead.appendChild(hr); tb.appendChild(thead);
     const tbody = el('tbody');
     for (const g of gs) g.qtys.forEach((q, qi) => {
@@ -1287,7 +1287,6 @@ html, body { height: auto; }
       tr.appendChild(el('th', '', q + g.unit));
       const ps = g.channels.map(ch => trkCell(g, q, ch)?.price).filter(v => v != null), min = Math.min(...ps);
       for (const ch of chs) tr.appendChild(g.channels.includes(ch) ? trkPriceTd(g, q, ch, trkCell(g, q, ch)?.price === min ? 'best' : '') : el('td', 'na', ''));
-      tr.appendChild(trkPriceTd(g, q, OTHER));
       tbody.appendChild(tr);
     });
     tb.appendChild(tbody);
@@ -1346,7 +1345,7 @@ html, body { height: auto; }
       box.appendChild(trkProdTable(gs));
       $('trkNote').textContent = '칸마다 그 채널에서 같은 입수량 상품 중 가장 싼 가격입니다 (폴센트 검색 기준). 초록 칸 = 그 줄 최저가, ▲▼ = 직전 기록 대비. 칸에 마우스를 올리면 상품명과 기록 최저·최고가가 보입니다. – = 검색에 안 잡힘.' + TRK_DL;
     } else {
-      const chs = [...trkChannels(), OTHER];
+      const chs = trkChannels();
       sel.replaceChildren(...chs.map(c => { const o = el('option', '', c); o.value = c; return o; }));
       if (!chs.includes(TRK.sel.ch)) TRK.sel.ch = chs[0];
       sel.value = TRK.sel.ch;
@@ -1378,7 +1377,7 @@ html, body { height: auto; }
     const pick = $('trkPick'), key = mode + '|' + g.id;
     pick.hidden = isCh;
     if (pick.dataset.key !== key) {
-      const opts = mode === 'ch' ? g.qtys.map(q => [String(q), q + g.unit]) : [...g.channels, OTHER].map(c => [c, c]);
+      const opts = mode === 'ch' ? g.qtys.map(q => [String(q), q + g.unit]) : g.channels.map(c => [c, c]);
       const keep = pick.value;
       pick.replaceChildren(...opts.map(([v, t]) => { const o = el('option', '', t); o.value = v; return o; }));
       if (opts.some(([v]) => v === keep)) pick.value = keep;
@@ -1399,7 +1398,7 @@ html, body { height: auto; }
       return ps.length ? Math.min(...ps) : null;
     };
     const series = mode === 'ch'
-      ? [...g.channels, OTHER].map(ch => ({ name: ch, values: times.map(t => at(t, +v, ch)) }))
+      ? g.channels.map(ch => ({ name: ch, values: times.map(t => at(t, +v, ch)) }))
       : g.qtys.map(q => ({ name: q + g.unit, values: times.map(t => { const p = at(t, q, v); return p == null ? null : Math.round(p / q); }) }));
     const shown = series.filter(s => s.values.some(y => y != null)).slice(0, 6);
     if (!shown.length) { box.appendChild(el('p', 'muted', '이 조건으로 기록된 가격이 없습니다.')); return; }
@@ -1416,11 +1415,10 @@ html, body { height: auto; }
     const btn = $('trkXlsx'); btn.disabled = true;
     try {
       const gs = trkViewGroups(), chs = trkChannels();
-      const now = [['브랜드', '구분', '입수량', ...chs.flatMap(c => [c, c + ' 개당']), OTHER, '채널', '기록 시각']];
+      const now = [['브랜드', '구분', '입수량', ...chs.flatMap(c => [c, c + ' 개당']), '기록 시각']];
       for (const g of gs) for (const q of g.qtys) {
-        const o = trkCell(g, q, OTHER);
         now.push([g.bname, g.name, q + g.unit, ...chs.flatMap(c => { const r = g.channels.includes(c) && trkCell(g, q, c); return r ? [r.price, Math.round(r.price / q)] : ['', '']; }),
-          o ? o.price : '', o ? o.ch : '', TRK.idx[g.id].times[trkCut(TRK.idx[g.id])] || '']);
+          TRK.idx[g.id].times[trkCut(TRK.idx[g.id])] || '']);
       }
       const all = [['기록 시각', '브랜드', '구분', '입수량', '채널', '가격', '개당', '같은 조건 상품 수', '폴센트 표시', '상품명']];
       for (const g of gs) for (const r of TRK.idx[g.id].rows) if (r.price != null)
