@@ -12,7 +12,7 @@
   --bg: #eef2f0; --panel: #fbfcfb; --sheet: #ffffff; --head: #e3e9e6;
   --line: #d2dad6; --fg: #17211d; --muted: #5b6a63;
   --in: #0f6b4f; --out: #3a4fb0; --warn: #a3341f; --on-accent: #ffffff;
-  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --grid: #e6ebe8;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #7d5bd6; --grid: #e6ebe8;
   --sans: "Malgun Gothic", "Segoe UI", sans-serif;
   --mono: Consolas, "Malgun Gothic", monospace;
 }
@@ -20,7 +20,7 @@
   --bg: #121715; --panel: #181f1c; --sheet: #1c2421; --head: #252e2a;
   --line: #333f3a; --fg: #e6ece9; --muted: #98a7a0;
   --in: #4fc29b; --out: #9aa9f2; --warn: #f09a86; --on-accent: #10231c; color-scheme: dark;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --grid: #2a3430;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #9a7ef0; --grid: #2a3430;
 } }
 [hidden] { display: none !important; }
 *, *::before, *::after { box-sizing: border-box; }
@@ -38,6 +38,15 @@ a { color: var(--out); }
 .tab[aria-selected="true"] { background: var(--in); border-color: var(--in); color: var(--on-accent); }
 #tabIn[aria-selected="true"] { background: var(--out); border-color: var(--out); }
 #tabAna[aria-selected="true"] { background: var(--s3); border-color: var(--s3); color: #fff; }
+#tabTrk[aria-selected="true"] { background: var(--s2); border-color: var(--s2); color: #fff; }
+.trk-t td { text-align: right; font-family: var(--mono); vertical-align: top; }
+.trk-t td small { display: block; color: var(--muted); font-size: 11px; }
+.trk-t td.best { background: color-mix(in srgb, var(--s3) 16%, transparent); font-weight: 700; }
+.trk-t td.na { color: var(--muted); text-align: center; }
+.trk-t .up { color: var(--warn); } .trk-t .dn { color: var(--s1); }
+.trk-ctl { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 14px; }
+.trk-ctl select { font: inherit; padding: 3px 6px; background: var(--sheet); color: var(--fg); border: 1px solid var(--line); }
+#trkSel { font-size: 16px; font-weight: 700; border-color: var(--s2); max-width: 100%; }
 .who { margin-left: auto; color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: center; }
 
 .pane { background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; min-width: 0; }
@@ -218,7 +227,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   :root {
     --bg: #ffffff; --panel: #ffffff; --sheet: #ffffff; --head: #eef1ef;
     --line: #c9d1cd; --fg: #111111; --muted: #4f5b55; --out: #3a4fb0; color-scheme: light;
-    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --grid: #e6ebe8;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #7d5bd6; --grid: #e6ebe8;
   }
   @page { size: A4; margin: 10mm; }
   html, body, .app { height: auto; }
@@ -243,6 +252,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <button class="tab" id="tabOut" role="tab" type="button" aria-selected="true">보내기</button>
       <button class="tab" id="tabIn" role="tab" type="button" aria-selected="false">답장 보기</button>
       <button class="tab" id="tabAna" role="tab" type="button" aria-selected="false">분석표</button>
+      <button class="tab" id="tabTrk" role="tab" type="button" aria-selected="false">가격 추적</button>
     </div>
     <span class="who" id="who" hidden>연결됨 <button class="btn small" id="logoutBtn" type="button">연결 끊기</button></span>
   </header>
@@ -323,6 +333,26 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       </div>
     </div>
     <p class="err" id="rErr" hidden></p>
+  </section>
+
+  <section class="pane" id="trackPane" hidden>
+    <div class="bar">
+      <select id="trkSel" aria-label="추적 상품 고르기"></select>
+      <span class="grow" id="trkInfo"></span>
+      <button class="btn" id="trkRefresh" type="button">새로고침</button>
+      <button class="btn primary" id="trkXlsx" type="button">엑셀로 내려받기</button>
+    </div>
+    <div class="view" id="trkView">
+      <div class="tw"><table class="at trk-t" id="trkTable"></table></div>
+      <p class="cn muted" id="trkNote" style="margin:0;font-size:13px"></p>
+      <div class="trk-ctl">
+        <label><input type="radio" name="trkMode" value="ch" checked> 캔수 하나 · 몰별 비교</label>
+        <label><input type="radio" name="trkMode" value="q"> 몰 하나 · 캔수별 비교 (캔당 가격)</label>
+        <select id="trkPick" aria-label="그래프 기준"></select>
+      </div>
+      <div id="trkChart" style="max-width:900px"></div>
+    </div>
+    <p class="err" id="trkErr" hidden></p>
   </section>
 </div>
 
@@ -428,7 +458,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   $('logoutBtn').addEventListener('click', () => {
     if (busy) return;
     store.clear(); token = '';
-    $('sendPane').hidden = true; $('readPane').hidden = true; $('tabs').hidden = true; $('who').hidden = true;
+    $('sendPane').hidden = true; $('readPane').hidden = true; $('trackPane').hidden = true; $('tabs').hidden = true; $('who').hidden = true;
     $('loginPane').hidden = false;
   });
 
@@ -436,12 +466,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   // 'read' = replies (outbox/*.txt: 답장 · 결과표 · 올린 데이터); 'ana' = 분석표 (analysis/*.json: in-browser analysis of an upload)
   let mode = 'read';
   function tab(name) {
-    const send = name === 'send';
-    $('sendPane').hidden = !send; $('readPane').hidden = send;
+    const send = name === 'send', trk = name === 'track';
+    $('sendPane').hidden = !send; $('readPane').hidden = send || trk; $('trackPane').hidden = !trk;
     $('tabOut').setAttribute('aria-selected', String(send));
     $('tabIn').setAttribute('aria-selected', String(name === 'read'));
     $('tabAna').setAttribute('aria-selected', String(name === 'ana'));
+    $('tabTrk').setAttribute('aria-selected', String(trk));
     if (send) return;
+    if (trk) { trkLoad(); return; }
     if (mode !== name || !cur) {
       mode = name; cur = null; AS = null; srcState = null; openToken++;
       $('rHead').hidden = true; $('rTabs').hidden = true; $('aBar').hidden = true; $('aCrumb').hidden = true;
@@ -452,6 +484,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   $('tabOut').addEventListener('click', () => tab('send'));
   $('tabIn').addEventListener('click', () => tab('read'));
   $('tabAna').addEventListener('click', () => tab('ana'));
+  $('tabTrk').addEventListener('click', () => tab('track'));
 
   // ---------- table helpers ----------
   const clean = t => t.replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
@@ -983,7 +1016,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   // ---------- dashboard ----------
   const SVGNS = 'http://www.w3.org/2000/svg';
   const sv = (tag, attrs, parent) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
-  const COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'];
+  const COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)', 'var(--s6)'];
   const fmt = (v, unit) => v == null ? '–' : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : (+v.toFixed(1)).toLocaleString()) + (unit || '');
   function ticks(lo, hi, n) {
     if (lo === hi) { lo -= 1; hi += 1; }
@@ -1027,7 +1060,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const py = v => T + (hi - v) * (H - T - B) / (hi - lo);
     const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': ch.title || '' });
     for (const v of tk) { sv('line', { x1: L, x2: W - R, y1: py(v), y2: py(v), stroke: 'var(--grid)' }, svg); sv('text', { x: L - 6, y: py(v) + 4, 'text-anchor': 'end' }, svg).textContent = fmt(v); }
-    x.forEach((lab, i) => { sv('text', { x: px(i), y: H - 8, 'text-anchor': 'middle' }, svg).textContent = lab; });
+    x.forEach((lab, i) => { sv('text', { x: px(i), y: H - 8, 'text-anchor': x.length > 1 && i === x.length - 1 ? 'end' : 'middle' }, svg).textContent = lab; });
     const cross = sv('line', { y1: T, y2: H - B, stroke: 'var(--muted)', 'stroke-dasharray': '3 3', visibility: 'hidden' }, svg);
     series.forEach((s, si) => {
       const c = COLORS[si % COLORS.length]; let d = '';
@@ -1046,6 +1079,162 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     hit.addEventListener('pointerleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); });
     return svg;
   }
+  // ================= 가격 추적 =================
+  // price-data tracker/items.json (groups: qtys × channels) + tracker/prices.csv
+  // (at,group,qty,channel,price,listings,trend,name), written twice a day by the price-tracker workflow.
+  const TRK = { cfg: null, rows: null, loading: null };
+  const won = v => v == null ? '–' : Math.round(v).toLocaleString() + '원';
+  async function trkLoad(force) {
+    $('trkErr').hidden = true;
+    if (TRK.cfg && !force) { trkRender(); return; }
+    if (TRK.loading) return TRK.loading;
+    $('trkInfo').textContent = '불러오는 중…';
+    TRK.loading = (async () => {
+      try {
+        const get = p => api('/contents/tracker/' + p, { accept: 'application/vnd.github.raw+json' }).then(r => r.text());
+        const opt = p => p.catch(e => { if (e.status === 404) return null; throw e; });
+        // prices: one CSV per month in tracker/prices/
+        const months = await opt(api('/contents/tracker/prices').then(r => r.json()));
+        const names = (months || []).filter(f => f.type === 'file' && /\.csv$/.test(f.name)).map(f => 'prices/' + f.name).sort();
+        const [cfgText, latestText, ...csvs] = await Promise.all([get('items.json'), opt(get('latest.json')), ...names.map(get)]);
+        TRK.cfg = JSON.parse(cfgText);
+        TRK.latest = latestText ? JSON.parse(latestText) : null;
+        TRK.rows = [];
+        for (const csvText of csvs) {
+          const t = split(clean(csvText), ',');
+          const h = t.shift() || [];
+          const ix = n => h.indexOf(n);
+          for (const r of t) if (r.length >= h.length) TRK.rows.push({
+            at: r[ix('at')], group: r[ix('group')], qty: +r[ix('qty')], ch: r[ix('channel')],
+            price: r[ix('price')] === '' ? null : +r[ix('price')], listings: +r[ix('listings')] || 0, trend: r[ix('trend')], name: r[ix('name')],
+          });
+        }
+        const sel = $('trkSel'), keep = sel.value;
+        sel.replaceChildren(...TRK.cfg.groups.map(g => { const o = el('option', '', g.title); o.value = g.id; return o; }));
+        if (keep && TRK.cfg.groups.some(g => g.id === keep)) sel.value = keep;
+        trkRender();
+      } catch (e) {
+        $('trkInfo').textContent = '';
+        $('trkErr').textContent = e.status === 404 ? '아직 추적 설정이 없습니다.' : '불러오지 못했습니다. ' + (e.status ? explain(e) : (e.message || '')); $('trkErr').hidden = false;
+      } finally { TRK.loading = null; }
+    })();
+    return TRK.loading;
+  }
+  function trkGroup() {
+    const g = TRK.cfg.groups.find(x => x.id === $('trkSel').value) || TRK.cfg.groups[0];
+    const rows = TRK.rows.filter(r => r.group === g.id);
+    const times = [...new Set(rows.map(r => r.at))].sort();
+    const cell = new Map();   // at|qty|ch -> row
+    for (const r of rows) cell.set(r.at + '|' + r.qty + '|' + r.ch, r);
+    return { g, rows, times, cell };
+  }
+  const trkLabel = at => { const [d, t] = at.split(' '); const [, m, dd] = d.split('-'); return `${+m}/${+dd} ${+t.slice(0, 2)}시`; };
+  function trkRender() {
+    if (!TRK.cfg) return;
+    const { g, rows, times, cell } = trkGroup(), unit = g.unit || '개';
+    const last = times[times.length - 1], prev = times[times.length - 2];
+    $('trkInfo').textContent = last ? `마지막 기록 ${last} · 기록 ${times.length}회 · 매일 0시 20분·9시 30분 자동 기록` : '아직 기록이 없습니다. 매일 0시 20분·9시 30분에 기록됩니다.';
+    // table: rows = qty, cols = channel
+    const tb = $('trkTable'); tb.replaceChildren();
+    const thead = el('thead'), hr = el('tr'); hr.appendChild(el('th', '', unit + '수'));
+    for (const ch of g.channels) hr.appendChild(el('th', '', ch));
+    hr.appendChild(el('th', '', '로켓 제외 최저가'));
+    thead.appendChild(hr); tb.appendChild(thead);
+    const L = TRK.latest && TRK.latest.at === last ? TRK.latest.groups?.[g.id] : null;   // links are kept for the latest run only
+    const linkTo = (href, text) => { if (!href || !/^https:\/\//.test(href)) return document.createTextNode(text); const a = el('a', '', text); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a; };
+    const tbody = el('tbody');
+    for (const q of g.qtys) {
+      const tr = el('tr'); tr.appendChild(el('th', '', q + unit));
+      const vals = g.channels.map(ch => last && cell.get(last + '|' + q + '|' + ch));
+      const min = Math.min(...vals.filter(r => r && r.price != null).map(r => r.price));
+      g.channels.forEach((ch, i) => {
+        const r = vals[i];
+        if (!r || r.price == null) { tr.appendChild(el('td', 'na', '–')); return; }
+        const td = el('td', r.price === min ? 'best' : '');
+        td.append(linkTo(L?.cells?.[q + '|' + ch]?.link, won(r.price)));
+        const sub = el('small', '', `${unit}당 ${won(r.price / q)}`);
+        const p = prev && cell.get(prev + '|' + q + '|' + ch);
+        if (p && p.price != null && p.price !== r.price) { const d = r.price - p.price; sub.appendChild(el('span', d > 0 ? 'up' : 'dn', ` ${d > 0 ? '▲' : '▼'}${Math.abs(d).toLocaleString()}`)); }
+        td.appendChild(sub);
+        const hist = rows.filter(x => x.qty === q && x.ch === ch && x.price != null).map(x => x.price);
+        td.title = `${r.name}\n같은 조건 상품 ${r.listings}건 중 최저가\n기록 최저 ${won(Math.min(...hist))} · 최고 ${won(Math.max(...hist))}`;
+        tr.appendChild(td);
+      });
+      // 로켓 제외 최저가 (lowest of the other channels)
+      const others = g.channels.map((ch, i) => ch !== '로켓배송' && vals[i] && vals[i].price != null ? { ch, r: vals[i] } : null).filter(Boolean);
+      const ob = others.reduce((a, x) => (!a || x.r.price < a.r.price ? x : a), null);
+      if (!ob) tr.appendChild(el('td', 'na', '–'));
+      else {
+        const td = el('td');
+        const href = L?.other?.[q]?.ch === ob.ch ? L.other[q].link : L?.cells?.[q + '|' + ob.ch]?.link;
+        td.append(linkTo(href, won(ob.r.price) + (href ? ' ↗' : '')));
+        td.appendChild(el('small', '', `${ob.ch} · ${unit}당 ${won(ob.r.price / q)}`));
+        td.title = ob.r.name;
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    tb.appendChild(tbody);
+    $('trkNote').textContent = '칸마다 그 몰에서 같은 ' + unit + '수 상품 중 가장 싼 가격입니다 (폴센트 검색 기준). 초록 칸 = 그 줄 최저가, ▲▼ = 직전 기록 대비. 가격을 누르면 그 상품 페이지가 새 창으로 열립니다. 칸에 마우스를 올리면 상품명과 기록 최저·최고가가 보입니다. – = 검색에 안 잡힘.';
+    trkChartRender();
+  }
+  function trkChartRender() {
+    const { g, times, cell } = trkGroup(), unit = g.unit || '개';
+    const mode = document.querySelector('input[name="trkMode"]:checked').value;
+    const pick = $('trkPick'), opts = mode === 'ch' ? g.qtys.map(q => [String(q), q + unit]) : g.channels.map(c => [c, c]);
+    if (pick.dataset.mode !== mode) {
+      pick.replaceChildren(...opts.map(([v, t]) => { const o = el('option', '', t); o.value = v; return o; }));
+      pick.dataset.mode = mode;
+    }
+    const box = $('trkChart'); box.replaceChildren();
+    if (times.length < 1) return;
+    const v = pick.value;
+    const series = mode === 'ch'
+      ? g.channels.map(ch => ({ name: ch, values: times.map(t => cell.get(t + '|' + v + '|' + ch)?.price ?? null) }))
+      : g.qtys.map(q => ({ name: q + unit, values: times.map(t => { const p = cell.get(t + '|' + q + '|' + v)?.price; return p == null ? null : Math.round(p / q); }) }));
+    const shown = series.filter(s => s.values.some(x => x != null));
+    if (!shown.length) { box.appendChild(el('p', 'muted', '이 조건으로 기록된 가격이 없습니다.')); return; }
+    box.appendChild(chart({
+      type: 'line', zero: false, unit: '원', x: times.map(trkLabel), series: shown,
+      title: mode === 'ch' ? `${g.title} ${v}${unit} · 몰별 가격` : `${g.title} · ${v} · ${unit}수별 ${unit}당 가격`,
+      note: times.length < 2 ? '기록이 2회 이상 쌓이면 선으로 이어집니다.' : '',
+    }));
+  }
+  async function trkXlsx() {
+    if (!TRK.cfg) return;
+    const btn = $('trkXlsx'); btn.disabled = true;
+    try {
+      const { g, rows, times, cell } = trkGroup(), unit = g.unit || '개', last = times[times.length - 1];
+      const L = TRK.latest && TRK.latest.at === last ? TRK.latest.groups?.[g.id] : null;
+      const now = [[unit + '수', ...g.channels.flatMap(c => [c, c + ' ' + unit + '당']), '로켓 제외 최저가', '몰', '링크']];
+      for (const q of g.qtys) {
+        const ps = g.channels.map(c => last && cell.get(last + '|' + q + '|' + c)?.price);
+        const oi = g.channels.reduce((b, c, i) => c !== '로켓배송' && ps[i] != null && (b < 0 || ps[i] < ps[b]) ? i : b, -1);
+        now.push([q + unit, ...ps.flatMap(p => p == null ? ['', ''] : [p, Math.round(p / q)]),
+          oi < 0 ? '' : ps[oi], oi < 0 ? '' : g.channels[oi], oi < 0 ? '' : (L?.cells?.[q + '|' + g.channels[oi]]?.link || '')]);
+      }
+      const wide = [['기록 시각', ...g.qtys.flatMap(q => g.channels.map(c => `${q}${unit} ${c}`))]];
+      for (const t of times) wide.push([t, ...g.qtys.flatMap(q => g.channels.map(c => cell.get(t + '|' + q + '|' + c)?.price ?? ''))]);
+      const all = [['기록 시각', unit + '수', '몰', '가격', unit + '당', '같은 조건 상품 수', '폴센트 표시', '상품명']];
+      for (const r of rows) if (r.price != null) all.push([r.at, r.qty, r.ch, r.price, Math.round(r.price / r.qty), r.listings, r.trend === 'up' ? '상승' : r.trend === 'down' ? '하락' : '', r.name]);
+      const blob = await buildXlsx([
+        { name: '지금 가격', rows: now, header: true },
+        { name: '날짜별 가격', rows: wide, header: true },
+        { name: '전체 기록', rows: all, header: true },
+      ]);
+      const a = document.createElement('a'), url = URL.createObjectURL(blob);
+      a.href = url; a.download = `가격 추적 - ${g.title} (${(last || '').slice(0, 10)}).xlsx`.replace(/[\\/:*?"<>|]+/g, ' ');
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { $('trkErr').textContent = '엑셀 파일을 만들지 못했습니다. ' + (e.message || ''); $('trkErr').hidden = false; }
+    btn.disabled = false;
+  }
+  $('trkSel').addEventListener('change', () => { $('trkPick').dataset.mode = ''; trkRender(); });
+  $('trkRefresh').addEventListener('click', () => trkLoad(true));
+  $('trkXlsx').addEventListener('click', trkXlsx);
+  $('trkPick').addEventListener('change', trkChartRender);
+  for (const r of document.querySelectorAll('input[name="trkMode"]')) r.addEventListener('change', trkChartRender);
+
   // ================= analysis: 요약표 · 판정표 · INSIGHT =================
   // The uploaded table is read whole and turned into amounts per (dims, year, period):
   // S 총매출, D 차감, G 판관비, C 비용(차감+판관비), V 변동원가; CM = S − C − V.
