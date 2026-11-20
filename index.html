@@ -1419,7 +1419,10 @@ html, body { height: auto; }
           trkReqShared(host);
         } catch (e) { b.disabled = false; b.textContent = '삭제'; alert('지우지 못했습니다. ' + reqErr(e)); }
       }));
-    } catch (e) { host.innerHTML = '<h4>공유 링크로 들어온 요청</h4><p class="err">' + esc(reqErr(e)) + '</p>'; }
+    } catch (e) {
+      host.innerHTML = '<h4>공유 링크로 들어온 요청</h4><p class="err">' + esc(reqErr(e)) + '</p><p><button type="button" class="btn small" id="reqTokReset">토큰 다시 넣기</button></p>';
+      $('reqTokReset').addEventListener('click', () => { reqTok = ''; try { localStorage.removeItem(REQ_KEY); } catch (er) {} trkReqShared(host); });
+    }
   }
   const trkLabel = at => { const [d, t] = at.split(' '); const [, m, dd] = d.split('-'); return `${+m}/${+dd} ${+t.slice(0, 2)}시`; };
   const trkChannels = () => [...new Set(TRK.groups.flatMap(g => g.channels))];
