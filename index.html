@@ -205,6 +205,8 @@ td.num { text-align: right; font-family: var(--mono); }
 .psb button:hover { border-color: var(--out); }
 .psb button.on { background: var(--out); border-color: var(--out); color: #fff; font-weight: 600; }
 .psb button.off { opacity: .38; }
+.psb button.drag { background: var(--out); border-color: var(--out); color: #fff; opacity: .75; }
+.psb button { user-select: none; }
 .psb .more { font-size: 12px; color: var(--muted); padding: 1px 4px; }
 .pmore > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .ppick > summary { list-style: none; cursor: pointer; display: inline-block; }
@@ -2275,6 +2277,7 @@ html, body { height: auto; }
     if (!PS || !PS.model) return;
     const s = PS.s, b = e.target.closest('button'); if (!b) return;
     if (b.dataset.pv != null) {
+      if (psDragDone) { psDragDone = false; return; }   // the click that ends a drag: the drag already chose
       const d = +b.closest('.ps').dataset.d, k = +b.dataset.pv, f = new Set(s.filt[d] || []);
       if (f.has(k)) f.delete(k); else f.add(k);
       s.filt[d] = f.size ? f : null; perfChanged(); return;
@@ -2283,6 +2286,32 @@ html, body { height: auto; }
     if (b.hasAttribute('data-pall')) { s.filt = s.filt.map(() => null); perfChanged(); return; }
     if (b.hasAttribute('data-pfold')) { s.fold = !s.fold; perfSave(); perfBar(); }
     if (b.hasAttribute('data-pshowdef')) { s.show = perfShowDef(PS.model); perfSave(); perfBar(); perfReopenPick(); }
+  });
+  // drag across slicer buttons to pick a run of values (like an Excel slicer); Ctrl/Shift while dragging adds to what is picked
+  let psDrag = null, psDragDone = false;
+  $('pBar').addEventListener('pointerdown', e => {
+    const b = e.target.closest('.psb button[data-pv]'); if (!b || e.button !== 0 || !PS || !PS.model) return;
+    const box = b.closest('.ps');
+    psDrag = { box, d: +box.dataset.d, btns: [...box.querySelectorAll('.psb button[data-pv]')], i0: 0, i1: 0, moved: false, add: e.ctrlKey || e.shiftKey || e.metaKey };
+    psDrag.i0 = psDrag.i1 = psDrag.btns.indexOf(b);
+    e.preventDefault();   // no text selection while dragging
+  });
+  document.addEventListener('pointermove', e => {
+    if (!psDrag) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY), b = el && el.closest && el.closest('.psb button[data-pv]');
+    if (!b || !psDrag.box.contains(b)) return;
+    const i = psDrag.btns.indexOf(b); if (i < 0 || i === psDrag.i1) return;
+    psDrag.i1 = i; psDrag.moved = true;
+    const [a, z] = [Math.min(psDrag.i0, i), Math.max(psDrag.i0, i)];
+    psDrag.btns.forEach((x, j) => x.classList.toggle('drag', j >= a && j <= z));
+  });
+  document.addEventListener('pointerup', () => {
+    const g = psDrag; psDrag = null; if (!g || !g.moved) return;
+    psDragDone = true; setTimeout(() => { psDragDone = false; }, 0);
+    const [a, z] = [Math.min(g.i0, g.i1), Math.max(g.i0, g.i1)], s = PS.s;
+    const f = new Set(g.add && s.filt[g.d] ? s.filt[g.d] : []);
+    g.btns.slice(a, z + 1).forEach(x => f.add(+x.dataset.pv));
+    s.filt[g.d] = f.size ? f : null; perfChanged();
   });
   $('pBar').addEventListener('change', e => {
     if (!PS || !PS.s) return;
