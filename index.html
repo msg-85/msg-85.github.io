@@ -39,6 +39,7 @@ a { color: var(--out); }
 #tabIn[aria-selected="true"] { background: var(--out); border-color: var(--out); }
 #tabAna[aria-selected="true"] { background: var(--s3); border-color: var(--s3); color: #fff; }
 #tabTrk[aria-selected="true"] { background: var(--s2); border-color: var(--s2); color: #fff; }
+#tabPerf[aria-selected="true"] { background: var(--s6); border-color: var(--s6); color: #fff; }
 .trk-t td { text-align: right; font-family: var(--mono); vertical-align: top; }
 .trk-t td small { display: block; color: var(--muted); font-size: 11px; }
 .trk-t td.best { background: color-mix(in srgb, var(--s3) 16%, transparent); font-weight: 700; }
@@ -189,6 +190,49 @@ td.num { text-align: right; font-family: var(--mono); }
 .msl .msg:hover { color: var(--fg); }
 .trk-ms > summary { max-width: 240px; font-size: 14px; }
 .trk-ms .msp { width: 320px; }
+/* 실적 현황 (layout perf): Excel-style slicers, 총계 table, combo chart, free pivot */
+.pbar { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; max-height: 48vh; overflow: auto; }
+.pbar.fold .psg, .pbar.fold .pmore { display: none; }
+.psg { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+.ps { background: var(--sheet); border: 1px solid var(--line); padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ps.w2 { grid-column: span 2; }
+@media (max-width: 600px) { .ps.w2 { grid-column: auto; } }
+.psh { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.psh .muted { font-size: 12px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.psq { width: 100px; font-size: 12px; padding: 1px 4px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+.psb { display: flex; flex-wrap: wrap; gap: 3px; max-height: 80px; overflow: auto; align-content: flex-start; }
+.psb button { border: 1px solid var(--line); background: var(--panel); color: var(--fg); font-size: 12px; padding: 1px 7px; cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.psb button:hover { border-color: var(--out); }
+.psb button.on { background: var(--out); border-color: var(--out); color: #fff; font-weight: 600; }
+.psb button.off { opacity: .38; }
+.psb .more { font-size: 12px; color: var(--muted); padding: 1px 4px; }
+.pmore > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.pmore[open] > summary { margin-bottom: 6px; }
+.pline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; background: var(--sheet); border: 1px solid var(--line); padding: 5px 8px; }
+.pline .sel { color: var(--muted); flex: 1; min-width: 200px; }
+.pline .sel b { color: var(--fg); }
+.pline select, .pctl select { font-size: 13px; padding: 2px 6px; border: 1px solid var(--line); background: var(--sheet); color: var(--fg); }
+.ph { font-size: 15px; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.ph small { font-weight: 400; font-size: 12px; color: var(--muted); }
+.ptot td { text-align: right; font-family: var(--mono); }
+.ptot tbody th { text-align: center; font: 600 13px var(--sans); color: var(--fg); }
+.ptot tr.dl > * { background: var(--panel); }
+.ptot .pp { color: var(--pos); } .ptot .pn { color: var(--neg); }
+.pchips { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 13px; }
+.pchips .btn { border-radius: 999px; padding: 1px 10px; font-size: 13px; }
+.pchips .btn[aria-pressed="true"] { border-color: var(--out); color: var(--out); font-weight: 700; box-shadow: inset 0 0 0 1px var(--out); }
+.pchips b { font-size: 12px; color: var(--muted); font-weight: 600; margin-left: 6px; }
+.combo-wrap { overflow-x: auto; }
+.combo-wrap svg { min-width: var(--minw, 600px); }
+.pctl { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13px; }
+.pvt td { text-align: right; font-family: var(--mono); }
+.pvt tbody th { text-align: left; font: 500 13px var(--sans); color: var(--fg); background: var(--sheet); max-width: 360px; }
+.pvt tbody th .tg { cursor: pointer; display: inline-block; width: 16px; color: var(--out); user-select: none; }
+.pvt tbody tr.tot > * { font-weight: 700; background: var(--head); }
+.pvt tbody tr.lv0 th { font-weight: 600; }
+.pvt tbody tr.mr td { text-align: left; color: var(--muted); cursor: pointer; font-family: var(--sans); }
+.pvt thead th.c { cursor: pointer; }
+.pvt thead th.cg { border-bottom: 1px solid var(--line); }
 .crumb { font-size: 13px; color: var(--muted); background: var(--sheet); border: 1px solid var(--line); padding: 5px 10px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; flex-shrink: 0; }
 .crumb b { color: var(--fg); }
 .crumb .x { border: 1px solid var(--line); background: var(--panel); padding: 0 7px; cursor: pointer; font-size: 12px; color: var(--fg); }
@@ -276,7 +320,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   html, body, .app { height: auto; }
   body { padding: 0; background: #fff; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #anaSel { display: none !important; } #rTitle { display: block !important; }
-  .top, #readPane > .bar:not(#rHead), #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles, #aBar, .crumb .x, .req textarea, .req .bar { display: none !important; }
+  .top, #readPane > .bar:not(#rHead), #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles, #aBar, .pbar .psg, .pmore, .pline .btn, .pchips, .pctl, .crumb .x, .req textarea, .req .bar { display: none !important; }
   .tw { overflow: visible; }
   .icard, .tile { break-inside: avoid; }
   .pane { border: 0; padding: 0; gap: 8px; }
@@ -296,6 +340,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <button class="tab" id="tabIn" role="tab" type="button" aria-selected="false">답장 보기</button>
       <button class="tab" id="tabAna" role="tab" type="button" aria-selected="false">분석표</button>
       <button class="tab" id="tabTrk" role="tab" type="button" aria-selected="false">가격 추적</button>
+      <button class="tab" id="tabPerf" role="tab" type="button" aria-selected="false">실적표</button>
     </div>
     <span class="who" id="who" hidden>연결됨 <button class="btn small" id="logoutBtn" type="button">연결 끊기</button></span>
   </header>
@@ -348,13 +393,18 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <button type="button" role="tab" data-v="vSum" data-m="ana">요약표</button>
       <button type="button" role="tab" data-v="vJudge" data-m="ana">판정표</button>
       <button type="button" role="tab" data-v="vIns" data-m="ana">INSIGHT</button>
-      <button type="button" role="tab" data-v="vReq" data-m="ana">요청 · 추가 분석</button>
+      <button type="button" role="tab" data-v="vPerf" data-m="perf">실적 현황</button>
+      <button type="button" role="tab" data-v="vPivot" data-m="perf">자유 피벗</button>
+      <button type="button" role="tab" data-v="vReq" data-m="ana perf">요청 · 추가 분석</button>
       <button type="button" role="tab" data-v="vTable" data-m="reply">결과표</button>
-      <button type="button" role="tab" data-v="vSrc" data-m="reply ana">올린 데이터</button>
+      <button type="button" role="tab" data-v="vSrc" data-m="reply ana perf">올린 데이터</button>
     </div>
     <div class="view" id="vNote" hidden></div>
     <div class="abar" id="aBar" hidden></div>
     <div class="crumb" id="aCrumb" hidden></div>
+    <div class="pbar" id="pBar" hidden></div>
+    <div class="view" id="vPerf" hidden></div>
+    <div class="view" id="vPivot" hidden></div>
     <div class="view" id="vSum" hidden></div>
     <div class="view" id="vJudge" hidden></div>
     <div class="view" id="vIns" hidden></div>
@@ -539,11 +589,12 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     $('tabIn').setAttribute('aria-selected', String(name === 'read'));
     $('tabAna').setAttribute('aria-selected', String(name === 'ana'));
     $('tabTrk').setAttribute('aria-selected', String(trk));
+    $('tabPerf').setAttribute('aria-selected', String(name === 'perf'));
     if (send) return;
     if (trk) { trkLoad(); return; }
     if (mode !== name || !cur) {
-      mode = name; cur = null; AS = null; srcState = null; openToken++;
-      $('rHead').hidden = true; $('rTabs').hidden = true; $('aBar').hidden = true; $('aCrumb').hidden = true;
+      mode = name; cur = null; AS = null; PS = null; srcState = null; openToken++;
+      $('rHead').hidden = true; $('rTabs').hidden = true; $('aBar').hidden = true; $('aCrumb').hidden = true; $('pBar').hidden = true;
       for (const v of VIEWS) $(v).hidden = true;
     }
     loadList();
@@ -552,6 +603,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   $('tabIn').addEventListener('click', () => tab('read'));
   $('tabAna').addEventListener('click', () => tab('ana'));
   $('tabTrk').addEventListener('click', () => tab('track'));
+  $('tabPerf').addEventListener('click', () => tab('perf'));
 
   // ---------- table helpers ----------
   const clean = t => t.replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
@@ -728,11 +780,12 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   // ---------- replies ----------
   async function loadList() {
     $('listInfo').textContent = '불러오는 중입니다.'; $('rErr').hidden = true;
-    const ana = mode === 'ana', none = ana ? '아직 분석표가 없습니다. 디스코드에 "번호 ○○ 분석표로 분석해줘"라고 보내주세요.' : '아직 답장이 없습니다.';
+    const m0 = mode, ana = mode === 'ana' || mode === 'perf';
+    const none = mode === 'perf' ? '아직 실적표가 없습니다. 디스코드에 "번호 ○○ 실적표로 만들어줘"라고 보내주세요.' : ana ? '아직 분석표가 없습니다. 디스코드에 "번호 ○○ 분석표로 분석해줘"라고 보내주세요.' : '아직 답장이 없습니다.';
     listMode(ana);
     try {
-      const items = await (await api(ana ? '/contents/analysis' : '/contents/outbox')).json();
-      if (ana !== (mode === 'ana')) return;
+      const items = await (await api(mode === 'perf' ? '/contents/perf' : ana ? '/contents/analysis' : '/contents/outbox')).json();
+      if (m0 !== mode) return;
       const names = items.filter(i => i.type === 'file' && i.name.endsWith(ana ? '.json' : '.txt')).map(i => i.name).sort().reverse();
       if (ana) { if (names.length) { fillAnaSel(names); return; } $('list').replaceChildren(); $('listInfo').textContent = none; return; }
       outFiles = new Set(items.filter(i => i.type === 'file').map(i => i.name));
@@ -785,13 +838,16 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   }
   // 분석표: analysis/<name>.json = { title, source: '<inbox stamp>', note?, createdAt, analysis?: {unit, split, merge, filt} }
   const anaCache = new Map();
+  const anaDir = () => mode === 'perf' ? 'perf' : 'analysis';
   function anaEntry(name) {
-    if (!anaCache.has(name)) {
-      const p = api('/contents/analysis/' + encodeURIComponent(name), { accept: 'application/vnd.github.raw+json' }).then(r => r.text()).then(JSON.parse);
-      p.catch(() => anaCache.delete(name)); anaCache.set(name, p);
+    const key = anaDir() + '/' + name;
+    if (!anaCache.has(key)) {
+      const p = api('/contents/' + anaDir() + '/' + encodeURIComponent(name), { accept: 'application/vnd.github.raw+json' }).then(r => r.text()).then(JSON.parse);
+      p.catch(() => anaCache.delete(key)); anaCache.set(key, p);
     }
-    return anaCache.get(name);
+    return anaCache.get(key);
   }
+  const anaKeep = () => mode === 'perf' ? 'data-window-perf-sel' : 'data-window-ana';
   function loadAnaTitle(o) {
     const name = o.value;
     anaEntry(name).then(j => { if (j.title) o.textContent = `${j.title} · ${name.replace(/\.json$/, '')}`; }, () => {});
@@ -802,7 +858,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     $('listBar').hidden = false;
   }
   function fillAnaSel(names) {
-    const sel = $('anaSel'), keep = cur && cur.ana ? cur.name : (() => { try { return localStorage.getItem('data-window-ana'); } catch (e) { return null; } })();
+    const sel = $('anaSel'), keep = cur && cur.ana ? cur.name : (() => { try { return localStorage.getItem(anaKeep()); } catch (e) { return null; } })();
     sel.replaceChildren(...names.map(n => { const o = document.createElement('option'); o.value = n; o.textContent = n.replace(/\.json$/, ''); return o; }));
     for (const o of sel.options) loadAnaTitle(o);
     const pick = names.includes(keep) ? keep : names[0];
@@ -814,10 +870,11 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   async function openAna(name) {
     const my = ++openToken;
     $('rErr').hidden = true;
-    try { localStorage.setItem('data-window-ana', name); } catch (e) {}
+    try { localStorage.setItem(anaKeep(), name); } catch (e) {}
     try {
-      const j = await anaEntry(name);
+      const j0 = await anaEntry(name);
       if (my !== openToken) return;
+      const j = mode === 'perf' ? { ...j0, layout: 'perf' } : j0;
       const stamp = j.source || (/^(\d{8}-\d{6})/.exec(name) || [])[1] || '';
       $('rHead').hidden = false; $('rTitle').textContent = j.title || name.replace(/\.json$/, '');
       drawTable('');
@@ -827,7 +884,10 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       for (const [id] of EXTRA_FILES) $(id).hidden = true;
       srcState = { stamp, loaded: false };
       $('sFiles').replaceChildren(); $('sGrid').hidden = true; $('sCopy').hidden = true; $('sNote').hidden = true; $('sInfo').textContent = '';
-      reqState = null; showTabs('ana'); startAnalysis(cur, srcState);
+      reqState = null;
+      if (isPerf(cur)) { AS = null; $('aBar').hidden = true; $('aCrumb').hidden = true; showTabs('perf'); startPerf(cur, srcState); view(PVIEWS.includes(curView) || curView === 'vReq' ? curView : 'vPerf'); return; }
+      PS = null; $('pBar').hidden = true;
+      showTabs('ana'); startAnalysis(cur, srcState);
       view(AVIEWS.includes(curView) || curView === 'vReq' ? curView : 'vSum');
     } catch (e) { $('rErr').textContent = explain(e); $('rErr').hidden = false; }
   }
@@ -839,7 +899,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const c = cur, host = $('vNote'); if (!c) return;
     host.innerHTML = c.note ? `<p class="summary">${esc(c.note)}</p>` : '<p class="muted">이 답장에는 메모가 없습니다. 결과표 탭을 보세요.</p>';
   }
-  const AVIEWS = ['vSum', 'vJudge', 'vIns'], VIEWS = ['vNote', 'vSum', 'vJudge', 'vIns', 'vReq', 'vTable', 'vSrc'];
+  const AVIEWS = ['vSum', 'vJudge', 'vIns'], VIEWS = ['vNote', 'vSum', 'vJudge', 'vIns', 'vPerf', 'vPivot', 'vReq', 'vTable', 'vSrc'];
   let curView = 'vSum';
   function view(id) {
     curView = id;
@@ -848,9 +908,11 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     if (id === 'vNote') drawNote();
     const a = AVIEWS.includes(id) && AS && AS.model;
     $('aBar').hidden = !a; $('aCrumb').hidden = !a;
+    if (!(PVIEWS.includes(id) && PS && PS.model)) $('pBar').hidden = true;
     if (id === 'vSrc' && srcState && !srcState.loaded) srcState.loading = loadSource();
     if (id === 'vReq') drawReq();
     if (AVIEWS.includes(id)) drawAnalysis();
+    if (PVIEWS.includes(id)) perfDraw();
   }
   for (const b of $('rTabs').children) b.addEventListener('click', () => view(b.dataset.v));
 
@@ -1028,6 +1090,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   }
   async function downloadXlsx() {
     if (!cur) return;
+    if (isPerf(cur) && PS) return perfXlsx();
     const c = cur, btn = $('xlsxBtn'); btn.disabled = true; btn.textContent = '엑셀 만드는 중…';
     try {
       const st = srcState;
@@ -1867,6 +1930,525 @@ html, body { height: auto; }
     nmBest.forEach((mp, d) => { if (mp && mp.size) vals[d] = vals[d].map(v => mp.has(v) ? `${v} ${mp.get(v).n}` : v); });   // 번호 이름
     if (!nd) { dimNames.push('전체'); vals.push(['전체']); leafDim.push(new Int32Array(nL)); }
     return { dims: dimNames, vals, leafDim, years, periods, isMonth, nL, nY, nP, data, has, lab: Object.assign({ C: '비용 (차감+판관비)', V: '변동원가', P: '판매액' }, opts.labels || {}), kind: flat ? '목록형 표' : '피벗' };
+  }
+
+  // ================= 실적표 (top tab; price-data perf/<name>.json = { title, source, perf?: {dims, more, rename, meas, qtyDiv, qtyUnit} }) =================
+  // The upload is a row-level ledger (one row per 연·월·고객·제품 …). It is read as a stream and only the slicer
+  // columns (as codes) and the amount columns (Float64Array) are kept, so 15만+ rows stay light; every slicer
+  // change re-sums in the browser. Rates are always recomputed from summed amounts (÷ 총매출), never averaged.
+  const PERF_DEF = {
+    dims: ['연', '월', '팀', '채널', '제품구분', '대카테고리', '소카테고리', '플레이버'],
+    more: ['용기', '영업그룹 Name', '고객3레벨 Name', '제품대분류 Name', '제품담당', '채널담당', '외주여부', '세분류', '제품번호 Name'],
+    rename: { '영업그룹 Name': '영업그룹', '고객3레벨 Name': '고객', '제품대분류 Name': '제품대분류', '제품번호 Name': '제품' },
+    meas: [['S', '총매출', '총매출'], ['C', '비용', '비용'], ['O', '원가', '매출원가합계'], ['OP', '영업이익', '영업이익'], ['CM', '공헌이익', '공헌이익'],
+      ['V', '변동원가', '변동원가'], ['T', '운송비', '관리비_운송비'], ['A', '관리비용', '관리비용합계'], ['Q', '실판매수량', '실매출수량', 'qty'],
+      ['N', '순매출', '순매출'], ['GP', '매출총이익', '매출총이익'], ['E', '영업비용', '영업비용 합계']],
+    qtyDiv: 1000, qtyUnit: '천개',
+  };
+  const PERF_RATES = [['Cr', '비용율', 'C'], ['Or', '원가율', 'O'], ['OPr', '영업이익율', 'OP'], ['CMr', '공헌이익율', 'CM'], ['Tr', '운송비율', 'T'], ['Ar', '관리비용율', 'A'], ['Vr', '변동원가율', 'V'], ['GPr', '매출총이익율', 'GP'], ['Er', '영업비용율', 'E']];
+  const PERF_SUM = ['S', 'C', 'Cr', 'O', 'Or', 'OP', 'OPr', 'CM', 'CMr', 'Tr', 'Ar', 'Q', 'V', 'Vr'];
+  const PERF_DIVS = [[1e8, '억원', 1], [1e6, '백만원', 0], [1e3, '천원', 0], [1, '원', 0]];
+  const PVIEWS = ['vPerf', 'vPivot'];
+  let PS = null;
+  const isPerf = c => !!(c && c.extra && c.extra.layout === 'perf');
+  const pKey = name => 'data-window-perf:' + name;
+  function perfCfg(extra) { const o = (extra && extra.perf) || {}; return { ...PERF_DEF, ...o, rename: { ...PERF_DEF.rename, ...(o.rename || {}) } }; }
+  function splitLine(line, d) {
+    if (line.indexOf('"') < 0) return line.split(d);
+    const out = []; let cell = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (q) { if (ch === '"') { if (line[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+      else if (ch === '"') q = true; else if (ch === d) { out.push(cell); cell = ''; } else cell += ch;
+    }
+    out.push(cell); return out;
+  }
+  const pnum = s => {
+    if (!s) return 0; let t = s.trim(); if (!t || t === '-') return 0;
+    let neg = false; if (t[0] === '(' && t[t.length - 1] === ')') { neg = true; t = t.slice(1, -1); }
+    if (t.indexOf(',') >= 0 || t.indexOf(' ') >= 0) t = t.replace(/[,\s]/g, '');
+    const x = +t; return Number.isFinite(x) ? (neg ? -x : x) : 0;
+  };
+  // streams the upload line by line into { dims:[{name, more, vals}], codes:[Int32Array], meas:[{k,label,kind}], val:{k: Float64Array}, n }
+  async function perfRead(stamp, f, cfg, prog) {
+    let pi = 0, n = 0;
+    const gz = new ReadableStream({ async pull(ctl) {
+      if (pi >= f.parts.length) { ctl.close(); return; }
+      const r = await api(`/contents/inbox/${stamp}/${f.parts[pi++]}`, { accept: 'application/vnd.github.raw+json' });
+      ctl.enqueue(new Uint8Array(await r.arrayBuffer())); prog(pi, f.parts.length, n);
+    } });
+    const reader = gz.pipeThrough(new DecompressionStream('gzip')).pipeThrough(new TextDecoderStream()).getReader();
+    let H = null, d = '\t', tries = 0, dims = [], mcols = [], codes = [], mv = [];
+    const first = [].concat(cfg.meas[0][2])[0];
+    const take = line => {
+      if (!H) {
+        if (!line.trim() || tries++ > 40) return;
+        const t = line.replace(/^﻿/, ''); d = t.split('\t').length >= t.split(',').length ? '\t' : ',';
+        const h = splitLine(t, d).map(x => x.trim());
+        if (!h.includes(first)) return;
+        H = h;
+        for (const [list, more] of [[cfg.dims, false], [cfg.more, true]]) for (const name of list) { const c = h.indexOf(name); if (c >= 0) dims.push({ name: cfg.rename[name] || name, src: name, c, more, vals: [], map: new Map() }); }
+        mcols = cfg.meas.map(([k, label, col, kind]) => ({ k, label, kind: kind || 'amt', c: [].concat(col).map(x => h.indexOf(x)).filter(c => c >= 0) })).filter(m => m.c.length);
+        codes = dims.map(() => []); mv = mcols.map(() => []);
+        return;
+      }
+      if (!line || !/[^\t,\s]/.test(line)) return;
+      const r = d === '\t' && line.indexOf('"') < 0 ? line.split('\t') : splitLine(line, d);
+      for (let i = 0; i < dims.length; i++) {
+        const D = dims[i], v = (r[D.c] || '').trim() || '(빈칸)';
+        let k = D.map.get(v); if (k === undefined) { k = D.vals.length; D.map.set(v, k); D.vals.push(v); }
+        codes[i].push(k);
+      }
+      for (let j = 0; j < mcols.length; j++) { const cs = mcols[j].c; let x = 0; for (let q = 0; q < cs.length; q++) x += pnum(r[cs[q]]); mv[j].push(x); }
+      n++;
+    };
+    let rest = '';
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break;
+      const parts = (rest + value).split('\n'); rest = parts.pop();
+      for (const p of parts) take(p.endsWith('\r') ? p.slice(0, -1) : p);
+    }
+    if (rest) take(rest.replace(/\r$/, ''));
+    if (!H) throw new Error(`머리글(「${first}」 열이 있는 줄)을 찾지 못했습니다.`);
+    if (!mcols.some(m => m.k === 'S')) throw new Error('총매출 열이 없습니다.');
+    if (!dims.some(D => D.src === '연')) throw new Error('연 열이 없습니다.');
+    return perfModel(dims, codes, mcols, mv, n);
+  }
+  function perfModel(dims, codes, mcols, mv, n) {
+    const mn = v => { const m = /\d+/.exec(v); return m ? +m[0] : 1e9; };
+    const out = { n, dims: [], codes: [], meas: mcols.map(m => ({ k: m.k, label: m.label, kind: m.kind })), val: {}, kix: {} };
+    dims.forEach((D, i) => {
+      const ord = D.vals.map((v, k) => k);
+      const blank = v => v === '(빈칸)' ? 1 : 0;
+      if (D.src === '연' || D.src === '월') ord.sort((a, b) => blank(D.vals[a]) - blank(D.vals[b]) || mn(D.vals[a]) - mn(D.vals[b]));
+      else ord.sort((a, b) => blank(D.vals[a]) - blank(D.vals[b]) || D.vals[a].localeCompare(D.vals[b], 'ko', { numeric: true }));
+      const re = new Int32Array(ord.length); ord.forEach((o, k) => { re[o] = k; });
+      const src = codes[i], cd = new Int32Array(n); for (let r = 0; r < n; r++) cd[r] = re[src[r]];
+      out.dims.push({ name: D.name, src: D.src, more: D.more, vals: ord.map(o => D.vals[o]) }); out.codes.push(cd);
+    });
+    mcols.forEach((m, j) => { out.val[m.k] = mv[j] instanceof Float64Array ? mv[j] : Float64Array.from(mv[j]); });
+    out.meas.forEach((m, j) => { out.kix[m.k] = j; });
+    out.yi = out.dims.findIndex(D => D.src === '연'); out.mi = out.dims.findIndex(D => D.src === '월');
+    return out;
+  }
+  function startPerf(c, st) {
+    const my = PS = { c, st, cfg: perfCfg(c.extra), model: null, error: '', loading: null, s: null, prog: '', pt: null, q: {} };
+    my.loading = (async () => {
+      try {
+        if (!st.stamp) throw new Error('연결된 올린 데이터가 없습니다.');
+        const man = await manifestOf(st);
+        const f = (man.files || [])[0]; if (!f) throw new Error('올린 파일이 없습니다.');
+        const m = await perfRead(st.stamp, f, my.cfg, (i, k, n) => { my.prog = `원본을 읽는 중… ${i}/${k} 조각 · ${n.toLocaleString()}행`; if (my === PS && cur === c && PVIEWS.includes(curView)) perfDraw(); });
+        if (my !== PS) return;
+        my.model = m; my.s = perfInit(m, c);
+      } catch (e) { if (my === PS) my.error = e.status ? explain(e) : (e.message || String(e)); }
+      if (my === PS && cur === c) view(curView);
+    })();
+  }
+  const pDimIx = (M, name) => M.dims.findIndex(D => D.name === name);
+  function perfInit(M, c) {
+    const keys = perfKeys(M);
+    const s = { filt: M.dims.map(() => null), same: true, div: 1e8, fold: false, more: false,
+      bars: ['S', 'OP', 'CM'].filter(k => keys.includes(k)), lines: ['Cr', 'Or'].filter(k => keys.includes(k)),
+      piv: { rows: ['채널', '대카테고리'].map(n => pDimIx(M, n)).filter(d => d >= 0), col: 'y', vals: ['S', 'C', 'Cr', 'CM', 'CMr'].filter(k => keys.includes(k)) }, open: new Set(), psort: null };
+    const pre = c.extra && c.extra.state;
+    if (pre) perfApply(M, s, pre);
+    try { const v = localStorage.getItem(pKey(c.name)); if (v) perfApply(M, s, JSON.parse(v)); } catch (e) {}
+    return s;
+  }
+  // state by names, so it survives a re-upload and travels in a share link or a request
+  function perfStateOut() {
+    const M = PS.model, s = PS.s, filt = {};
+    s.filt.forEach((f, d) => { if (f) filt[M.dims[d].name] = [...f].map(k => M.dims[d].vals[k]); });
+    return { filt, same: s.same, div: s.div, fold: s.fold, more: s.more, bars: s.bars, lines: s.lines, piv: { rows: s.piv.rows.map(d => M.dims[d].name), col: s.piv.col, vals: s.piv.vals }, open: [...s.open], psort: s.psort };
+  }
+  function perfApply(M, s, o) {
+    if (!o) return;
+    const keys = perfKeys(M);
+    if (o.filt) { s.filt = M.dims.map(() => null); for (const [name, vs] of Object.entries(o.filt)) { const d = pDimIx(M, name); if (d < 0) continue; const set = new Set(vs.map(v => M.dims[d].vals.indexOf(v)).filter(k => k >= 0)); s.filt[d] = set.size ? set : null; } }
+    for (const k of ['same', 'fold', 'more']) if (typeof o[k] === 'boolean') s[k] = o[k];
+    if (PERF_DIVS.some(x => x[0] === o.div)) s.div = o.div;
+    if (Array.isArray(o.bars)) s.bars = o.bars.filter(k => keys.includes(k));
+    if (Array.isArray(o.lines)) s.lines = o.lines.filter(k => keys.includes(k));
+    if (o.piv) { const p = o.piv; if (Array.isArray(p.rows)) s.piv.rows = p.rows.map(n => pDimIx(M, n)).filter(d => d >= 0); if (['none', 'y', 'm', 'ym'].includes(p.col)) s.piv.col = p.col; if (Array.isArray(p.vals)) s.piv.vals = p.vals.filter(k => keys.includes(k)); }
+    if (Array.isArray(o.open)) s.open = new Set(o.open);
+    if (o.psort) s.psort = o.psort;
+  }
+  function perfSave() { if (!PS || !PS.model || PS.live) return; try { localStorage.setItem(pKey(PS.c.name), JSON.stringify(perfStateOut())); } catch (e) {} }
+  const perfKeys = M => [...M.meas.map(m => m.k), ...PERF_RATES.filter(r => r[2] in M.kix && 'S' in M.kix).map(r => r[0])];
+  const pLabel = k => (PS.model.meas.find(m => m.k === k) || {}).label || (PERF_RATES.find(r => r[0] === k) || [])[1] || k;
+  const pKind = k => PERF_RATES.some(r => r[0] === k) ? 'rate' : (PS.model.meas.find(m => m.k === k) || {}).kind || 'amt';
+  function pv(a, k) {
+    const ix = PS.model.kix; if (k in ix) return a[ix[k]];
+    const r = PERF_RATES.find(x => x[0] === k); if (!r) return NaN;
+    const S = a[ix.S], b = a[ix[r[2]]]; return S ? b / S : NaN;
+  }
+  const pDiv = () => PERF_DIVS.find(x => x[0] === PS.s.div) || PERF_DIVS[0];
+  // display value: amounts in the chosen unit, 수량 ÷ qtyDiv, rates in %
+  const pDisp = (v, k) => !Number.isFinite(v) ? NaN : pKind(k) === 'rate' ? v * 100 : pKind(k) === 'qty' ? v / (PS.cfg.qtyDiv || 1) : v / pDiv()[0];
+  function pFmt(v, k) {
+    const x = pDisp(v, k); if (!Number.isFinite(x)) return '–';
+    if (pKind(k) === 'rate') return x.toFixed(1) + '%';
+    const dp = pKind(k) === 'qty' ? 1 : pDiv()[2];
+    return x.toLocaleString('ko-KR', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+  }
+  const pUnitText = () => `단위: ${pDiv()[1]}${PS.model.kix.Q != null ? ', 수량 ' + (PS.cfg.qtyUnit || '') : ''}, %`;
+  function perfScope() {
+    if (!PS || !PS.model) return '';
+    const M = PS.model, bits = [];
+    PS.s.filt.forEach((f, d) => { if (f) { const vs = [...f].map(k => M.dims[d].vals[k]); bits.push(`${M.dims[d].name}: ${vs.length > 4 ? vs.slice(0, 4).join(', ') + ` 외 ${vs.length - 4}개` : vs.join(', ')}`); } });
+    return bits.length ? bits.join(' · ') : '전체';
+  }
+  // rows passing the slicers; avail[d][k] = value k of slicer d still has rows under the other slicers (Excel's greyed items)
+  function perfCompute() {
+    const M = PS.model, s = PS.s, nd = M.dims.length, n = M.n;
+    const act = [];
+    for (let d = 0; d < nd; d++) if (s.filt[d]) { const lk = new Uint8Array(M.dims[d].vals.length); for (const k of s.filt[d]) lk[k] = 1; act.push([d, lk, M.codes[d]]); }
+    const pass = new Uint8Array(n), avail = M.dims.map(D => new Uint8Array(D.vals.length)), na = act.length;
+    for (let i = 0; i < n; i++) {
+      let cnt = 0, w = -1;
+      for (let a = 0; a < na; a++) { const t = act[a]; if (!t[1][t[2][i]]) { if (++cnt > 1) break; w = t[0]; } }
+      if (cnt === 0) { pass[i] = 1; for (let d = 0; d < nd; d++) avail[d][M.codes[d][i]] = 1; }
+      else if (cnt === 1) avail[w][M.codes[w][i]] = 1;
+    }
+    const nk = M.meas.length, cols = M.meas.map(m => M.val[m.k]);
+    const nY = M.dims[M.yi].vals.length, nM = M.mi >= 0 ? M.dims[M.mi].vals.length : 1;
+    const agg = new Float64Array(nY * nM * nk), cnt = new Uint32Array(nY * nM), yc = M.codes[M.yi], mc = M.mi >= 0 ? M.codes[M.mi] : null;
+    let rows = 0;
+    for (let i = 0; i < n; i++) if (pass[i]) { rows++; const o = yc[i] * nM + (mc ? mc[i] : 0); cnt[o]++; const b = o * nk; for (let j = 0; j < nk; j++) agg[b + j] += cols[j][i]; }
+    return { pass, avail, agg, cnt, nY, nM, nk, rows };
+  }
+  // 선택항목 총계: one sum per year; same = the other years only over the months the latest year has
+  function perfYears(C) {
+    const M = PS.model, { nY, nM, nk, agg, cnt } = C;
+    const ys = []; for (let y = 0; y < nY; y++) { let any = false; for (let m = 0; m < nM; m++) if (cnt[y * nM + m]) any = true; if (any) ys.push(y); }
+    const last = ys[ys.length - 1], months = [];
+    if (last != null) for (let m = 0; m < nM; m++) if (cnt[last * nM + m]) months.push(m);
+    const same = PS.s.same && ys.length > 1 && M.mi >= 0;
+    const out = ys.map(y => { const a = new Float64Array(nk); for (let m = 0; m < nM; m++) { if (same && !months.includes(m)) continue; const b = (y * nM + m) * nk; for (let j = 0; j < nk; j++) a[j] += agg[b + j]; } return { y, name: M.dims[M.yi].vals[y], a }; });
+    let monthText = '';
+    if (M.mi >= 0 && months.length) { const mv = M.dims[M.mi].vals; monthText = months.length === nM ? '' : months.length > 2 && months.every((m, i) => i === 0 || m === months[i - 1] + 1) ? `${mv[months[0]]}~${mv[months[months.length - 1]]}` : months.map(m => mv[m]).join(', '); }
+    return { rows: out, same, monthText };
+  }
+  function perfDraw() {
+    if (!PS || cur !== PS.c) return;
+    const host = $(curView === 'vPivot' ? 'vPivot' : 'vPerf');
+    if (!PS.model) { $('pBar').hidden = true; host.innerHTML = PS.error ? `<p class="err">${esc(PS.error)}</p>` : `<p class="muted">${esc(PS.prog || '원본을 읽는 중…')}</p>`; return; }
+    PS.C = perfCompute();
+    $('pBar').hidden = false; perfBar();
+    if (curView === 'vPivot') perfPivot(); else perfMain();
+  }
+  function perfChanged(keepTree) { if (!keepTree) PS.pt = null; perfSave(); perfDraw(); }
+  // ---------- slicers ----------
+  const PS_MAX = 300;
+  function psbHtml(d) {
+    const M = PS.model, D = M.dims[d], f = PS.s.filt[d], av = PS.C.avail[d], q = (PS.q[d] || '').toLowerCase();
+    let ks = D.vals.map((v, k) => k);
+    if (q) ks = ks.filter(k => D.vals[k].toLowerCase().includes(q));
+    if (D.vals.length > 30) ks.sort((a, b) => (f && f.has(b) ? 1 : 0) - (f && f.has(a) ? 1 : 0) || av[b] - av[a] || a - b);   // picked, then items with data first
+    const more = ks.length > PS_MAX ? ks.length - PS_MAX : 0;
+    return ks.slice(0, PS_MAX).map(k => `<button type="button" data-pv="${k}" class="${f && f.has(k) ? 'on' : ''}${av[k] ? '' : ' off'}" title="${esc(D.vals[k])}">${esc(D.vals[k])}</button>`).join('') + (more ? `<span class="more">외 ${more.toLocaleString()}개 · 찾기로 좁혀 주세요</span>` : ks.length ? '' : '<span class="more">없음</span>');
+  }
+  function psBox(d) {
+    const D = PS.model.dims[d], f = PS.s.filt[d], wide = D.vals.length > 10 || D.src === '월';
+    return `<div class="ps${wide ? ' w2' : ''}" data-d="${d}"><div class="psh"><b>${esc(D.name)}</b><span class="muted">${f ? f.size + '개 선택' : '전체'}</span>${D.vals.length > 30 ? `<input type="search" class="psq" placeholder="찾기 (${D.vals.length.toLocaleString()})" value="${esc(PS.q[d] || '')}">` : ''}<button type="button" class="btn small" data-pclr="${d}"${f ? '' : ' disabled'} title="이 슬라이서 선택 해제">해제</button></div><div class="psb">${psbHtml(d)}</div></div>`;
+  }
+  function perfBar() {
+    const M = PS.model, s = PS.s, main = [], more = [];
+    M.dims.forEach((D, d) => (D.more ? more : main).push(d));
+    const nSel = s.filt.filter(Boolean).length, moreSel = more.filter(d => s.filt[d]).length;
+    const sel = perfScope();
+    $('pBar').className = 'pbar' + (s.fold ? ' fold' : '');
+    $('pBar').innerHTML = `<div class="pline"><span class="sel"><b>선택</b> ${esc(sel)} <span class="muted">· ${PS.C.rows.toLocaleString()}행</span></span>
+      <button type="button" class="btn small" data-pall${nSel ? '' : ' disabled'}>슬라이서 모두 해제</button>
+      <button type="button" class="btn small" data-pfold>${s.fold ? '슬라이서 펼치기 ▾' : '슬라이서 접기 ▴'}</button>
+      <label>금액 <select data-pdiv>${PERF_DIVS.map(([v, t]) => `<option value="${v}"${v === s.div ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div>
+      <div class="psg">${main.map(psBox).join('')}</div>
+      ${more.length ? `<details class="pmore"${s.more ? ' open' : ''}><summary>슬라이서 더 보기 (${more.map(d => M.dims[d].name).join(' · ')})${moreSel ? ` · ${moreSel}개 선택 중` : ''}</summary><div class="psg">${more.map(psBox).join('')}</div></details>` : ''}`;
+  }
+  $('pBar').addEventListener('click', e => {
+    if (!PS || !PS.model) return;
+    const s = PS.s, b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.pv != null) {
+      const d = +b.closest('.ps').dataset.d, k = +b.dataset.pv, f = new Set(s.filt[d] || []);
+      if (f.has(k)) f.delete(k); else f.add(k);
+      s.filt[d] = f.size ? f : null; perfChanged(); return;
+    }
+    if (b.dataset.pclr != null) { s.filt[+b.dataset.pclr] = null; perfChanged(); return; }
+    if (b.hasAttribute('data-pall')) { s.filt = s.filt.map(() => null); perfChanged(); return; }
+    if (b.hasAttribute('data-pfold')) { s.fold = !s.fold; perfSave(); perfBar(); }
+  });
+  $('pBar').addEventListener('change', e => { if (e.target.dataset.pdiv != null && PS && PS.s) { PS.s.div = +e.target.value; perfChanged(true); } });
+  $('pBar').addEventListener('input', e => {
+    const t = e.target; if (!t.classList.contains('psq') || !PS || !PS.model) return;
+    const box = t.closest('.ps'), d = +box.dataset.d; PS.q[d] = t.value; box.querySelector('.psb').innerHTML = psbHtml(d);
+  });
+  $('pBar').addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('pmore') && PS && PS.s) { PS.s.more = e.target.open; perfSave(); } }, true);
+  // ---------- 실적 현황: 총계 table + monthly combo chart ----------
+  function perfTotHtml(Y) {
+    const keys = PERF_SUM.filter(k => k in PS.model.kix || PERF_RATES.some(r => r[0] === k && r[2] in PS.model.kix));
+    let h = `<div class="tw"><table class="at ptot"><thead><tr><th>연도</th>${keys.map(k => `<th>${esc(pLabel(k))}</th>`).join('')}</tr></thead><tbody>`;
+    for (const r of Y.rows) h += `<tr><th>${esc(r.name)}</th>${keys.map(k => `<td>${pFmt(pv(r.a, k), k)}</td>`).join('')}</tr>`;
+    if (Y.rows.length > 1) {
+      const a = Y.rows[Y.rows.length - 2].a, b = Y.rows[Y.rows.length - 1].a;
+      // signed cell; a change that rounds to zero shows plain 0 (no sign, no colour). Cost-type items: up = bad
+      const sg = (x, k, txt) => { const z = /^[-+]?0(\.0+)?(%p?)?$/.test(txt.replace(/^-/, '')) && !/[1-9]/.test(txt); if (z) return `<td>${txt.replace(/^-/, '')}</td>`; return `<td class="${(x > 0) !== /^(C|O|V|T|A|E)r?$/.test(k) ? 'pp' : 'pn'}">${x > 0 ? '+' : ''}${txt}</td>`; };
+      h += `<tr class="dl"><th>증감</th>${keys.map(k => { const x = pv(b, k) - pv(a, k); if (!Number.isFinite(x)) return '<td>–</td>'; return sg(x, k, pKind(k) === 'rate' ? (x * 100).toFixed(1) + '%p' : pFmt(x, k)); }).join('')}</tr>`;
+      h += `<tr class="dl"><th>증감률</th>${keys.map(k => { if (pKind(k) === 'rate') return '<td></td>'; const x0 = pv(a, k), x1 = pv(b, k), g = x0 ? (x1 - x0) / Math.abs(x0) : NaN; return Number.isFinite(g) ? sg(g, k, (g * 100).toFixed(1) + '%') : '<td>–</td>'; }).join('')}</tr>`;
+    }
+    return h + '</tbody></table></div>';
+  }
+  function perfSeries(C) {
+    const M = PS.model, { nY, nM, nk, agg, cnt } = C, per = [];
+    for (let y = 0; y < nY; y++) for (let m = 0; m < nM; m++) if (cnt[y * nM + m]) per.push({ y, m, a: agg.subarray((y * nM + m) * nk, (y * nM + m + 1) * nk) });
+    return per.map(p => ({ ...p, ml: M.mi >= 0 ? M.dims[M.mi].vals[p.m] : '', yl: M.dims[M.yi].vals[p.y] }));
+  }
+  function comboChart(o) {
+    const card = el('div', 'card'); card.appendChild(el('h3', '', o.title));
+    const nb = o.bars.length, all = [...o.bars, ...o.lines];
+    if (all.length) { const lg = el('div', 'legend'); all.forEach((s, i) => { const sp = el('span'), sw = el('i', i < nb ? 'box' : ''); sw.style.background = COLORS[i % COLORS.length]; sp.append(sw, s.name); lg.appendChild(sp); }); card.appendChild(lg); }
+    const n = o.x.length, W = Math.max(640, n * 58 + 120), H = 300, L = 58, R = 54, T = 12, B = 36;
+    const slot = (W - L - R) / Math.max(1, n), cx = i => L + (i + 0.5) * slot;
+    const bv = o.bars.flatMap(s => s.values).filter(Number.isFinite), lv = o.lines.flatMap(s => s.values).filter(Number.isFinite);
+    const tk = ticks(Math.min(0, ...bv, 0), Math.max(0, ...bv, 1e-9), 5), lo = tk[0], hi = tk[tk.length - 1];
+    const tk2 = lv.length ? ticks(Math.min(0, ...lv), Math.max(...lv, 1e-9), 5) : [0, 1], lo2 = tk2[0], hi2 = tk2[tk2.length - 1];
+    const py = v => T + (hi - v) * (H - T - B) / ((hi - lo) || 1), py2 = v => T + (hi2 - v) * (H - T - B) / ((hi2 - lo2) || 1);
+    const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': o.title });
+    for (const v of tk) { sv('line', { x1: L, x2: W - R, y1: py(v), y2: py(v), stroke: v === 0 ? 'var(--muted)' : 'var(--grid)' }, svg); if (nb) sv('text', { x: L - 6, y: py(v) + 4, 'text-anchor': 'end' }, svg).textContent = fmt(v); }
+    if (o.lines.length) for (const v of tk2) sv('text', { x: W - R + 6, y: py2(v) + 4, 'text-anchor': 'start' }, svg).textContent = (+v.toFixed(1)) + '%';
+    o.x.forEach((x, i) => { const t = sv('text', { x: cx(i), y: H - 20, 'text-anchor': 'middle' }, svg); t.textContent = x[0]; const t2 = sv('text', { x: cx(i), y: H - 6, 'text-anchor': 'middle' }, svg); t2.textContent = x[1]; });
+    const gw = slot * 0.72, bw = nb ? gw / nb : 0;
+    o.bars.forEach((s, j) => s.values.forEach((v, i) => { if (!Number.isFinite(v)) return; const y0 = py(Math.max(v, 0)), y1 = py(Math.min(v, 0)); sv('rect', { x: cx(i) - gw / 2 + j * bw + 0.5, y: y0, width: Math.max(1, bw - 1), height: Math.max(0.5, y1 - y0), fill: COLORS[j % COLORS.length] }, svg); }));
+    o.lines.forEach((s, j) => {
+      const c = COLORS[(nb + j) % COLORS.length]; let d = '';
+      s.values.forEach((v, i) => { if (!Number.isFinite(v)) return; d += (d && Number.isFinite(s.values[i - 1]) ? 'L' : 'M') + cx(i) + ' ' + py2(v); });
+      sv('path', { d, fill: 'none', stroke: c, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }, svg);
+      s.values.forEach((v, i) => { if (Number.isFinite(v)) sv('circle', { cx: cx(i), cy: py2(v), r: 3.5, fill: 'var(--sheet)', stroke: c, 'stroke-width': 2 }, svg); });
+    });
+    const cross = sv('rect', { y: T, height: H - T - B, width: slot, fill: 'var(--muted)', opacity: 0.08, visibility: 'hidden' }, svg);
+    const hit = sv('rect', { x: L, y: 0, width: W - L - R, height: H, fill: 'transparent' }, svg);
+    const tip = el('div', 'tip'); tip.hidden = true;
+    const move = e => {
+      const p = local(svg, card, e, W); const i = Math.max(0, Math.min(n - 1, Math.floor((p.vx - L) / slot)));
+      cross.setAttribute('x', L + i * slot); cross.setAttribute('visibility', 'visible');
+      showTip(tip, card, o.x[i].join(' '), all.map((s, j) => ({ name: s.name, color: COLORS[j % COLORS.length], value: s.fmt(s.raw[i]) })), p.cx, p.cy);
+    };
+    hit.addEventListener('pointermove', move); hit.addEventListener('pointerdown', move);
+    hit.addEventListener('pointerleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); });
+    const wrap = el('div', 'combo-wrap'); wrap.style.setProperty('--minw', Math.min(W, n * 40 + 120) + 'px'); wrap.appendChild(svg);
+    card.append(wrap, tip);
+    // the numbers under the chart, like the Excel chart's data table
+    const t = el('table', 'at ptot'), th = el('thead'), r1 = el('tr'), r2 = el('tr');
+    r1.appendChild(el('th', '', '')); r2.appendChild(el('th', '', ''));
+    o.x.forEach(x => { r1.appendChild(el('th', '', x[0])); r2.appendChild(el('th', '', x[1])); });
+    th.append(r1, r2); t.appendChild(th);
+    const tb = el('tbody');
+    all.forEach((s, j) => { const tr = el('tr'), h = el('th'); const sw = el('i'); sw.style.cssText = `display:inline-block;width:10px;height:${j < nb ? 10 : 3}px;margin-right:5px;vertical-align:middle;background:${COLORS[j % COLORS.length]}`; h.append(sw, s.name); tr.appendChild(h); s.raw.forEach(v => tr.appendChild(el('td', '', s.fmt(v)))); tb.appendChild(tr); });
+    t.appendChild(tb); const tw = el('div', 'tw'); tw.appendChild(t); card.appendChild(tw);
+    if (o.note) card.appendChild(el('p', 'cn', o.note));
+    return card;
+  }
+  function perfMain() {
+    const C = PS.C, s = PS.s, host = $('vPerf'), keys = perfKeys(PS.model);
+    if (!C.rows) { host.innerHTML = '<p class="muted">고른 조건에 해당하는 행이 없습니다. 슬라이서를 풀어 보세요.</p>'; return; }
+    const Y = perfYears(C);
+    const sameBox = Y.rows.length > 1 && PS.model.mi >= 0 ? `<label class="check" style="font-size:13px"><input type="checkbox" data-psame${s.same ? ' checked' : ''}> 연도별 같은 달만 비교${Y.monthText && s.same ? ` (${esc(Y.monthText)})` : ''}</label>` : '';
+    const amtK = keys.filter(k => pKind(k) === 'amt'), rateK = keys.filter(k => pKind(k) === 'rate');
+    const chip = (k, on, grp) => `<button type="button" class="btn" data-pchip="${grp}" data-k="${k}" aria-pressed="${on}">${esc(pLabel(k))}</button>`;
+    host.innerHTML = `<h3 class="ph">[선택항목 총계] <small>(${esc(pUnitText())})</small> ${sameBox}</h3>${perfTotHtml(Y)}
+      <h3 class="ph">월별 추이 <small>막대 = 금액 (왼쪽 축), 선 = 율 (오른쪽 축) · 차트에 마우스를 올리면 숫자</small></h3>
+      <div class="pchips"><b>막대</b>${amtK.map(k => chip(k, s.bars.includes(k), 'bars')).join('')}<b>선</b>${rateK.map(k => chip(k, s.lines.includes(k), 'lines')).join('')}</div><div id="pChart"></div>`;
+    const per = perfSeries(C);
+    const ser = k => { const raw = per.map(p => pv(p.a, k)); return { name: pLabel(k), raw, values: raw.map(v => pDisp(v, k)), fmt: v => pFmt(v, k) }; };
+    $('pChart').appendChild(comboChart({ title: `월별 ${s.bars.map(pLabel).join(' · ')}${s.lines.length ? ' / ' + s.lines.map(pLabel).join(' · ') : ''}`, x: per.map(p => [p.ml, p.yl]), bars: s.bars.map(ser), lines: s.lines.map(ser), note: per.length < 2 ? '달이 2개 이상이면 선으로 이어집니다.' : '' }));
+  }
+  $('vPerf').addEventListener('click', e => {
+    const b = e.target.closest('[data-pchip]'); if (!b || !PS || !PS.s) return;
+    const g = b.dataset.pchip, k = b.dataset.k, a = PS.s[g];
+    PS.s[g] = a.includes(k) ? a.filter(x => x !== k) : [...a, k];
+    perfSave(); perfMain();
+  });
+  $('vPerf').addEventListener('change', e => { if (e.target.dataset.psame != null && PS && PS.s) { PS.s.same = e.target.checked; perfSave(); perfMain(); } });
+  // ---------- 자유 피벗: rows stacked from slicer fields, columns 연 / 월 / 연·월, any values; children built when opened ----------
+  function pivCols() {
+    const M = PS.model, C = PS.C, col = PS.s.piv.col, { nY, nM, cnt } = C, list = [];
+    const yv = M.dims[M.yi].vals, mv = M.mi >= 0 ? M.dims[M.mi].vals : [''];
+    if (col === 'y') { for (let y = 0; y < nY; y++) { let a = false; for (let m = 0; m < nM; m++) if (cnt[y * nM + m]) a = true; if (a) list.push({ raw: [y], name: yv[y] }); } }
+    else if (col === 'm' && M.mi >= 0) { for (let m = 0; m < nM; m++) { let a = false; for (let y = 0; y < nY; y++) if (cnt[y * nM + m]) a = true; if (a) list.push({ raw: [m], name: mv[m] }); } }
+    else if (col === 'ym') { for (let y = 0; y < nY; y++) for (let m = 0; m < nM; m++) if (cnt[y * nM + m]) list.push({ raw: [y, m], name: `${yv[y]} ${mv[m]}` }); }
+    return list;
+  }
+  function pivTree() {
+    const M = PS.model, C = PS.C, piv = PS.s.piv;
+    const sig = piv.rows.join(',') + '|' + piv.col;
+    if (PS.pt && PS.pt.sig === sig) return PS.pt;
+    const cols = pivCols(), nC = cols.length, nk = M.meas.length, nM = C.nM;
+    const pos = new Int32Array(piv.col === 'ym' ? C.nY * nM : piv.col === 'y' ? C.nY : piv.col === 'm' ? nM : 1).fill(-1);
+    cols.forEach((c, i) => { pos[piv.col === 'ym' ? c.raw[0] * nM + c.raw[1] : c.raw[0]] = i; });
+    const yc = M.codes[M.yi], mc = M.mi >= 0 ? M.codes[M.mi] : null, vals = M.meas.map(m => M.val[m.k]);
+    const colOf = piv.col === 'y' ? i => pos[yc[i]] : piv.col === 'm' && mc ? i => pos[mc[i]] : piv.col === 'ym' ? i => pos[yc[i] * nM + (mc ? mc[i] : 0)] : () => -1;
+    const sumOf = rows => { const a = new Float64Array((nC + 1) * nk), t = nC * nk; for (let r = 0; r < rows.length; r++) { const i = rows[r], c = colOf(i), b = c * nk; for (let j = 0; j < nk; j++) { const v = vals[j][i]; a[t + j] += v; if (c >= 0) a[b + j] += v; } } return a; };
+    const all = []; for (let i = 0; i < M.n; i++) if (C.pass[i]) all.push(i);
+    const root = { path: '', lv: -1, rows: all, sum: sumOf(all), kids: null };
+    PS.pt = { sig, cols, nC, nk, root, sumOf };
+    return PS.pt;
+  }
+  function pivKids(node) {
+    if (node.kids) return node.kids;
+    const T = PS.pt, d = PS.s.piv.rows[node.lv + 1], cd = PS.model.codes[d], g = new Map();
+    for (const i of node.rows) { let a = g.get(cd[i]); if (!a) g.set(cd[i], a = []); a.push(i); }
+    node.kids = [...g].map(([k, rows]) => ({ k, name: PS.model.dims[d].vals[k], path: node.path + '/' + k, lv: node.lv + 1, rows, sum: T.sumOf(rows), kids: null }));
+    return node.kids;
+  }
+  function perfPivot() {
+    const M = PS.model, s = PS.s, piv = s.piv, host = $('vPivot'), keys = perfKeys(M);
+    const dimOpt = cur => `<option value="-1">(없음)</option>` + M.dims.map((D, d) => `<option value="${d}"${d === cur ? ' selected' : ''}>${esc(D.name)}</option>`).join('');
+    const levels = [...piv.rows, -1].slice(0, 5);
+    const ctl = `<div class="pctl">${levels.map((d, i) => `<label>행 ${i + 1} <select data-prow="${i}">${dimOpt(d)}</select></label>`).join('')}
+      <label>열 <select data-pcol>${[['none', '없음 (합계만)'], ['y', '연'], ['m', '월'], ['ym', '연 · 월']].map(([v, t]) => `<option value="${v}"${v === piv.col ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+      <button type="button" class="btn small" data-pexp>1단계 모두 펼치기</button><button type="button" class="btn small" data-pfoldall>모두 접기</button></div>
+      <div class="pchips"><b>값</b>${keys.map(k => `<button type="button" class="btn" data-pval="${k}" aria-pressed="${piv.vals.includes(k)}">${esc(pLabel(k))}</button>`).join('')}</div>`;
+    if (!PS.C.rows) { host.innerHTML = ctl + '<p class="muted">고른 조건에 해당하는 행이 없습니다.</p>'; return; }
+    if (!piv.vals.length) { host.innerHTML = ctl + '<p class="muted">값을 하나 이상 골라 주세요.</p>'; return; }
+    const T = pivTree(), { cols, nC, nk } = T, vk = piv.vals, groups = nC ? [...cols.map((c, i) => ({ i, name: c.name })), { i: nC, name: '합계' }] : [{ i: nC, name: '' }];
+    const ps = s.psort || { g: nC, k: vk[0], dir: -1 };
+    const val = (node, gi, k) => pv(node.sum.subarray(gi * nk, gi * nk + nk), k);
+    const sortKids = kids => { const g = Math.min(ps.g, nC), k = vk.includes(ps.k) ? ps.k : vk[0]; return kids.slice().sort((a, b) => { const x = val(a, g, k), y = val(b, g, k); return ((Number.isFinite(y) ? y : -Infinity) - (Number.isFinite(x) ? x : -Infinity)) * (ps.dir === 1 ? -1 : 1) || a.k - b.k; }); };
+    let h = ctl + `<p class="muted" style="margin:0;font-size:12px">${esc(pUnitText())} · ▸ 눌러서 펼치기 · 값 머리글 누르면 정렬 · 위 슬라이서 선택이 그대로 적용됩니다.</p><div class="tw"><table class="at pvt"><thead>`;
+    const arrow = (g, k) => ps.g === g && ps.k === k ? (ps.dir === -1 ? ' ▼' : ' ▲') : '';
+    if (nC) h += `<tr><th rowspan="2">${esc(piv.rows.map(d => M.dims[d].name).join(' › ') || '합계')}</th>${groups.map(g => `<th class="cg" colspan="${vk.length}">${esc(g.name)}</th>`).join('')}</tr><tr>${groups.map(g => vk.map(k => `<th class="c" data-ps="${g.i}|${k}">${esc(pLabel(k))}${arrow(g.i, k)}</th>`).join('')).join('')}</tr>`;
+    else h += `<tr><th>${esc(piv.rows.map(d => M.dims[d].name).join(' › ') || '합계')}</th>${vk.map(k => `<th class="c" data-ps="${nC}|${k}">${esc(pLabel(k))}${arrow(nC, k)}</th>`).join('')}</tr>`;
+    h += '</thead><tbody>';
+    const cells = node => groups.map(g => vk.map(k => `<td>${pFmt(val(node, g.i, k), k)}</td>`).join('')).join('');
+    h += `<tr class="tot"><th>합계</th>${cells(T.root)}</tr>`;
+    const lim = PS.plim || (PS.plim = {}), span = groups.length * vk.length + 1;
+    const walk = node => {
+      if (node.lv + 1 >= piv.rows.length) return;
+      const kids = sortKids(pivKids(node)), n = lim[node.path] || 200;
+      for (const ch of kids.slice(0, n)) {
+        const leaf = ch.lv + 1 >= piv.rows.length, open = !leaf && s.open.has(ch.path);
+        h += `<tr class="lv${ch.lv}"><th style="padding-left:${6 + ch.lv * 16}px">${leaf ? '<span class="tg"></span>' : `<span class="tg" data-pt="${esc(ch.path)}">${open ? '▾' : '▸'}</span>`}${esc(ch.name)}</th>${cells(ch)}</tr>`;
+        if (open) walk(ch);
+      }
+      if (kids.length > n) h += `<tr class="mr"><td colspan="${span}" data-pm="${esc(node.path)}" style="padding-left:${22 + (node.lv + 1) * 16}px">… ${(kids.length - n).toLocaleString()}개 더 보기 (200개씩)</td></tr>`;
+    };
+    walk(T.root);
+    host.innerHTML = h + '</tbody></table></div>';
+  }
+  $('vPivot').addEventListener('click', e => {
+    if (!PS || !PS.s) return;
+    const s = PS.s, piv = s.piv, t = e.target.closest('[data-pt],[data-pm],[data-ps],[data-pval],[data-pexp],[data-pfoldall]'); if (!t) return;
+    if (t.dataset.pt != null) { const p = t.dataset.pt; if (s.open.has(p)) s.open.delete(p); else s.open.add(p); perfSave(); perfPivot(); return; }
+    if (t.dataset.pm != null) { const lim = PS.plim || (PS.plim = {}); lim[t.dataset.pm] = (lim[t.dataset.pm] || 200) + 200; perfPivot(); return; }
+    if (t.dataset.ps != null) { const [g, k] = t.dataset.ps.split('|'); const ps = s.psort || { g: PS.pt.nC, k: piv.vals[0], dir: -1 }; s.psort = ps.g === +g && ps.k === k ? { g: +g, k, dir: -ps.dir } : { g: +g, k, dir: -1 }; perfSave(); perfPivot(); return; }
+    if (t.dataset.pval != null) { const k = t.dataset.pval; piv.vals = piv.vals.includes(k) ? piv.vals.filter(x => x !== k) : perfKeys(PS.model).filter(x => x === k || piv.vals.includes(x)); perfSave(); perfPivot(); return; }
+    if (t.hasAttribute('data-pexp')) { if (piv.rows.length > 1) for (const ch of pivKids(pivTree().root)) s.open.add(ch.path); perfSave(); perfPivot(); return; }
+    if (t.hasAttribute('data-pfoldall')) { s.open.clear(); perfSave(); perfPivot(); }
+  });
+  $('vPivot').addEventListener('change', e => {
+    if (!PS || !PS.s) return;
+    const t = e.target, piv = PS.s.piv;
+    if (t.dataset.prow != null) { const i = +t.dataset.prow, d = +t.value, rows = piv.rows.slice(); if (d < 0) rows.splice(i); else rows[i] = d; piv.rows = rows.filter((x, j) => rows.indexOf(x) === j); PS.s.open.clear(); PS.plim = {}; perfChanged(); return; }
+    if (t.dataset.pcol != null) { piv.col = t.value; PS.s.psort = null; perfChanged(); }
+  });
+  // ---------- Excel ----------
+  async function perfXlsx() {
+    const btn = $('xlsxBtn'); btn.disabled = true; btn.textContent = '엑셀 만드는 중…';
+    try {
+      if (PS.loading) await PS.loading;
+      if (!PS.model) throw new Error(PS.error || '자료를 읽지 못했습니다.');
+      const C = PS.C || (PS.C = perfCompute()), keys = perfKeys(PS.model);
+      const num = (v, k) => { const x = pDisp(v, k); return Number.isFinite(x) ? Math.round(x * 100) / 100 : ''; };
+      const head = k => pLabel(k) + (pKind(k) === 'rate' ? ' (%)' : pKind(k) === 'qty' ? ` (${PS.cfg.qtyUnit})` : ` (${pDiv()[1]})`);
+      const sheets = [{ name: '선택 조건', rows: [['항목', '내용'], ['실적표', PS.c.title], ['슬라이서', perfScope()], ['단위', pUnitText()], ['행 수', C.rows]], header: true, wrap: [1], widths: [14, 110] }];
+      const Y = perfYears(C), tot = [['연도', ...keys.map(head)]];
+      for (const r of Y.rows) tot.push([r.name, ...keys.map(k => num(pv(r.a, k), k))]);
+      if (Y.same && Y.monthText) tot.push([`※ 연도별 같은 달만 비교 (${Y.monthText})`]);
+      sheets.push({ name: '선택항목 총계', rows: tot, header: true });
+      const mon = [['연', '월', ...keys.map(head)]];
+      for (const p of perfSeries(C)) mon.push([p.yl, p.ml, ...keys.map(k => num(pv(p.a, k), k))]);
+      sheets.push({ name: '월별', rows: mon, header: true });
+      // 자유 피벗, every level open
+      const piv = PS.s.piv, T = pivTree(), groups = T.nC ? [...T.cols.map((c, i) => ({ i, name: c.name })), { i: T.nC, name: '합계' }] : [{ i: T.nC, name: '' }];
+      const pr = [[...piv.rows.map(d => PS.model.dims[d].name), ...groups.flatMap(g => piv.vals.map(k => (g.name ? g.name + ' ' : '') + head(k)))]];
+      const line = (node, names) => [...names, ...Array(piv.rows.length - names.length).fill(''), ...groups.flatMap(g => piv.vals.map(k => num(pv(node.sum.subarray(g.i * T.nk, g.i * T.nk + T.nk), k), k)))];
+      const walk = (node, names) => { if (pr.length > 200000) return; for (const ch of pivKids(node)) { const nm = [...names, ch.name]; pr.push(line(ch, nm)); if (ch.lv + 1 < piv.rows.length) walk(ch, nm); } };
+      pr.push(line(T.root, ['합계'].slice(0, piv.rows.length ? 1 : 0))); if (piv.rows.length) walk(T.root, []);
+      sheets.push({ name: '자유 피벗', rows: pr, header: true });
+      const blob = await buildXlsx(sheets);
+      const a = document.createElement('a'), url = URL.createObjectURL(blob);
+      a.href = url; a.download = `${PS.c.title} - 실적표.xlsx`.replace(/[\\/:*?"<>|]+/g, ' ');
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { $('rErr').textContent = '엑셀 파일을 만들지 못했습니다. ' + (e.message || ''); $('rErr').hidden = false; }
+    btn.disabled = false; btn.textContent = '엑셀로 내려받기';
+  }
+  // ---------- share: ①② the screen frozen (총계 · 월별 · 피벗 as open now); ③ the compact model, opened read-only here ----------
+  function buildPerfShare() {
+    if (!PS || !PS.model) throw new Error('실적표를 먼저 열어 주세요.');
+    const keep = curView;
+    const parts = [];
+    try {
+      curView = 'vPerf'; perfDraw(); parts.push($('vPerf').cloneNode(true));
+      curView = 'vPivot'; perfDraw(); parts.push($('vPivot').cloneNode(true));
+    } finally { curView = keep; perfDraw(); }
+    for (const p of parts) for (const n of p.querySelectorAll('.pchips, .pctl, .tip, input, [data-pm]')) n.remove();
+    for (const p of parts) for (const n of p.querySelectorAll('.tg')) n.textContent = n.textContent === '▸' ? '' : n.textContent;
+    const now = new Date(), p2 = n => String(n).padStart(2, '0');
+    const made = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
+    const css = [...document.querySelectorAll('style')].map(s => s.textContent).join('\n'), title = PS.c.title;
+    const html = `<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>${esc(title)} · 공유용</title>
+<style>${css}
+html, body { height: auto; }
+.view { overflow: visible; flex: none; }
+.share { display: flex; flex-direction: column; gap: 10px; max-width: 1600px; margin: 0 auto; }
+.share header h1 { font-size: 19px; margin: 0; }
+.share header p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+</style>
+<body>
+<div class="share">
+<header><h1>${esc(title)}</h1><p>공유용 · ${esc(made)} 기준으로 고정된 화면입니다 · 선택: ${esc(perfScope())} · ${esc(pUnitText())}</p></header>
+<div class="view">${parts[0].innerHTML}</div>
+<h3 class="ph">자유 피벗</h3>
+<div class="view">${parts[1].innerHTML}</div>
+</div>
+</body>
+</html>`;
+    return { html, title, made, scope: perfScope() };
+  }
+  const b64Of = ta => toBase64(new Uint8Array(ta.buffer, ta.byteOffset, ta.byteLength));
+  const fromB64 = (s, T) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); };
+  function perfLivePayload(id) {
+    const M = PS.model;
+    return { kind: 'live', v: 1, view: 'perf', id, title: PS.c.title, perf: PS.c.extra.perf || null, state: perfStateOut(), n: M.n,
+      dims: M.dims.map((D, d) => ({ name: D.name, src: D.src, more: D.more, vals: D.vals, codes: b64Of(D.vals.length < 65536 ? Uint16Array.from(M.codes[d]) : M.codes[d]), w: D.vals.length < 65536 ? 2 : 4 })),
+      meas: M.meas, val: Object.fromEntries(M.meas.map(m => [m.k, b64Of(M.val[m.k])])) };
+  }
+  function startPerfLive(L) {
+    document.body.classList.add('live');
+    document.querySelector('.top h1').textContent = '공유된 실적표 (보기 전용)';
+    $('loginPane').hidden = true; $('sendPane').hidden = true; $('readPane').hidden = false;
+    $('listBar').hidden = true; $('list').hidden = true;
+    $('rHead').hidden = false; $('rTitle').hidden = false; $('rTitle').textContent = L.title || '실적표';
+    $('anaSel').hidden = true; $('anaRefresh').hidden = true; $('shareBtn').hidden = true; for (const [id] of EXTRA_FILES) $(id).hidden = true;
+    mode = 'perf';
+    cur = { name: 'live-' + (L.id || 'x'), title: L.title || '실적표', note: '', body: '', extra: { layout: 'perf', perf: L.perf, state: L.state }, ana: true };
+    srcState = { stamp: '', loaded: true };
+    showTabs('perf'); for (const b of $('rTabs').children) if (b.dataset.v === 'vReq' || b.dataset.v === 'vSrc') b.hidden = true;
+    const n = L.n, dims = [], codes = [];
+    const model = { n, dims: [], codes: [], meas: L.meas, val: {}, kix: {} };
+    for (const D of L.dims) { model.dims.push({ name: D.name, src: D.src, more: D.more, vals: D.vals }); const c = fromB64(D.codes, D.w === 2 ? Uint16Array : Int32Array); model.codes.push(c instanceof Int32Array ? c : Int32Array.from(c)); }
+    L.meas.forEach((m, j) => { model.val[m.k] = fromB64(L.val[m.k], Float64Array); model.kix[m.k] = j; });
+    model.yi = model.dims.findIndex(D => D.src === '연'); model.mi = model.dims.findIndex(D => D.src === '월');
+    PS = { c: cur, st: srcState, cfg: perfCfg(cur.extra), model, error: '', loading: null, s: null, prog: '', pt: null, q: {}, live: true };
+    PS.s = perfInit(model, cur);
+    view('vPerf');
   }
 
   // ---------- state ----------
@@ -2765,6 +3347,7 @@ html, body { height: auto; }
   let shareCtx = 'ana';   // which screen the 공유하기 dialog shares: 'ana' (분석표) or 'trk' (가격 추적)
   async function buildShare() {
     if (shareCtx === 'trk') return buildTrkShare();
+    if (shareCtx === 'perf') { if (PS && PS.loading) await PS.loading; return buildPerfShare(); }
     const c = cur;
     if (!c || !c.ana || !AS) throw new Error('분석표를 먼저 열어 주세요.');
     {
@@ -2840,6 +3423,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     const sh = await buildShare(), id = b64u(crypto.getRandomValues(new Uint8Array(15)));
     let payload = sh.html;
     if (mode === 'live' && shareCtx === 'trk') payload = JSON.stringify(trkLivePayload(id));
+    else if (mode === 'live' && shareCtx === 'perf') payload = JSON.stringify(perfLivePayload(id));
     else if (mode === 'live') {
       const st = AS.st; if (!st || !st.full) throw new Error('원본 데이터를 아직 읽지 못했습니다.');
       const { text, cut } = await st.full;
@@ -2852,7 +3436,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     // public: only the sealed box (the commit message carries no title)
     await apiSite(`/contents/s/d/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(sealed)), author: SITE_AUTHOR, committer: SITE_AUTHOR }) });
     // private: what it was, for the list
-    const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: shareCtx === 'trk' ? 'tracker' : cur.name, mode: auto ? 'live-auto' : mode };
+    const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: shareCtx === 'trk' ? 'tracker' : shareCtx === 'perf' ? 'perf/' + cur.name : cur.name, mode: auto ? 'live-auto' : mode };
     // 매일 자동 갱신: the private meta keeps the AES key (not the password) so the workflow can re-seal the same id after each run
     if (auto) meta.auto = { key: sealed.key, salt: sealed.salt, it: sealed.it, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch }, title: '가격 추적' };
     if (auto) { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); return meta; }
@@ -2900,6 +3484,8 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
       '— 분석표와 똑같이 열려 필터·기간·기준을 바꿀 수 있습니다. ⚠️ 비밀번호를 아는 사람은 이 분석표의 <b>원본 데이터 전체</b>를 볼 수 있습니다.'],
     trk: ['지금 보는 <b>가격 추적 화면(표 · 그래프)</b>을 공유합니다. ①·②는 만든 시점 그대로 고정됩니다.',
       '— 가격 추적 탭과 똑같이 열려 제품/채널 기준, 브랜드·세부 구분, 그래프를 바꿔 볼 수 있습니다. <b>전체 가격 기록</b>이 들어갑니다. ③-1은 만든 시점까지, ③-2는 같은 링크가 수집할 때마다 최신 기록으로 바뀝니다.'],
+    perf: ['지금 고른 슬라이서 그대로 <b>실적 현황(총계 · 월별 차트) · 자유 피벗</b>을 공유합니다. ①·②는 만든 시점 그대로 고정되고, 원본 데이터는 들어가지 않습니다.',
+      '— 실적표 탭과 똑같이 열려 슬라이서·차트·피벗을 마음대로 바꿔 볼 수 있습니다. ⚠️ 비밀번호를 아는 사람은 이 실적표의 <b>숫자 전체</b>(슬라이서 항목별 금액)를 볼 수 있습니다.'],
   };
   function openShare(ctx) {
     shareCtx = ctx; $('shAutoBox').hidden = ctx !== 'trk';
@@ -2910,6 +3496,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
   $('trkShare').addEventListener('click', () => { if (!TRK.cfg) return; openShare('trk'); $('shScope').textContent = trkScope(); });
   $('shareBtn').addEventListener('click', () => {
     if (!cur || !cur.ana) return;
+    if (isPerf(cur)) { openShare('perf'); $('shScope').textContent = PS && PS.model ? perfScope() : ''; return; }
     shareCtx = 'ana'; $('shAutoBox').hidden = true; $('shIntro').innerHTML = SH_TEXT.ana[0]; $('shLiveNote').innerHTML = SH_TEXT.ana[1];
     $('shScope').textContent = AS && AS.model ? scopeText() : '';
     $('shPw').value = ''; $('shPw2').value = ''; $('shOut').hidden = true; shMsg('');
@@ -2978,10 +3565,9 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
   let reqState = null;
   async function drawReq() {
     const c = cur; if (!c) return;
-    const base = c.name.replace(/\.(txt|json)$/, ''), host = $('vReq'), ready = AS && AS.model;
-    host.innerHTML = `<div class="req"><h3 style="margin:0;font-size:15px">요청 쓰기</h3>
+    const perf = isPerf(c), base = (perf ? 'perf-' : '') + c.name.replace(/\.(txt|json)$/, ''), host = $('vReq'), ready = perf ? PS && PS.model : AS && AS.model;    host.innerHTML = `<div class="req"><h3 style="margin:0;font-size:15px">요청 쓰기</h3>
       <p class="muted">기본 화면 말고 더 보고 싶은 분석을 적어주세요. 지금 고른 범위가 같이 저장됩니다. 저장한 뒤 디스코드에 "요청 넣음"이라고 보내주시면 Claude가 답을 이 탭에 올립니다.</p>
-      <p class="muted">지금 범위: ${ready ? esc(scopeText()) : '(자료를 읽는 중이거나 자동 분석이 안 되는 자료)'}</p>
+      <p class="muted">지금 범위: ${ready ? esc(perf ? perfScope() : scopeText()) : '(자료를 읽는 중이거나 자동 분석이 안 되는 자료)'}</p>
       <textarea id="reqText" maxlength="4000" placeholder="예: 01.도매 안에서 제품군별로 원가율이 오른 이유를 SKU까지 보여줘"></textarea>
       <div class="bar"><span class="grow" id="reqInfo"></span><button type="button" class="btn primary" id="reqSend">요청 저장</button></div></div>
       <h3 style="margin:4px 0 0;font-size:15px">요청과 답</h3><div class="ins" id="reqList"><p class="muted">불러오는 중입니다.</p></div>
@@ -3004,7 +3590,9 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
       if (!out.length) { list.innerHTML = '<p class="muted">아직 요청이 없습니다.</p>'; return; }
       list.innerHTML = out.map(({ n, q, a }, i) => `<div class="qa"><div class="muted">${esc(n.slice(0, 13).replace(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/, '$1-$2-$3 $4:$5'))} · ${esc(q.scope || '')}${q.state ? ` <button type="button" class="btn small" data-apply="${i}">이 범위로 보기</button>` : ''}</div>
         <div class="q">${esc(q.text || '')}</div>${a ? ansHtml(a) : '<div class="a muted">답 기다리는 중</div>'}</div>`).join('');
-      list.onclick = e => { const b = e.target.closest('[data-apply]'); if (!b || !AS || !AS.model) return; applyState(AS.model, AS.s, out[+b.dataset.apply].q.state); saveState(); view('vIns'); };
+      list.onclick = e => { const b = e.target.closest('[data-apply]'); if (!b) return;
+        if (perf) { if (PS && PS.model) { perfApply(PS.model, PS.s, out[+b.dataset.apply].q.state); PS.pt = null; perfSave(); view('vPerf'); } return; }
+        if (!AS || !AS.model) return; applyState(AS.model, AS.s, out[+b.dataset.apply].q.state); saveState(); view('vIns'); };
     } catch (e) { if (my === reqState) $('reqList').innerHTML = `<p class="err">${esc(explain(e))}</p>`; }
   }
   function ansHtml(a) {
@@ -3021,7 +3609,8 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     const p2 = n => String(n).padStart(2, '0'), d = new Date();
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
     const body = { reply: c.name, text, createdAt: d.toISOString() };
-    if (AS && AS.model && AS.c === c) { body.scope = scopeText(); body.state = stateOut(); }
+    if (isPerf(c)) { if (PS && PS.model && PS.c === c) { body.scope = perfScope(); body.state = perfStateOut(); } }
+    else if (AS && AS.model && AS.c === c) { body.scope = scopeText(); body.state = stateOut(); }
     $('reqSend').disabled = true; $('reqInfo').textContent = '저장하는 중입니다.';
     try {
       await put(`requests/${base}/${stamp}.json`, toBase64(new TextEncoder().encode(JSON.stringify(body, null, 2))), `request ${base} ${stamp}`);
@@ -3035,6 +3624,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
   // ---------- 보기 전용 (조작 가능 공유 링크): the viewer page decrypts { title, ana, state, text } into window.__LIVE ----------
   function startLive(L) {
     if (L.view === 'trk') { startTrkLive(L); return; }
+    if (L.view === 'perf') { startPerfLive(L); return; }
     document.body.classList.add('live');
     document.querySelector('.top h1').textContent = '공유된 분석표 (보기 전용)';
     $('loginPane').hidden = true; $('sendPane').hidden = true; $('readPane').hidden = false;
