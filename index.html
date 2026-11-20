@@ -536,6 +536,16 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     }
     return res;
   }
+  // 공유 링크 요청함: a separate private repo (msg-85/share-requests) and a token that can only touch it.
+  // The owner pastes the token once (kept in this browser); it travels inside sealed ③ links so viewers can leave requests.
+  const REQ_REPO = '/repos/msg-85/share-requests', REQ_KEY = 'data-window-req-token';
+  let reqTok = ''; try { reqTok = localStorage.getItem(REQ_KEY) || ''; } catch (e) {}
+  async function apiReq(path, opts = {}, tok) {
+    const res = await fetch('https://api.github.com' + REQ_REPO + path, { cache: 'no-store', ...opts, headers: { Authorization: 'Bearer ' + (tok || reqTok), Accept: opts.accept || 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
+    if (!res.ok) { let msg = ''; try { msg = (await res.json()).message || ''; } catch (e) {} throw new ApiError(res.status, msg); }
+    return res;
+  }
+  const reqErr = e => e.status === 401 || e.status === 403 || e.status === 404 ? '요청함에 연결하지 못했습니다 (요청 토큰이 맞지 않거나 기간이 끝났을 수 있습니다).' : explain(e);
   function explain(e) {
     if (e.status === 401) return '열쇠가 맞지 않거나 기간이 끝났습니다. 연결을 끊고 새 열쇠로 다시 연결해 주세요.';
     if (e.status === 403) return '이 열쇠에 쓰기 권한이 없습니다. Contents가 Read and write인지 확인해 주세요.';
@@ -1321,17 +1331,95 @@ html, body { height: auto; }
   // ③ 조작 가능: settings + all records, opened read-only in this page
   function trkLivePayload(id) {
     return { kind: 'live', v: 1, view: 'trk', id, title: '가격 추적', cfg: TRK.cfg, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch },
-      rows: TRK.rows.map(r => [r.at, r.group, r.qty, r.ch, r.price, r.listings, r.trend, r.name, r.flag || '']) };
+      rows: TRK.rows.map(r => [r.at, r.group, r.qty, r.ch, r.price, r.listings, r.trend, r.name, r.flag || '']), req: reqTok || undefined };
   }
   function startTrkLive(L) {
     document.body.classList.add('live');
     document.querySelector('.top h1').textContent = '공유된 가격 추적 (보기 전용)';
     $('loginPane').hidden = true; $('sendPane').hidden = true; $('readPane').hidden = true; $('trackPane').hidden = false;
-    $('trkRefresh').hidden = true; $('trkShare').hidden = true; $('trkReq').hidden = true;
+    $('trkRefresh').hidden = true; $('trkShare').hidden = true; $('trkReq').hidden = !L.req;
+    TRK.live = { id: L.id, req: L.req || '' };
     TRK.cfg = L.cfg; Object.assign(TRK, trkFlatten(L.cfg));
     TRK.rows = (L.rows || []).map(r => ({ at: r[0], group: r[1], qty: r[2], ch: r[3], price: r[4], listings: r[5], trend: r[6], name: r[7], flag: r[8] || '' }));
     if (L.state) { TRK.by = L.state.by || 'prod'; TRK.sel = L.state.sel || {}; TRK.chip = L.state.chip || {}; TRK.cg = L.state.cg || []; TRK.cch = L.state.cch || null; }
     trkIndex(); trkRender();
+    if (L.req) trkReqLoadLive();
+  }
+  const reqStamp = () => { const p2 = n => String(n).padStart(2, '0'), d = new Date(); return '' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '-' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds()); };
+  const reqWhen = n => esc(n.slice(0, 13).replace(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/, '$1-$2-$3 $4:$5'));
+  // requests in the share-requests repo (newest 60): [{ n, q, a }]
+  async function reqList(tok) {
+    let items = [];
+    try { items = await (await apiReq('/contents/requests/tracker', {}, tok)).json(); } catch (e) { if (e.status !== 404) throw e; }
+    const names = new Set(items.filter(i => i.type === 'file').map(i => i.name));
+    const qs = [...names].filter(n => /^\d{8}-\d{6}-[a-z0-9]+\.json$/.test(n)).sort().reverse().slice(0, 60);
+    const get = async n => JSON.parse(await (await apiReq('/contents/requests/tracker/' + n, { accept: 'application/vnd.github.raw+json' }, tok)).text());
+    return Promise.all(qs.map(async n => { const an = n.replace(/\.json$/, '.answer.json'); return { n, q: await get(n), a: names.has(an) ? await get(an) : null }; }));
+  }
+  // viewer of a shared link: write a request, see the ones sent from this link and their answers
+  async function trkReqLoadLive() {
+    const L = TRK.live, body = $('trkReqBody');
+    let who = ''; try { who = localStorage.getItem('data-window-who') || ''; } catch (e) {}
+    body.innerHTML = '<div class="req"><p class="muted" style="margin:0">추가했으면 하는 품목, 고칠 점, 안 잡히는 품목 확인 같은 요청을 적어 보내 주세요. 담당자가 확인해서 반영하고 여기에 답을 답니다.</p>' +
+      '<div class="bar"><label class="field" style="flex:0 0 160px">작성자<input id="trkReqWho" type="text" maxlength="20" placeholder="예: 김대리"></label><span class="grow"></span></div>' +
+      '<textarea id="trkReqText" maxlength="4000" rows="3" style="width:100%" placeholder="예: 앱솔루트 산양 4캔도 추적해 주세요 / 카누 라떼 30T 가격이 안 보여요"></textarea>' +
+      '<div class="bar"><span class="grow" id="trkReqInfo"></span><button type="button" class="btn primary" id="trkReqSend">요청 보내기</button></div></div><div class="ins" id="trkReqList"><p class="muted">불러오는 중…</p></div>';
+    $('trkReqWho').value = who;
+    $('trkReqSend').addEventListener('click', async () => {
+      const text = $('trkReqText').value.trim(); if (!text) { $('trkReqInfo').textContent = '요청을 적어주세요.'; return; }
+      const w = $('trkReqWho').value.trim(); try { localStorage.setItem('data-window-who', w); } catch (e) {}
+      const n = reqStamp() + '-' + Math.random().toString(36).slice(2, 6);
+      $('trkReqSend').disabled = true; $('trkReqInfo').textContent = '보내는 중…';
+      try {
+        const q = { text, who: w, scope: trkScope(), date: TRK.date || '최근', share: L.id, createdAt: new Date().toISOString() };
+        await apiReq('/contents/requests/tracker/' + n + '.json', { method: 'PUT', body: JSON.stringify({ message: 'request ' + n, content: toBase64(new TextEncoder().encode(JSON.stringify(q, null, 2))) }) }, L.req);
+        $('trkReqText').value = ''; await trkReqLoadLive();
+        $('trkReqInfo').textContent = '보냈습니다. 반영되면 여기에 답이 달립니다.';
+      } catch (e) { $('trkReqInfo').textContent = '보내지 못했습니다. ' + reqErr(e); $('trkReqSend').disabled = false; }
+    });
+    try {
+      const out = (await reqList(L.req)).filter(x => x.q.share === L.id);
+      const wait = out.filter(x => !x.a).length;
+      $('trkReqSum').innerHTML = '<b>요청하기</b>' + (out.length ? ' · 보낸 요청 ' + out.length + '건' + (wait ? ' · 답 대기 ' + wait + '건' : '') : '') + ' <span class="muted">(눌러서 펼치기)</span>';
+      $('trkReqList').innerHTML = out.length ? out.map(({ n, q, a }) => '<div class="qa"><div class="muted">' + reqWhen(n) + (q.who ? ' · ' + esc(q.who) : '') + '</div><div class="q">' + esc(q.text || '') + '</div>' + (a ? ansHtml(a) : '<div class="a muted">확인 중</div>') + '</div>').join('') : '<p class="muted">아직 이 링크에서 보낸 요청이 없습니다.</p>';
+    } catch (e) { $('trkReqList').innerHTML = '<p class="err">' + esc(reqErr(e)) + '</p>'; }
+  }
+  // owner: requests that came in through shared links; delete the ones not to apply, then ask on Discord to apply the rest
+  async function trkReqShared(host) {
+    if (!reqTok) {
+      host.innerHTML = '<h4>공유 링크로 들어온 요청</h4><p class="muted">공유 링크(③ 조작 가능)를 받은 사람도 요청을 적을 수 있게 하려면, 요청함(msg-85/share-requests) 전용 토큰을 한 번 넣어 주세요. 이 브라우저에만 저장되고, 이후 만드는 ③ 링크 안에 잠긴 채로 들어갑니다.</p>' +
+        '<div class="bar"><input id="reqTokIn" type="password" placeholder="github_pat_…" style="flex:1;min-width:200px"><button type="button" class="btn" id="reqTokSave">저장</button></div><p class="muted" id="reqTokInfo"></p>';
+      $('reqTokSave').addEventListener('click', async () => {
+        const v = $('reqTokIn').value.trim(); if (!v) return;
+        $('reqTokInfo').textContent = '확인하는 중…';
+        try { await apiReq('', {}, v); reqTok = v; try { localStorage.setItem(REQ_KEY, v); } catch (e) {} trkReqShared(host); }
+        catch (e) { $('reqTokInfo').textContent = reqErr(e); }
+      });
+      return;
+    }
+    host.innerHTML = '<h4>공유 링크로 들어온 요청</h4><p class="muted">불러오는 중…</p>';
+    try {
+      let shares = {}; try { for (const m of await listShares()) shares[m.id] = m; } catch (e) {}
+      const out = await reqList();
+      const open = out.filter(x => !x.a).length;
+      host.innerHTML = '<h4>공유 링크로 들어온 요청 <small class="muted">' + out.length + '건' + (open ? ' · 미반영 ' + open + '건' : '') + '</small></h4>' +
+        '<p class="muted">반영하지 않을 요청은 「삭제」로 지우세요. 남은 요청은 디스코드에 <b>"공유 요청 적용해줘"</b>라고 보내 주시면 Claude가 반영하고 답을 답니다 (받은 사람 화면에도 보입니다).</p>' +
+        (out.length ? out.map(({ n, q, a }) => '<div class="qa"><div class="muted">' + reqWhen(n) + (q.who ? ' · ' + esc(q.who) : '') + ' · 링크 ' + esc((shares[q.share] && shares[q.share].made ? shares[q.share].made.slice(0, 10) + ' ' : '') + (q.share || '').slice(0, 6)) +
+          ' <button type="button" class="btn small" data-reqdel="' + esc(n) + '"' + (a ? ' data-ans="1"' : '') + '>삭제</button></div><div class="q">' + esc(q.text || '') + '</div>' + (a ? ansHtml(a) : '<div class="a muted">미반영</div>') + '</div>').join('') : '<p class="muted">아직 들어온 요청이 없습니다.</p>') +
+        '<p class="muted" style="font-size:12px">요청 토큰: 저장됨 · <a href="#" id="reqTokForget">지우기</a></p>';
+      $('reqTokForget').addEventListener('click', e => { e.preventDefault(); reqTok = ''; try { localStorage.removeItem(REQ_KEY); } catch (er) {} trkReqShared(host); });
+      host.querySelectorAll('[data-reqdel]').forEach(b => b.addEventListener('click', async () => {
+        const n = b.dataset.reqdel; if (!confirm('이 요청을 지울까요?')) return;
+        b.disabled = true; b.textContent = '지우는 중…';
+        try {
+          for (const f of [n, ...(b.dataset.ans ? [n.replace(/\.json$/, '.answer.json')] : [])]) {
+            const sha = (await (await apiReq('/contents/requests/tracker/' + f)).json()).sha;
+            await apiReq('/contents/requests/tracker/' + f, { method: 'DELETE', body: JSON.stringify({ message: 'delete request ' + f, sha }) });
+          }
+          trkReqShared(host);
+        } catch (e) { b.disabled = false; b.textContent = '삭제'; alert('지우지 못했습니다. ' + reqErr(e)); }
+      }));
+    } catch (e) { host.innerHTML = '<h4>공유 링크로 들어온 요청</h4><p class="err">' + esc(reqErr(e)) + '</p>'; }
   }
   const trkLabel = at => { const [d, t] = at.split(' '); const [, m, dd] = d.split('-'); return `${+m}/${+dd} ${+t.slice(0, 2)}시`; };
   const trkChannels = () => [...new Set(TRK.groups.flatMap(g => g.channels))];
@@ -1477,9 +1565,10 @@ html, body { height: auto; }
     body.innerHTML = '<div class="req"><p class="muted" style="margin:0">품목 추가·수정, 안 잡히는 품목 확인 등 요청을 적어 저장하세요. 저장 후 디스코드에 <b>"요청 넣음"</b>이라고 보내주시면 Claude가 반영하고 여기에 답을 답니다.</p>' +
       '<div class="bar"><label class="field" style="flex:0 0 160px">작성자<input id="trkReqWho" type="text" maxlength="20" placeholder="예: 김대리"></label><span class="grow"></span></div>' +
       '<textarea id="trkReqText" maxlength="4000" rows="3" style="width:100%" placeholder="예: 앱솔루트 산양 5캔은 빼고 4캔으로 바꿔줘 / 카누 라떼 30T 안 잡히는 이유 확인해줘"></textarea>' +
-      '<div class="bar"><span class="grow" id="trkReqInfo"></span><button type="button" class="btn primary" id="trkReqSend">요청 저장</button></div></div><div class="ins" id="trkReqList"><p class="muted">불러오는 중…</p></div>';
+      '<div class="bar"><span class="grow" id="trkReqInfo"></span><button type="button" class="btn primary" id="trkReqSend">요청 저장</button></div></div><div class="ins" id="trkReqList"><p class="muted">불러오는 중…</p></div><div class="ins" id="trkReqShared"></div>';
     $('trkReqWho').value = who;
     $('trkReqSend').addEventListener('click', trkReqSend);
+    trkReqShared($('trkReqShared'));
     try {
       let items = [];
       try { items = await (await api('/contents/requests/tracker')).json(); } catch (e) { if (e.status !== 404) throw e; }
@@ -3467,7 +3556,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     // private: what it was, for the list
     const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: shareCtx === 'trk' ? 'tracker' : shareCtx === 'perf' ? 'perf/' + cur.name : cur.name, mode: auto ? 'live-auto' : mode };
     // 매일 자동 갱신: the private meta keeps the AES key (not the password) so the workflow can re-seal the same id after each run
-    if (auto) meta.auto = { key: sealed.key, salt: sealed.salt, it: sealed.it, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch }, title: '가격 추적' };
+    if (auto) meta.auto = { key: sealed.key, salt: sealed.salt, it: sealed.it, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch }, title: '가격 추적', req: reqTok || undefined };
     if (auto) { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); return meta; }
     try { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); } catch (e) { console.error(e); }
     return meta;
