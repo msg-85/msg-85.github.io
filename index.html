@@ -2336,11 +2336,13 @@ html, body { height: auto; }
     const T = pivTree(), { cols, nC, nk } = T, vk = piv.vals, groups = nC ? [...cols.map((c, i) => ({ i, name: c.name })), { i: nC, name: '합계' }] : [{ i: nC, name: '' }];
     const ps = s.psort || { g: nC, k: vk[0], dir: -1 };
     const val = (node, gi, k) => pv(node.sum.subarray(gi * nk, gi * nk + nk), k);
-    const sortKids = kids => { const g = Math.min(ps.g, nC), k = vk.includes(ps.k) ? ps.k : vk[0]; return kids.slice().sort((a, b) => { const x = val(a, g, k), y = val(b, g, k); return ((Number.isFinite(y) ? y : -Infinity) - (Number.isFinite(x) ? x : -Infinity)) * (ps.dir === 1 ? -1 : 1) || a.k - b.k; }); };
-    let h = ctl + `<p class="muted" style="margin:0;font-size:12px">${esc(pUnitText())} · ▸ 눌러서 펼치기 · 값 머리글 누르면 정렬 · 위 슬라이서 선택이 그대로 적용됩니다.</p><div class="tw"><table class="at pvt"><thead>`;
+    const sortKids = kids => { if (ps.k === '@name') return kids.slice().sort((a, b) => (a.k - b.k) * ps.dir); const g = Math.min(ps.g, nC), k = vk.includes(ps.k) ? ps.k : vk[0]; return kids.slice().sort((a, b) => { const x = val(a, g, k), y = val(b, g, k); return ((Number.isFinite(y) ? y : -Infinity) - (Number.isFinite(x) ? x : -Infinity)) * (ps.dir === 1 ? -1 : 1) || a.k - b.k; }); };
+    let h = ctl + `<p class="muted" style="margin:0;font-size:12px">${esc(pUnitText())} · ▸ 눌러서 펼치기 · 값 머리글 누르면 큰 순/작은 순, 맨 앞 행 머리글 누르면 이름순(오름/내림) 정렬 · 위 슬라이서 선택이 그대로 적용됩니다.</p><div class="tw"><table class="at pvt"><thead>`;
     const arrow = (g, k) => ps.g === g && ps.k === k ? (ps.dir === -1 ? ' ▼' : ' ▲') : '';
-    if (nC) h += `<tr><th rowspan="2">${esc(piv.rows.map(d => M.dims[d].name).join(' › ') || '합계')}</th>${groups.map(g => `<th class="cg" colspan="${vk.length}">${esc(g.name)}</th>`).join('')}</tr><tr>${groups.map(g => vk.map(k => `<th class="c" data-ps="${g.i}|${k}">${esc(pLabel(k))}${arrow(g.i, k)}</th>`).join('')).join('')}</tr>`;
-    else h += `<tr><th>${esc(piv.rows.map(d => M.dims[d].name).join(' › ') || '합계')}</th>${vk.map(k => `<th class="c" data-ps="${nC}|${k}">${esc(pLabel(k))}${arrow(nC, k)}</th>`).join('')}</tr>`;
+    const nameTh = (rs) => `<th${rs} class="c" data-ps="0|@name" title="누르면 이름순 정렬">${esc(piv.rows.map(d => M.dims[d].name).join(' › ') || '합계')}${arrow(0, '@name').replace(/^ /, ' ')}</th>`;
+    if (ps.k === '@name') ps.g = 0;
+    if (nC) h += `<tr>${nameTh(' rowspan="2"')}${groups.map(g => `<th class="cg" colspan="${vk.length}">${esc(g.name)}</th>`).join('')}</tr><tr>${groups.map(g => vk.map(k => `<th class="c" data-ps="${g.i}|${k}">${esc(pLabel(k))}${arrow(g.i, k)}</th>`).join('')).join('')}</tr>`;
+    else h += `<tr>${nameTh('')}${vk.map(k => `<th class="c" data-ps="${nC}|${k}">${esc(pLabel(k))}${arrow(nC, k)}</th>`).join('')}</tr>`;
     h += '</thead><tbody>';
     const cells = node => groups.map(g => vk.map(k => `<td>${pFmt(val(node, g.i, k), k)}</td>`).join('')).join('');
     h += `<tr class="tot"><th>합계</th>${cells(T.root)}</tr>`;
@@ -2363,7 +2365,7 @@ html, body { height: auto; }
     const s = PS.s, piv = s.piv, t = e.target.closest('[data-pt],[data-pm],[data-ps],[data-pval],[data-pexp],[data-pfoldall]'); if (!t) return;
     if (t.dataset.pt != null) { const p = t.dataset.pt; if (s.open.has(p)) s.open.delete(p); else s.open.add(p); perfSave(); perfPivot(); return; }
     if (t.dataset.pm != null) { const lim = PS.plim || (PS.plim = {}); lim[t.dataset.pm] = (lim[t.dataset.pm] || 200) + 200; perfPivot(); return; }
-    if (t.dataset.ps != null) { const [g, k] = t.dataset.ps.split('|'); const ps = s.psort || { g: PS.pt.nC, k: piv.vals[0], dir: -1 }; s.psort = ps.g === +g && ps.k === k ? { g: +g, k, dir: -ps.dir } : { g: +g, k, dir: -1 }; perfSave(); perfPivot(); return; }
+    if (t.dataset.ps != null) { const [g, k] = t.dataset.ps.split('|'); const ps = s.psort || { g: PS.pt.nC, k: piv.vals[0], dir: -1 }; s.psort = ps.g === +g && ps.k === k ? { g: +g, k, dir: -ps.dir } : { g: +g, k, dir: k === '@name' ? 1 : -1 }; perfSave(); perfPivot(); return; }
     if (t.dataset.pval != null) { const k = t.dataset.pval; piv.vals = piv.vals.includes(k) ? piv.vals.filter(x => x !== k) : perfKeys(PS.model).filter(x => x === k || piv.vals.includes(x)); perfSave(); perfPivot(); return; }
     if (t.hasAttribute('data-pexp')) { if (piv.rows.length > 1) for (const ch of pivKids(pivTree().root)) s.open.add(ch.path); perfSave(); perfPivot(); return; }
     if (t.hasAttribute('data-pfoldall')) { s.open.clear(); perfSave(); perfPivot(); }
