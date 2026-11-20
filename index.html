@@ -1937,7 +1937,7 @@ html, body { height: auto; }
     leafDims.forEach((dims, l) => dims.forEach((v, d) => { let k = vmap[d].get(v); if (k == null) { k = vals[d].length; vmap[d].set(v, k); vals[d].push(v); } leafDim[d][l] = k; }));
     nmBest.forEach((mp, d) => { if (mp && mp.size) vals[d] = vals[d].map(v => mp.has(v) ? `${v} ${mp.get(v).n}` : v); });   // 번호 이름
     if (!nd) { dimNames.push('전체'); vals.push(['전체']); leafDim.push(new Int32Array(nL)); }
-    return { dims: dimNames, vals, leafDim, years, periods, isMonth, nL, nY, nP, data, has, lab: Object.assign({ C: '비용 (차감+판관비)', V: '변동원가', P: '판매액' }, opts.labels || {}), kind: flat ? '목록형 표' : '피벗' };
+    return { dims: dimNames, vals, leafDim, years, periods, isMonth, nL, nY, nP, data, has, lab: Object.assign({ C: '비용 (차감+판관비)', V: '변동원가', P: '판매액', M: 'CM (공헌이익)' }, opts.labels || {}), kind: flat ? '목록형 표' : '피벗' };
   }
 
   // ================= 실적표 (top tab; price-data perf/<name>.json = { title, source, perf?: {dims, more, rename, meas, qtyDiv, qtyUnit} }) =================
@@ -2795,7 +2795,7 @@ html, body { height: auto; }
     if (h.Q) { L.push(['판매수량', 'Q', 'qty'], ['ASP', 'a', 'price']); }
     if (h.C) { L.push([AS.model.lab.C, 'C', 'amt'], ['% 비용율', 'c', 'cost']); if (h.D) L.push(['　· 차감율', 'd', 'cost', 1]); if (h.G) L.push(['　· 판관비율', 'g', 'cost', 1]); }
     if (h.V) L.push([AS.model.lab.V, 'V', 'amt'], ['% 원가율', 'v', 'cost']);
-    L.push(['CM (공헌이익)', 'M', 'amt'], ['% CM율', 'm', 'margin']);
+    L.push([AS.model.lab.M, 'M', 'amt'], ['% CM율', 'm', 'margin']);
     return L;
   }
   function sumBlocks(C) {
