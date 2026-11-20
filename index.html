@@ -2210,8 +2210,12 @@ html, body { height: auto; }
     const n = o.x.length, W = Math.max(640, n * 58 + 120), H = 300, L = 58, R = 54, T = 12, B = 36;
     const slot = (W - L - R) / Math.max(1, n), cx = i => L + (i + 0.5) * slot;
     const bv = o.bars.flatMap(s => s.values).filter(Number.isFinite), lv = o.lines.flatMap(s => s.values).filter(Number.isFinite);
-    const tk = ticks(Math.min(0, ...bv, 0), Math.max(0, ...bv, 1e-9), 5), lo = tk[0], hi = tk[tk.length - 1];
-    const tk2 = lv.length ? ticks(Math.min(0, ...lv), Math.max(...lv, 1e-9), 5) : [0, 1], lo2 = tk2[0], hi2 = tk2[tk2.length - 1];
+    // both axes share the same tick rows so 0 sits on one line left and right
+    const ta = ticks(Math.min(0, ...bv), Math.max(0, ...bv, 1e-9), 5), tb2 = lv.length ? ticks(Math.min(0, ...lv), Math.max(0, ...lv, 1e-9), 5) : [0, 1];
+    const s1 = (ta[1] - ta[0]) || 1, s2 = (tb2[1] - tb2[0]) || 1;
+    const neg = Math.max(Math.round(-ta[0] / s1), lv.length ? Math.round(-tb2[0] / s2) : 0), pos = Math.max(Math.round(ta[ta.length - 1] / s1), lv.length ? Math.round(tb2[tb2.length - 1] / s2) : 0, 1);
+    const tk = [], tk2 = []; for (let k = -neg; k <= pos; k++) { tk.push(+(k * s1).toPrecision(12)); tk2.push(+(k * s2).toPrecision(12)); }
+    const lo = tk[0], hi = tk[tk.length - 1], lo2 = tk2[0], hi2 = tk2[tk2.length - 1];
     const py = v => T + (hi - v) * (H - T - B) / ((hi - lo) || 1), py2 = v => T + (hi2 - v) * (H - T - B) / ((hi2 - lo2) || 1);
     const svg = sv('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': o.title });
     for (const v of tk) { sv('line', { x1: L, x2: W - R, y1: py(v), y2: py(v), stroke: v === 0 ? 'var(--muted)' : 'var(--grid)' }, svg); if (nb) sv('text', { x: L - 6, y: py(v) + 4, 'text-anchor': 'end' }, svg).textContent = fmt(v); }
