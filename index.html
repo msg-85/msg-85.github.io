@@ -192,6 +192,22 @@ td.num { text-align: right; font-family: var(--mono); }
 .trk-ms .msp { width: 320px; }
 /* 실적 현황 (layout perf): Excel-style slicers, 총계 table, combo chart, free pivot */
 .pbar { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; max-height: 48vh; overflow: auto; }
+/* 실적표: slicers in a column on the right; on narrow screens a drawer opened by the 슬라이서 button */
+.pwrap { display: flex; gap: 10px; flex: 1; min-height: 0; align-items: stretch; }
+.pwrap:not(:has(> .view:not([hidden]))) { display: none; }
+.pwrap > .view { flex: 1; min-width: 0; }
+.pwrap > .pbar { order: 2; width: 330px; max-height: none; overflow: auto; align-self: stretch; }
+.pwrap > .pbar .psg { grid-template-columns: 1fr; }
+.pwrap > .pbar .ps.w2 { grid-column: auto; }
+.pwrap > .pbar .pline .sel { flex-basis: 100%; min-width: 0; }
+.pwrap > .pbar.fold { width: 170px; }
+.pdbtn { display: none; }
+@media (max-width: 1000px) {
+  .pwrap > .pbar { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 90vw); z-index: 60; background: var(--panel); border-left: 1px solid var(--line); padding: 10px; box-shadow: -8px 0 24px rgba(0,0,0,.35); transform: translateX(105%); transition: transform .2s; }
+  .pwrap > .pbar.open { transform: none; }
+  .pwrap > .pbar.fold { width: min(360px, 90vw); }
+  .pdbtn:not([hidden]) { display: block; position: fixed; right: 12px; bottom: 14px; z-index: 61; border: 0; border-radius: 20px; padding: 9px 16px; background: var(--s6); color: #fff; font: 600 14px var(--sans); box-shadow: 0 4px 14px rgba(0,0,0,.35); cursor: pointer; }
+}
 .pbar.fold .psg, .pbar.fold .pmore { display: none; }
 .psg { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
 .ps { background: var(--sheet); border: 1px solid var(--line); padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -412,9 +428,12 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     <div class="view" id="vNote" hidden></div>
     <div class="abar" id="aBar" hidden></div>
     <div class="crumb" id="aCrumb" hidden></div>
-    <div class="pbar" id="pBar" hidden></div>
-    <div class="view" id="vPerf" hidden></div>
-    <div class="view" id="vPivot" hidden></div>
+    <div class="pwrap" id="pWrap">
+      <div class="view" id="vPerf" hidden></div>
+      <div class="view" id="vPivot" hidden></div>
+      <div class="pbar" id="pBar" hidden></div>
+      <button type="button" class="pdbtn" id="pDrawerBtn" hidden>슬라이서</button>
+    </div>
     <div class="view" id="vSum" hidden></div>
     <div class="view" id="vJudge" hidden></div>
     <div class="view" id="vIns" hidden></div>
@@ -2151,7 +2170,7 @@ html, body { height: auto; }
   const pDimIx = (M, name) => M.dims.findIndex(D => D.name === name);
   function perfInit(M, c) {
     const keys = perfKeys(M);
-    const s = { filt: M.dims.map(() => null), same: true, div: 1e8, fold: false, more: false, show: perfShowDef(M),
+    const s = { filt: M.dims.map(() => null), same: true, avg: false, div: 1e8, fold: false, more: false, show: perfShowDef(M),
       bars: ['S', 'OP', 'CM'].filter(k => keys.includes(k)), lines: ['Cr', 'Or'].filter(k => keys.includes(k)),
       piv: { rows: ['채널', '대카테고리'].map(n => pDimIx(M, n)).filter(d => d >= 0), col: 'y', vals: ['S', 'C', 'Cr', 'CM', 'CMr'].filter(k => keys.includes(k)) }, open: new Set(), psort: null };
     const pre = c.extra && c.extra.state;
@@ -2163,13 +2182,13 @@ html, body { height: auto; }
   function perfStateOut() {
     const M = PS.model, s = PS.s, filt = {};
     s.filt.forEach((f, d) => { if (f) filt[M.dims[d].name] = [...f].map(k => M.dims[d].vals[k]); });
-    return { filt, same: s.same, div: s.div, fold: s.fold, more: s.more, show: s.show.map(d => M.dims[d].name), bars: s.bars, lines: s.lines, piv: { rows: s.piv.rows.map(d => M.dims[d].name), col: s.piv.col, vals: s.piv.vals }, open: [...s.open], psort: s.psort };
+    return { filt, same: s.same, avg: s.avg, div: s.div, fold: s.fold, more: s.more, show: s.show.map(d => M.dims[d].name), bars: s.bars, lines: s.lines, piv: { rows: s.piv.rows.map(d => M.dims[d].name), col: s.piv.col, vals: s.piv.vals }, open: [...s.open], psort: s.psort };
   }
   function perfApply(M, s, o) {
     if (!o) return;
     const keys = perfKeys(M);
     if (o.filt) { s.filt = M.dims.map(() => null); for (const [name, vs] of Object.entries(o.filt)) { const d = pDimIx(M, name); if (d < 0) continue; const set = new Set(vs.map(v => M.dims[d].vals.indexOf(v)).filter(k => k >= 0)); s.filt[d] = set.size ? set : null; } }
-    for (const k of ['same', 'fold', 'more']) if (typeof o[k] === 'boolean') s[k] = o[k];
+    for (const k of ['same', 'avg', 'fold', 'more']) if (typeof o[k] === 'boolean') s[k] = o[k];
     if (PERF_DIVS.some(x => x[0] === o.div)) s.div = o.div;
     if (Array.isArray(o.show)) s.show = o.show.map(n => pDimIx(M, n)).filter(d => d >= 0);
     if (Array.isArray(o.bars)) s.bars = o.bars.filter(k => keys.includes(k));
@@ -2229,7 +2248,7 @@ html, body { height: auto; }
     const last = ys[ys.length - 1], months = [];
     if (last != null) for (let m = 0; m < nM; m++) if (cnt[last * nM + m]) months.push(m);
     const same = PS.s.same && ys.length > 1 && M.mi >= 0;
-    const out = ys.map(y => { const a = new Float64Array(nk); for (let m = 0; m < nM; m++) { if (same && !months.includes(m)) continue; const b = (y * nM + m) * nk; for (let j = 0; j < nk; j++) a[j] += agg[b + j]; } return { y, name: M.dims[M.yi].vals[y], a }; });
+    const out = ys.map(y => { const a = new Float64Array(nk); let n = 0; for (let m = 0; m < nM; m++) { if (same && !months.includes(m)) continue; if (cnt[y * nM + m]) n++; const b = (y * nM + m) * nk; for (let j = 0; j < nk; j++) a[j] += agg[b + j]; } if (PS.s.avg && n > 1) for (let j = 0; j < nk; j++) a[j] /= n; return { y, name: M.dims[M.yi].vals[y], a, n }; });
     let monthText = '';
     if (M.mi >= 0 && months.length) { const mv = M.dims[M.mi].vals; monthText = months.length === nM ? '' : months.length > 2 && months.every((m, i) => i === 0 || m === months[i - 1] + 1) ? `${mv[months[0]]}~${mv[months[months.length - 1]]}` : months.map(m => mv[m]).join(', '); }
     return { rows: out, same, monthText };
@@ -2262,7 +2281,8 @@ html, body { height: auto; }
     main.push(...s.show); M.dims.forEach((D, d) => { if (!s.show.includes(d)) more.push(d); });
     const nSel = s.filt.filter(Boolean).length, moreSel = more.filter(d => s.filt[d]).length;
     const sel = perfScope();
-    $('pBar').className = 'pbar' + (s.fold ? ' fold' : '');
+    $('pBar').className = 'pbar' + (s.fold ? ' fold' : '') + (PS.drawer ? ' open' : '');
+    pDrawerSync();
     $('pBar').innerHTML = `<div class="pline"><span class="sel"><b>선택</b> ${esc(sel)} <span class="muted">· ${PS.C.rows.toLocaleString()}행</span></span>
       <button type="button" class="btn small" data-pall${nSel ? '' : ' disabled'}>슬라이서 모두 해제</button>
       <details class="ppick"${PS.pick ? " open" : ""}><summary class="btn small">슬라이서 고르기 ▾</summary><div class="ppl"><p class="muted">위에 상자로 둘 슬라이서를 고르세요. 고른 순서대로 놓이고(숫자), 나머지는 「슬라이서 더 보기」로 갑니다. 다 고르셨으면 「슬라이서 고르기」를 다시 눌러 닫으세요.</p>
@@ -2287,6 +2307,14 @@ html, body { height: auto; }
     if (b.hasAttribute('data-pfold')) { s.fold = !s.fold; perfSave(); perfBar(); }
     if (b.hasAttribute('data-pshowdef')) { s.show = perfShowDef(PS.model); perfSave(); perfBar(); perfReopenPick(); }
   });
+  // narrow screens: the slicer column becomes a drawer behind a floating 슬라이서 button
+  function pDrawerSync() {
+    const b = $('pDrawerBtn'), bar = $('pBar'); b.hidden = bar.hidden;
+    const n = PS && PS.s ? PS.s.filt.filter(Boolean).length : 0;
+    b.textContent = PS && PS.drawer ? '✕ 닫기' : '슬라이서' + (n ? ' · ' + n + '개 선택' : '');
+  }
+  new MutationObserver(() => { if ($('pBar').hidden && PS) PS.drawer = false; pDrawerSync(); }).observe($('pBar'), { attributes: true, attributeFilter: ['hidden'] });
+  $('pDrawerBtn').addEventListener('click', () => { if (!PS) return; PS.drawer = !PS.drawer; $('pBar').classList.toggle('open', PS.drawer); pDrawerSync(); });
   // drag across slicer buttons to pick a run of values (like an Excel slicer); Ctrl/Shift while dragging adds to what is picked
   let psDrag = null, psDragDone = false;
   $('pBar').addEventListener('pointerdown', e => {
@@ -2329,7 +2357,7 @@ html, body { height: auto; }
   function perfTotHtml(Y) {
     const keys = PERF_SUM.filter(k => k in PS.model.kix || PERF_RATES.some(r => r[0] === k && r[2] in PS.model.kix));
     let h = `<div class="tw"><table class="at ptot"><thead><tr><th>연도</th>${keys.map(k => `<th>${esc(pLabel(k))}</th>`).join('')}</tr></thead><tbody>`;
-    for (const r of Y.rows) h += `<tr><th>${esc(r.name)}</th>${keys.map(k => `<td>${pFmt(pv(r.a, k), k)}</td>`).join('')}</tr>`;
+    for (const r of Y.rows) h += `<tr><th>${esc(r.name)}${PS.s.avg && r.n > 1 ? ` <small class="muted">(${r.n}개월 평균)</small>` : ''}</th>${keys.map(k => `<td>${pFmt(pv(r.a, k), k)}</td>`).join('')}</tr>`;
     if (Y.rows.length > 1) {
       const a = Y.rows[Y.rows.length - 2].a, b = Y.rows[Y.rows.length - 1].a;
       // signed cell; a change that rounds to zero shows plain 0 (no sign, no colour). Cost-type items: up = bad
@@ -2400,7 +2428,8 @@ html, body { height: auto; }
     const sameBox = Y.rows.length > 1 && PS.model.mi >= 0 ? `<label class="check" style="font-size:13px"><input type="checkbox" data-psame${s.same ? ' checked' : ''}> 연도별 같은 달만 비교${Y.monthText && s.same ? ` (${esc(Y.monthText)})` : ''}</label>` : '';
     const amtK = keys.filter(k => pKind(k) === 'amt'), rateK = keys.filter(k => pKind(k) === 'rate');
     const chip = (k, on, grp) => `<button type="button" class="btn" data-pchip="${grp}" data-k="${k}" aria-pressed="${on}">${esc(pLabel(k))}</button>`;
-    host.innerHTML = `<h3 class="ph">[선택항목 총계] <small>(${esc(pUnitText())})</small> ${sameBox}</h3>${perfTotHtml(Y)}
+    const avgSel = `<select data-pavg style="font-size:13px" aria-label="누계 또는 월평균"><option value="0"${s.avg ? '' : ' selected'}>누계</option><option value="1"${s.avg ? ' selected' : ''}>월평균</option></select>`;
+    host.innerHTML = `<h3 class="ph">[선택항목 총계] ${avgSel} <small>(${esc(pUnitText())}${s.avg ? ' · 월평균 = 합계 ÷ 데이터가 있는 달 수' : ''})</small> ${sameBox}</h3>${perfTotHtml(Y)}
       <h3 class="ph">월별 추이 <small>막대 = 금액 (왼쪽 축), 선 = 율 (오른쪽 축) · 차트에 마우스를 올리면 숫자</small></h3>
       <div class="pchips"><b>막대</b>${amtK.map(k => chip(k, s.bars.includes(k), 'bars')).join('')}<b>선</b>${rateK.map(k => chip(k, s.lines.includes(k), 'lines')).join('')}</div><div id="pChart"></div>`;
     const per = perfSeries(C);
@@ -2413,7 +2442,11 @@ html, body { height: auto; }
     PS.s[g] = a.includes(k) ? a.filter(x => x !== k) : [...a, k];
     perfSave(); perfMain();
   });
-  $('vPerf').addEventListener('change', e => { if (e.target.dataset.psame != null && PS && PS.s) { PS.s.same = e.target.checked; perfSave(); perfMain(); } });
+  $('vPerf').addEventListener('change', e => {
+    if (!PS || !PS.s) return;
+    if (e.target.dataset.psame != null) { PS.s.same = e.target.checked; perfSave(); perfMain(); }
+    if (e.target.dataset.pavg != null) { PS.s.avg = e.target.value === '1'; perfSave(); perfMain(); }
+  });
   // ---------- 자유 피벗: rows stacked from slicer fields, columns 연 / 월 / 연·월, any values; children built when opened ----------
   function pivCols() {
     const M = PS.model, C = PS.C, col = PS.s.piv.col, { nY, nM, cnt } = C, list = [];
