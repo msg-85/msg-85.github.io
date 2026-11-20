@@ -207,6 +207,14 @@ td.num { text-align: right; font-family: var(--mono); }
 .psb button.off { opacity: .38; }
 .psb .more { font-size: 12px; color: var(--muted); padding: 1px 4px; }
 .pmore > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.ppick > summary { list-style: none; cursor: pointer; display: inline-block; }
+.ppick > summary::-webkit-details-marker { display: none; }
+.ppick[open] { order: 9; flex-basis: 100%; }
+.ppl { margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.ppl p { flex-basis: 100%; margin: 0 0 2px; font-size: 12px; }
+.ppl label { border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.ppl label:has(input:checked) { border-color: var(--s6); }
+.ppb { margin-left: auto; }
 .pmore[open] > summary { margin-bottom: 6px; }
 .pline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; background: var(--sheet); border: 1px solid var(--line); padding: 5px 8px; }
 .pline .sel { color: var(--muted); flex: 1; min-width: 200px; }
@@ -320,7 +328,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   html, body, .app { height: auto; }
   body { padding: 0; background: #fff; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #anaSel { display: none !important; } #rTitle { display: block !important; }
-  .top, #readPane > .bar:not(#rHead), #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles, #aBar, .pbar .psg, .pmore, .pline .btn, .pchips, .pctl, .crumb .x, .req textarea, .req .bar { display: none !important; }
+  .top, #readPane > .bar:not(#rHead), #list, #rTabs, #rHead .btn, .tip, .err, #vTable .bar, #vSrc .bar, #sFiles, #aBar, .pbar .psg, .pmore, .ppick, .pline .btn, .pchips, .pctl, .crumb .x, .req textarea, .req .bar { display: none !important; }
   .tw { overflow: visible; }
   .icard, .tile { break-inside: avoid; }
   .pane { border: 0; padding: 0; gap: 8px; }
@@ -2048,7 +2056,7 @@ html, body { height: auto; }
   const pDimIx = (M, name) => M.dims.findIndex(D => D.name === name);
   function perfInit(M, c) {
     const keys = perfKeys(M);
-    const s = { filt: M.dims.map(() => null), same: true, div: 1e8, fold: false, more: false,
+    const s = { filt: M.dims.map(() => null), same: true, div: 1e8, fold: false, more: false, show: perfShowDef(M),
       bars: ['S', 'OP', 'CM'].filter(k => keys.includes(k)), lines: ['Cr', 'Or'].filter(k => keys.includes(k)),
       piv: { rows: ['채널', '대카테고리'].map(n => pDimIx(M, n)).filter(d => d >= 0), col: 'y', vals: ['S', 'C', 'Cr', 'CM', 'CMr'].filter(k => keys.includes(k)) }, open: new Set(), psort: null };
     const pre = c.extra && c.extra.state;
@@ -2060,7 +2068,7 @@ html, body { height: auto; }
   function perfStateOut() {
     const M = PS.model, s = PS.s, filt = {};
     s.filt.forEach((f, d) => { if (f) filt[M.dims[d].name] = [...f].map(k => M.dims[d].vals[k]); });
-    return { filt, same: s.same, div: s.div, fold: s.fold, more: s.more, bars: s.bars, lines: s.lines, piv: { rows: s.piv.rows.map(d => M.dims[d].name), col: s.piv.col, vals: s.piv.vals }, open: [...s.open], psort: s.psort };
+    return { filt, same: s.same, div: s.div, fold: s.fold, more: s.more, show: s.show.map(d => M.dims[d].name), bars: s.bars, lines: s.lines, piv: { rows: s.piv.rows.map(d => M.dims[d].name), col: s.piv.col, vals: s.piv.vals }, open: [...s.open], psort: s.psort };
   }
   function perfApply(M, s, o) {
     if (!o) return;
@@ -2068,6 +2076,7 @@ html, body { height: auto; }
     if (o.filt) { s.filt = M.dims.map(() => null); for (const [name, vs] of Object.entries(o.filt)) { const d = pDimIx(M, name); if (d < 0) continue; const set = new Set(vs.map(v => M.dims[d].vals.indexOf(v)).filter(k => k >= 0)); s.filt[d] = set.size ? set : null; } }
     for (const k of ['same', 'fold', 'more']) if (typeof o[k] === 'boolean') s[k] = o[k];
     if (PERF_DIVS.some(x => x[0] === o.div)) s.div = o.div;
+    if (Array.isArray(o.show)) s.show = o.show.map(n => pDimIx(M, n)).filter(d => d >= 0);
     if (Array.isArray(o.bars)) s.bars = o.bars.filter(k => keys.includes(k));
     if (Array.isArray(o.lines)) s.lines = o.lines.filter(k => keys.includes(k));
     if (o.piv) { const p = o.piv; if (Array.isArray(p.rows)) s.piv.rows = p.rows.map(n => pDimIx(M, n)).filter(d => d >= 0); if (['none', 'y', 'm', 'ym'].includes(p.col)) s.piv.col = p.col; if (Array.isArray(p.vals)) s.piv.vals = p.vals.filter(k => keys.includes(k)); }
@@ -2155,15 +2164,18 @@ html, body { height: auto; }
   }
   function perfBar() {
     const M = PS.model, s = PS.s, main = [], more = [];
-    M.dims.forEach((D, d) => (D.more ? more : main).push(d));
+    main.push(...s.show); M.dims.forEach((D, d) => { if (!s.show.includes(d)) more.push(d); });
     const nSel = s.filt.filter(Boolean).length, moreSel = more.filter(d => s.filt[d]).length;
     const sel = perfScope();
     $('pBar').className = 'pbar' + (s.fold ? ' fold' : '');
     $('pBar').innerHTML = `<div class="pline"><span class="sel"><b>선택</b> ${esc(sel)} <span class="muted">· ${PS.C.rows.toLocaleString()}행</span></span>
       <button type="button" class="btn small" data-pall${nSel ? '' : ' disabled'}>슬라이서 모두 해제</button>
+      <details class="ppick"${PS.pick ? " open" : ""}><summary class="btn small">슬라이서 고르기 ▾</summary><div class="ppl"><p class="muted">위에 상자로 둘 슬라이서를 고르세요. 고른 순서대로 놓이고(숫자), 나머지는 「슬라이서 더 보기」로 갑니다. 다 고르셨으면 「슬라이서 고르기」를 다시 눌러 닫으세요.</p>
+        ${M.dims.map((D, d) => { const o = s.show.indexOf(d); return `<label><input type="checkbox" data-pshow="${d}"${o >= 0 ? ' checked' : ''}> ${esc(D.name)}${o >= 0 ? ` <span class="muted">${o + 1}</span>` : ''}${s.filt[d] ? ' <span class="muted">· 선택 중</span>' : ''}</label>`; }).join('')}
+        <div class="ppb"><button type="button" class="btn small" data-pshowdef>처음 설정으로</button></div></div></details>
       <button type="button" class="btn small" data-pfold>${s.fold ? '슬라이서 펼치기 ▾' : '슬라이서 접기 ▴'}</button>
       <label>금액 <select data-pdiv>${PERF_DIVS.map(([v, t]) => `<option value="${v}"${v === s.div ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div>
-      <div class="psg">${main.map(psBox).join('')}</div>
+      ${main.length ? `<div class="psg">${main.map(psBox).join('')}</div>` : '<p class="muted">위에 보일 슬라이서가 없습니다. 「슬라이서 고르기」에서 고르세요.</p>'}
       ${more.length ? `<details class="pmore"${s.more ? ' open' : ''}><summary>슬라이서 더 보기 (${more.map(d => M.dims[d].name).join(' · ')})${moreSel ? ` · ${moreSel}개 선택 중` : ''}</summary><div class="psg">${more.map(psBox).join('')}</div></details>` : ''}`;
   }
   $('pBar').addEventListener('click', e => {
@@ -2177,13 +2189,20 @@ html, body { height: auto; }
     if (b.dataset.pclr != null) { s.filt[+b.dataset.pclr] = null; perfChanged(); return; }
     if (b.hasAttribute('data-pall')) { s.filt = s.filt.map(() => null); perfChanged(); return; }
     if (b.hasAttribute('data-pfold')) { s.fold = !s.fold; perfSave(); perfBar(); }
+    if (b.hasAttribute('data-pshowdef')) { s.show = perfShowDef(PS.model); perfSave(); perfBar(); perfReopenPick(); }
   });
-  $('pBar').addEventListener('change', e => { if (e.target.dataset.pdiv != null && PS && PS.s) { PS.s.div = +e.target.value; perfChanged(true); } });
+  $('pBar').addEventListener('change', e => {
+    if (!PS || !PS.s) return;
+    if (e.target.dataset.pdiv != null) { PS.s.div = +e.target.value; perfChanged(true); return; }
+    if (e.target.dataset.pshow != null) { const d = +e.target.dataset.pshow, s = PS.s; s.show = s.show.filter(x => x !== d); if (e.target.checked) s.show.push(d); perfSave(); perfBar(); perfReopenPick(); }
+  });
+  function perfShowDef(M) { return M.dims.map((D, d) => D.more ? -1 : d).filter(d => d >= 0); }
+  function perfReopenPick() { const p = document.querySelector('#pBar .ppick'); if (p) p.open = true; }
   $('pBar').addEventListener('input', e => {
     const t = e.target; if (!t.classList.contains('psq') || !PS || !PS.model) return;
     const box = t.closest('.ps'), d = +box.dataset.d; PS.q[d] = t.value; box.querySelector('.psb').innerHTML = psbHtml(d);
   });
-  $('pBar').addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('pmore') && PS && PS.s) { PS.s.more = e.target.open; perfSave(); } }, true);
+  $('pBar').addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('ppick') && PS) PS.pick = e.target.open; if (e.target.classList && e.target.classList.contains('pmore') && PS && PS.s) { PS.s.more = e.target.open; perfSave(); } }, true);
   // ---------- 실적 현황: 총계 table + monthly combo chart ----------
   function perfTotHtml(Y) {
     const keys = PERF_SUM.filter(k => k in PS.model.kix || PERF_RATES.some(r => r[0] === k && r[2] in PS.model.kix));
