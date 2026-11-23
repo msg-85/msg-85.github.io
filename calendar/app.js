@@ -500,9 +500,11 @@
         const ix = n => { let i = head.indexOf(n); for (const a of ALIAS[n] || []) if (i < 0) i = head.indexOf(a); return i; };
         const miss = ['채널', '행사명', '제품번호', '시작일', '종료일', '단위당 정상가', '단위당 판매가', '단위당 입수량'].filter(h => ix(h) < 0);
         if (miss.length) throw new AppError('양식의 머리글이 다릅니다. 없는 열: ' + miss.join(', '));
-        const errs = [];
+        const errs = [], subs = {};
+        // 제품번호 치환표 (master keeps it on the server): wrong / temporary numbers -> real product number
+        const AL = new Map((await api.listAliases()).map(a => [String(a.alias).trim().toUpperCase(), String(a.code).trim()]));
         rows.forEach((r, i) => {
-          const g = n => (ix(n) >= 0 ? r[ix(n)] ?? '' : ''), pcode = String(g('제품번호')).trim(), p = S.products.find(x => x.code === pcode), craw = String(g('채널')).trim(), chm = S.channels.find(c => c.code === craw || c.name === craw), ccode = chm ? chm.code : craw;
+          const g = n => (ix(n) >= 0 ? r[ix(n)] ?? '' : ''), praw = String(g('제품번호')).trim(), pcode = AL.get(praw.toUpperCase()) || praw, p = S.products.find(x => x.code === pcode), craw = String(g('채널')).trim(), chm = S.channels.find(c => c.code === craw || c.name === craw), ccode = chm ? chm.code : craw;
           const e = { channel_code: ccode, channel_detail: String(g('세부채널명')).trim(), pack_qty: g('단위당 입수량') === '' ? null : num(g('단위당 입수량')), title: String(g('행사명')).trim(), product_code: pcode, start_date: excelDate(g('시작일')), end_date: excelDate(g('종료일')),
             list_price: g('단위당 정상가') === '' && p ? Number(p.list_price) : num(g('단위당 정상가')), sale_price: num(g('단위당 판매가')), expected_qty: g('예상수량') !== '' ? num(g('예상수량')) : null, memo: String(g('메모')).trim() };
           const why = [];
@@ -514,9 +516,12 @@
           if (!(Number.isInteger(e.pack_qty) && e.pack_qty > 0)) why.push('단위당 입수량 확인');
           if (chm && isEtc(chm.name) && !e.channel_detail) why.push('기타 채널은 세부채널명 필요');
           if (chm && !isM && (S.user.channels || []).length && !S.user.channels.includes(chm.code)) why.push('담당 채널 아님');
+          if (pcode !== praw) subs[praw + ' → ' + pcode] = (subs[praw + ' → ' + pcode] || 0) + 1;
           if (why.length) errs.push(`${i + 2}행: ${why.join(', ')}`); else ready.push(e);
         });
         msg.append(el('div', { class: 'ok' }, `${isM ? '등록할 수 있는 행' : '등록 요청할 수 있는 행'} ${ready.length}개`));
+        const sk = Object.keys(subs);
+        if (sk.length) msg.append(el('div', { class: 's', style: 'color:var(--muted);margin:6px 0' }, `제품번호 치환표로 바꾼 행 ${Object.values(subs).reduce((a, b) => a + b, 0)}개: ` + sk.map(k => `${k} (${subs[k]})`).join(', ')));
         if (errs.length) msg.append(el('div', { class: 'err' }, `확인이 필요한 행 ${errs.length}개 (이 행들은 빼고 등록됩니다)\n` + errs.slice(0, 30).join('\n') + (errs.length > 30 ? `\n… 외 ${errs.length - 30}개` : '')));
         go.disabled = !ready.length;
       } catch (x) { msg.append(el('div', { class: 'err' }, x.message)); }
@@ -531,7 +536,7 @@
       catch (x) { msg.append(el('div', { class: 'err' }, x.message)); go.disabled = false; }
     });
     close = sheet(isM ? '일정 엑셀로 등록' : '일정 엑셀로 등록 요청', el('div', {},
-      el('p', { class: 's', style: 'color:var(--muted);margin-top:0' }, '양식은 "엑셀로 내려받기" 파일과 같습니다. 앞의 11개 열(채널~메모)만 읽고, (자동) 열은 비워도 됩니다. 세부채널명은 "기타" 채널일 때만 씁니다. 단위당 정상가를 비우면 제품 기준정보의 정상가가 들어갑니다. 날짜는 2026-11-01 형식이나 엑셀 날짜 모두 됩니다.' + (isM ? '' : ' 담당자가 올리면 한 줄씩 등록 요청으로 마스터에게 갑니다.')),
+      el('p', { class: 's', style: 'color:var(--muted);margin-top:0' }, '양식은 "엑셀로 내려받기" 파일과 같습니다. 앞의 11개 열(채널~메모)만 읽고, (자동) 열은 비워도 됩니다. 세부채널명은 "기타" 채널일 때만 씁니다. 단위당 정상가를 비우면 제품 기준정보의 정상가가 들어갑니다. 날짜는 2026-11-01 형식이나 엑셀 날짜 모두 됩니다. 치환표에 있는 임시·오류 제품번호는 실제 번호로 자동으로 바뀝니다.' + (isM ? '' : ' 담당자가 올리면 한 줄씩 등록 요청으로 마스터에게 갑니다.')),
       el('button', { class: 'btn', style: 'margin-bottom:12px', onclick: async () => download(await buildXlsx([{ name: '일정등록', rows: [[...EV_HEAD, ...EV_AUTO], ['F1.쿠팡', '', '월초 특가 (예시 줄, 지우고 쓰세요)', '2105345', todayKst(), addDays(todayKst(), 6), 1500, 1250, 24, 1000, '']], header: true },
         { name: '채널목록', rows: [['채널'], ...S.channels.map(c => [chLabel(c.code)])], header: true },
         { name: '제품번호', rows: [['제품번호', '제품번호 Name', '대카테고리', '소카테고리'], ...S.products.map(p => [p.code, p.name, p.cat_l || '', p.cat_s || ''])], header: true }]), '일정등록_양식.xlsx') }, '📄 양식 내려받기'),
