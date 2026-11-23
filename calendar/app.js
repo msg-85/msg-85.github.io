@@ -95,27 +95,30 @@
     setTimeout(() => cur.focus(), 60);
   }
   function fail(x) { if (x.code === 401) { api.logout(); showLogin(); } else toast(x.message); }
-  // filters: 팀 -> 채널, 대분류 -> 소분류 -> 가격구분 (each list follows the one before it)
+  // filters: 팀 -> 채널, 대분류 -> 소분류 -> 가격구분 (each list follows the one before it).
+  // Lists only hold values that appear in the loaded events (the shown month), so nothing empty can be picked.
   const opts = (sel, all, items, cur) => { sel.replaceChildren(el('option', { value: '' }, all), ...items.map(([v, t]) => el('option', { value: v }, t))); sel.value = items.some(([v]) => v === cur) ? cur : ''; return sel.value; };
+  const uniq = xs => [...new Set(xs.filter(Boolean))];
   function fillFilters() {
-    const teams = [...new Set(S.channels.map(c => divOf(c.code)[1]))].sort();
-    S.fTeam = opts($('fTeam'), '전체 팀', teams.map(t => [t, t]), S.fTeam);
-    S.fCh = opts($('fChannel'), '전체 채널', S.channels.filter(c => !S.fTeam || divOf(c.code)[1] === S.fTeam).map(c => [c.code, chLabel(c.code)]), S.fCh);
-    S.fBr = opts($('fBrand'), '전체 대분류', [...new Set(S.products.map(p => p.cat_l).filter(Boolean))].sort().map(b => [b, b]), S.fBr);
+    const ev = S.events;
+    S.fTeam = opts($('fTeam'), '전체 팀', uniq(ev.map(e => divOf(e.channel_code)[1])).sort().map(t => [t, t]), S.fTeam);
+    const chs = new Set(ev.filter(e => !S.fTeam || divOf(e.channel_code)[1] === S.fTeam).map(e => e.channel_code));
+    S.fCh = opts($('fChannel'), '전체 채널', [...chs].sort((a, b) => chIx(a) - chIx(b)).map(c => [c, chLabel(c)]), S.fCh);
+    S.fBr = opts($('fBrand'), '전체 대분류', uniq(ev.map(e => catOf(e).l)).sort().map(b => [b, b]), S.fBr);
     fillSub();
   }
   function fillSub() {
-    S.fSub = opts($('fSub'), '전체 소분류', [...new Set(S.products.filter(p => !S.fBr || p.cat_l === S.fBr).map(p => p.cat_s).filter(Boolean))].sort().map(s => [s, s]), S.fSub);
+    S.fSub = opts($('fSub'), '전체 소분류', uniq(S.events.filter(e => !S.fBr || catOf(e).l === S.fBr).map(e => catOf(e).s)).sort().map(s => [s, s]), S.fSub);
     fillPg();
   }
-  function fillPg() { // 가격구분 comes from the loaded events' product names
+  function fillPg() {
     const xs = S.events.filter(e => (!S.fBr || catOf(e).l === S.fBr) && (!S.fSub || catOf(e).s === S.fSub));
-    S.fPg = opts($('fPg'), '전체 가격구분', [...new Set(xs.map(pgOf))].sort(pgSort).map(g => [g, g]), S.fPg);
+    S.fPg = opts($('fPg'), '전체 가격구분', uniq(xs.map(pgOf)).sort(pgSort).map(g => [g, g]), S.fPg);
   }
-  $('fTeam').addEventListener('change', e => { S.fTeam = e.target.value; fillFilters(); draw(); });
+  $('fTeam').addEventListener('change', e => { S.fTeam = e.target.value; draw(); });
   $('fChannel').addEventListener('change', e => { S.fCh = e.target.value; draw(); });
-  $('fBrand').addEventListener('change', e => { S.fBr = e.target.value; fillSub(); draw(); });
-  $('fSub').addEventListener('change', e => { S.fSub = e.target.value; fillPg(); draw(); });
+  $('fBrand').addEventListener('change', e => { S.fBr = e.target.value; draw(); });
+  $('fSub').addEventListener('change', e => { S.fSub = e.target.value; draw(); });
   $('fPg').addEventListener('change', e => { S.fPg = e.target.value; draw(); });
   // one 행사 = same channel, 세부채널, 행사명 and dates; its SKUs are grouped by 소분류
   const promoKey = e => [e.channel_code, e.channel_detail || '', e.title, e.start_date, e.end_date].join('\u0001');
@@ -138,7 +141,7 @@
   // Lanes 1-3 show the top 3 팀 as "Hyper · 이마트 외 2개처"; the rest is "+n팀" under the day.
   function draw() {
     $('monthLabel').textContent = `${S.y}년 ${S.m + 1}월`;
-    fillPg();
+    fillFilters();
     const { from, to } = gridRange(), evs = visible(), today = todayKst(), grid = $('grid');
     grid.replaceChildren();
     const LANES = 3, LH = 18, TOP = 28;
