@@ -506,6 +506,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   </section>
 </div>
 
+<dialog id="trkXDlg" class="shd" aria-labelledby="trkXTitle" style="width:min(460px, calc(100vw - 32px))">
+  <div class="shh"><h2 id="trkXTitle">엑셀로 내려받기 · 전체 기록</h2><button type="button" class="btn small" id="trkXClose">닫기</button></div>
+  <p class="muted">고른 기간의 모든 제품·채널 기록을 시트 하나로 받습니다. 유사 상품·감시 기록은 「기준/유사/감시」 칸으로 구분되고, 그 설명은 시트 맨 위에 적혀 있습니다.</p>
+  <div class="shf"><label class="field">시작일<input type="date" id="trkX0"></label><label class="field">종료일<input type="date" id="trkX1"></label></div>
+  <div class="bar" style="margin-top:8px;gap:6px"><button type="button" class="btn small" data-xr="all">전체 기간</button><button type="button" class="btn small" data-xr="7">최근 7일</button><button type="button" class="btn small" data-xr="30">최근 30일</button><button type="button" class="btn small" data-xr="m">이번 달</button></div>
+  <div class="bar" style="margin-top:8px"><span class="grow muted" id="trkXInfo"></span><button type="button" class="btn primary" id="trkXGo">받기</button></div>
+</dialog>
+
 <dialog id="shDlg" class="shd" aria-labelledby="shTitle">
   <div class="shh"><h2 id="shTitle">공유하기</h2><button type="button" class="btn small" id="shClose">닫기</button></div>
   <p class="muted"><span id="shIntro">지금 고른 조건 그대로 <b>요약표 · 판정표 · INSIGHT</b>를 공유합니다. 숫자는 만든 시점 그대로 고정되고, 원본 데이터는 들어가지 않습니다.</span><br><span id="shScope"></span></p>
@@ -1092,21 +1100,21 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       return `<c r="${ref}"${s.includes(',') ? ' s="4"' : ''}><v>${+s.replace(/,/g, '')}</v></c>`;
     return `<c r="${ref}" t="inlineStr"${style ? ` s="${style}"` : ''}><is><t xml:space="preserve">${xesc(v)}</t></is></c>`;
   }
-  // sheet: {name, rows: [[...]], header: bool (bold first row), wrap: [column indexes], widths?: [..]}
+  // sheet: {name, rows: [[...]], header: bool (bold first row), top?: header row index (notes above it), wrap: [column indexes], widths?: [..]}
   function sheetXml(sh) {
-    const cols = sh.rows.reduce((m, r) => Math.max(m, r.length), 0), w = [];
+    const cols = sh.rows.reduce((m, r) => Math.max(m, r.length), 0), w = [], top = sh.top || 0;
     for (let c = 0; c < cols; c++) {
-      let m = 6; for (let r = 0; r < Math.min(sh.rows.length, 2000); r++) { const v = String(sh.rows[r][c] ?? ''); let n = 0; for (const ch of v.split('\n')[0]) n += ch.charCodeAt(0) > 0x2e80 ? 2 : 1; m = Math.max(m, n); }
+      let m = 6; for (let r = top; r < Math.min(sh.rows.length, top + 2000); r++) { const v = String(sh.rows[r][c] ?? ''); let n = 0; for (const ch of v.split('\n')[0]) n += ch.charCodeAt(0) > 0x2e80 ? 2 : 1; m = Math.max(m, n); }
       w.push(sh.widths && sh.widths[c] || Math.min(60, m + 2));
     }
     const out = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-      (sh.header ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : '') +
+      (sh.header ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${top + 1}" topLeftCell="A${top + 2}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` : '') +
       (cols ? '<cols>' + w.map((x, i) => `<col min="${i + 1}" max="${i + 1}" width="${x}" customWidth="1"/>`).join('') + '</cols>' : '') + '<sheetData>'];
     const names = Array.from({ length: cols }, (_, i) => colName(i));
     for (let s = 0; s < sh.rows.length; s += 5000) {   // pieces, so a big sheet is never one huge string
       let piece = '';
       for (let ri = s; ri < Math.min(s + 5000, sh.rows.length); ri++) piece += `<row r="${ri + 1}">` + sh.rows[ri].map((v, ci) => cellXml(names[ci] + (ri + 1), v,
-        sh.header && ri === 0 ? 1 : (sh.wrap || []).includes(ci) ? 3 : 0)).join('') + '</row>';
+        sh.header && ri === top ? 1 : (sh.wrap || []).includes(ci) ? 3 : 0)).join('') + '</row>';
       out.push(piece);
     }
     out.push('</sheetData></worksheet>');
@@ -1266,7 +1274,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   //           채널 = one channel → rows = products (brand › variant), columns = 입수량.
   const TRK = { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [], by: 'prod', sel: {}, chip: {} };
   const OTHER = '로켓 제외 최저가';
-  const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(10시 01분/23시 31분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고 「유사 상품」 시트에 따로 모았습니다. ★ = 정해진 시간 사이 6시간마다 감시해서 잡은 새 최저가. ⤴N = 지정 입수량을 파는 곳이 없어 바로 위 입수량(N) 가격을 넣은 칸.';
+  const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(10시 01분/23시 31분) 현황은 [엑셀로 내려받기]에서 기간을 골라 받은 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고, 엑셀의 「기준/유사/감시」 칸에 「유사 상품」으로 표시했습니다. ★ = 정해진 시간 사이 6시간마다 감시해서 잡은 새 최저가. ⤴N = 지정 입수량을 파는 곳이 없어 바로 위 입수량(N) 가격을 넣은 칸.';
   const TRK_KEY = 'data-window-trk';
   try { Object.assign(TRK, JSON.parse(localStorage.getItem(TRK_KEY) || '{}'), { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [] }); } catch (e) {}
   const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay, cg: TRK.cg, cch: TRK.cch, tg: TRK.tg, tf: TRK.tf, cf: TRK.cf })); } catch (e) {} };
@@ -1852,33 +1860,62 @@ html, body { height: auto; }
       note: notes.join(' · '),
     }));
   }
-  async function trkXlsx() {
+  // 엑셀로 내려받기: every product's records between two dates (calendar), one sheet 「전체 기록」 (user 11/23)
+  const trkXRows = (d0, d1) => {
+    const out = [];
+    for (const g of TRK.groups) {
+      const x = TRK.idx[g.id];
+      for (const r of [...x.rows, ...x.sim, ...x.star]) { const d = r.at.slice(0, 10); if (r.price != null && d >= d0 && d <= d1) out.push({ g, r }); }
+    }
+    return out.sort((a, b) => a.r.at.localeCompare(b.r.at) || TRK.groups.indexOf(a.g) - TRK.groups.indexOf(b.g) || a.r.qty - b.r.qty || a.r.ch.localeCompare(b.r.ch) || (a.r.flag ? 1 : -1));
+  };
+  function trkXInfo() {
+    const d0 = $('trkX0').value, d1 = $('trkX1').value, go = $('trkXGo');
+    if (!d0 || !d1 || d0 > d1) { $('trkXInfo').textContent = '시작일이 종료일보다 늦습니다.'; go.disabled = true; return; }
+    const n = trkXRows(d0, d1).length;
+    $('trkXInfo').textContent = n ? `${d0} ~ ${d1} · 기록 ${n.toLocaleString()}줄` : '이 기간에 기록이 없습니다.';
+    go.disabled = !n;
+  }
+  function trkXlsx() {
     if (!TRK.cfg) return;
-    const btn = $('trkXlsx'); btn.disabled = true;
+    const days = trkDays(), x0 = $('trkX0'), x1 = $('trkX1');
+    for (const i of [x0, x1]) { i.min = days[0] || ''; i.max = days[days.length - 1] || ''; }
+    if (!x0.value || x0.value < (days[0] || '')) x0.value = days[0] || '';
+    if (!x1.value || x1.value > days[days.length - 1] || x1.value < x0.value) x1.value = days[days.length - 1] || '';
+    trkXInfo();
+    $('trkXDlg').showModal();
+  }
+  for (const i of [$('trkX0'), $('trkX1')]) i.addEventListener('change', trkXInfo);
+  $('trkXClose').addEventListener('click', () => $('trkXDlg').close());
+  for (const b of document.querySelectorAll('[data-xr]')) b.addEventListener('click', () => {
+    const days = trkDays(), last = days[days.length - 1] || '', k = b.dataset.xr;
+    const back = n => { const d = new Date(last + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - n + 1); return d.toISOString().slice(0, 10); };
+    $('trkX0').value = k === 'all' ? days[0] : k === 'm' ? last.slice(0, 8) + '01' : back(+k);
+    if ($('trkX0').value < days[0]) $('trkX0').value = days[0];
+    $('trkX1').value = last; trkXInfo();
+  });
+  $('trkXGo').addEventListener('click', async () => {
+    const d0 = $('trkX0').value, d1 = $('trkX1').value, go = $('trkXGo'); go.disabled = true;
     try {
-      const gs = trkViewGroups(), chs = trkChannels();
-      const now = [['브랜드', '구분', '입수량', ...chs.flatMap(c => [c, c + ' 개당']), '기록 시각']];
-      for (const g of gs) for (const q of g.qtys) {
-        now.push([g.bname, g.name, q + g.unit, ...chs.flatMap(c => { const r = g.channels.includes(c) && trkCell(g, q, c); return r ? [r.price, Math.round(r.price / q)] : ['', '']; }),
-          TRK.idx[g.id].times[trkCut(TRK.idx[g.id])] || '']);
-      }
-      const head = ['기록 시각', '브랜드', '구분', '입수량', '채널', '가격', '개당', '같은 조건 상품 수', '폴센트 표시', '상품명', '기준/유사/감시'];
-      const line = (g, r) => [r.at, g.bname, g.name, r.qty, r.ch, r.price, Math.round(r.price / r.qty), r.listings, r.trend === 'up' ? '상승' : r.trend === 'down' ? '하락' : '', r.name, r.flag === '★' ? '★ 감시 최저' : /^상위/.test(r.flag || '') ? `상위 입수량 대체 (${r.flag.split(':')[1]})` : r.flag ? '유사 상품' : '기준'];
-      const all = [head], sim = [head];
-      for (const g of gs) {
-        const x = TRK.idx[g.id];
-        for (const r of [...x.rows, ...x.sim, ...x.star].sort((a, b) => a.at.localeCompare(b.at) || a.qty - b.qty || a.ch.localeCompare(b.ch) || (a.flag ? 1 : -1))) if (r.price != null) all.push(line(g, r));
-        for (const r of x.sim) if (r.price != null) sim.push(line(g, r));
-      }
-      const blob = await buildXlsx([{ name: TRK.date ? TRK.date + ' 기준 가격' : '최근 가격', rows: now, header: true }, { name: '전체 기록', rows: all, header: true }, { name: '유사 상품', rows: sim.length > 1 ? sim : [['유사 상품으로 분류된 기록이 없습니다. (이름이 비슷하지만 다른 상품 — 예: 직구판 PRE·어드밴스 HMO — 은 여기에 따로 모입니다.)']], header: sim.length > 1 }]);
-      const what = trkWhat(gs);
+      const head = ['기록 시각', '품목군', '제조사', '브랜드', '구분', '입수량', '채널', '가격', '개당', '같은 조건 상품 수', '폴센트 표시', '상품명', '기준/유사/감시'];
+      const notes = [
+        [`가격 추적 전체 기록 · ${d0} ~ ${d1} · 전 제품 · 폴센트 검색 기준 (마지막 칸 「기준/유사/감시」 설명)`],
+        ['기준 = 정해진 수집(매일 10:01 · 23:31)에서 그 채널·입수량 조건에 맞는 상품 중 최저가. 화면의 표·그래프는 이 값을 씁니다.'],
+        ['유사 상품 = 이름은 비슷하지만 다른 상품 (증정·덤 묶음, 다른 버전 등). 화면 가격에서는 빼고 참고로만 남깁니다.'],
+        ['★ 감시 최저 = 수집 사이 감시(05:31 · 16:31)에서 그때까지의 기록보다 싼 새 최저가가 나왔을 때만 남긴 줄입니다.'],
+        ['상위 입수량 대체 (N) = 지정 입수량을 파는 곳이 없어 바로 위 입수량 N의 가격을 넣은 줄. 개당 = 가격 ÷ N.'],
+        [],
+      ];
+      const rows = [...notes, head, ...trkXRows(d0, d1).map(({ g, r }) => [r.at, g.brand.group || '', g.brand.maker || '', g.bname, g.name, r.qty, r.ch, r.price, Math.round(r.price / (r.upQty || r.qty)), r.listings, r.trend === 'up' ? '상승' : r.trend === 'down' ? '하락' : '', r.name, r.flag === '★' ? '★ 감시 최저' : /^상위/.test(r.flag || '') ? `상위 입수량 대체 (${r.flag.split(':')[1]})` : r.flag ? '유사 상품' : '기준'])];
+      const blob = await buildXlsx([{ name: '전체 기록', rows, header: true, top: notes.length }]);
       const a = document.createElement('a'), url = URL.createObjectURL(blob);
-      a.href = url; a.download = `가격 추적 - ${what}.xlsx`.replace(/[\\/:*?"<>|]+/g, ' ');
+      a.href = url; a.download = `가격 추적 전체 기록 ${d0}~${d1}.xlsx`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (e) { $('trkErr').textContent = '엑셀 파일을 만들지 못했습니다. ' + (e.message || ''); $('trkErr').hidden = false; }
-    btn.disabled = false;
-  }
+      $('trkXDlg').close();
+    } catch (e) { $('trkXInfo').textContent = '엑셀 파일을 만들지 못했습니다. ' + (e.message || ''); }
+    go.disabled = false;
+  });
   for (const bt of document.querySelectorAll('.trk-seg .btn[data-by]')) bt.addEventListener('click', () => { TRK.by = bt.dataset.by; trkSave(); trkRender(); });
   $('trkSel').addEventListener('change', () => { TRK.sel[TRK.by] = $('trkSel').value; trkSave(); trkRender(); });
   $('trkRefresh').addEventListener('click', () => trkLoad(true));
