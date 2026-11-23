@@ -7,7 +7,7 @@
   const useDemo = params.has('demo') || !cfg.url || !cfg.anonKey;
   const api = useDemo ? new Cal.DemoBackend() : new Cal.SupabaseBackend(cfg.url, cfg.anonKey);
 
-  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], requests: [], fCh: '', fBr: '', fSub: '' };
+  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], requests: [], fCh: '', fBr: '', fSub: '', dv: (() => { try { return localStorage.getItem('evcal-dv') || 'sub'; } catch (e) { return 'sub'; } })() };
   const PALETTE = ['#2e7d6b', '#c2571a', '#3b62c4', '#a33ea1', '#b8860b', '#c0392b', '#00838f', '#6d4c41', '#5e35b1', '#558b2f'];
   const won = n => (n == null || n === '' ? '-' : Number(n).toLocaleString('ko-KR') + '원');
   const num = s => { if (s == null) return NaN; const t = String(s).replace(/[,\s원]/g, ''); return t === '' ? NaN : Number(t); };
@@ -164,36 +164,85 @@
   }
   function drawDay() {
     const d = S.sel, list = visible().filter(e => e.start_date <= d && e.end_date >= d), ps = promos(list);
-    const chIx = c => { const i = S.channels.findIndex(x => x.code === c); return i < 0 ? 1e9 : i; };
     ps.sort((a, b) => chIx(a.e.channel_code) - chIx(b.e.channel_code) || (a.e.channel_detail || '').localeCompare(b.e.channel_detail || '') || a.e.start_date.localeCompare(b.e.start_date) || a.e.title.localeCompare(b.e.title));
-    $('dayHead').replaceChildren(fmtD(d), el('small', {}, list.length ? `행사 ${ps.length}개 · SKU ${list.length}개` : ''));
-    $('dayList').replaceChildren(...(list.length ? ps.map(promoCard) : [el('div', { class: 'empty' }, '이 날 행사가 없습니다.')]));
+    const bySub = groupBy(list, subOf);
+    const seg = el('div', { class: 'seg' }, ...[['sub', '소분류별'], ['promo', '행사별']].map(([v, t]) => el('button', { class: S.dv === v ? 'on' : '', onclick: () => { S.dv = v; try { localStorage.setItem('evcal-dv', v); } catch (x) {} drawDay(); } }, t)));
+    $('dayHead').replaceChildren(el('span', {}, fmtD(d), ' ', el('small', {}, list.length ? (S.dv === 'sub' ? `소분류 ${bySub.size}개 · ` : `행사 ${ps.length}개 · `) + `SKU ${list.length}개` : '')), list.length ? seg : '');
+    if (!list.length) return $('dayList').replaceChildren(el('div', { class: 'empty' }, '이 날 행사가 없습니다.'));
+    $('dayList').replaceChildren(...(S.dv === 'sub' ? [...bySub.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([s, xs]) => subCard(s, xs)) : ps.map(promoCard)));
   }
-  // open/closed state survives redraws (keys: promo key, promo key + 소분류)
+  const chIx = c => { const i = S.channels.findIndex(x => x.code === c); return i < 0 ? 1e9 : i; };
+  const groupBy = (xs, f) => { const m = new Map(); for (const x of xs) { const k = f(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return m; };
+  const subOf = x => catOf(x).s || '(소분류 없음)';
+  // 가격 그룹 from the product name: 단계 (1공관 / 2스틱 / 1단계) + 규격 (last size token: 800g, 250ml, 180+20T).
+  // Taste and pack variants (12입 / 3*4입) fall into the same group. Later this can come from a 가격그룹 column in the product master.
+  const PG = new Map();
+  function pgOf(x) {
+    const name = x.product_name || ''; if (PG.has(name)) return PG.get(name);
+    const n = name.replace(/\s+/g, '').replace(/㎖/g, 'ml').replace(/ℓ/g, 'L');
+    const st = n.match(/(\d)(공관|스틱|단계)/), sizes = [...n.matchAll(/(\d+(?:\.\d+)?(?:\+\d+)?)(T|ml|L|kg|g|매)(?![a-zA-Z가-힣])/gi)];
+    const sz = sizes.length ? sizes[sizes.length - 1] : null;
+    const unit = sz ? (/^ml$/i.test(sz[2]) ? 'ml' : /^kg$/i.test(sz[2]) ? 'kg' : /^g$/i.test(sz[2]) ? 'g' : /^l$/i.test(sz[2]) ? 'L' : sz[2].toUpperCase() === 'T' ? 'T' : sz[2]) : '';
+    const g = [st ? st[1] + '단계' + (st[2] === '스틱' ? ' 스틱' : '') : '', sz ? sz[1] + unit : ''].filter(Boolean).join(' ') || '기타';
+    PG.set(name, g); return g;
+  }
+  const pgSort = (a, b) => (parseFloat(a.replace(/^\d단계\s*/, '')) || 0) - (parseFloat(b.replace(/^\d단계\s*/, '')) || 0) || a.localeCompare(b);
+  // open/closed state survives redraws
   const OPEN = new Set();
-  const offRange = list => { const r = list.map(e => discount(e.list_price, e.sale_price)).filter(x => x != null); if (!r.length) return ''; const a = Math.min(...r), b = Math.max(...r); return (a === b ? `${a}` : `${a}~${b}`) + '%↓'; };
+  const tog = k => { OPEN.has(k) ? OPEN.delete(k) : OPEN.add(k); drawDay(); };
+  const rng = (a, b, f) => (a === b ? f(a) : `${f(a)}~${f(b)}`);
+  const priceRange = list => { const r = list.map(e => Number(e.sale_price)).filter(x => x >= 0); if (!r.length) return ''; return rng(Math.min(...r), Math.max(...r), x => x.toLocaleString('ko-KR')) + '원'; };
+  const chName = e => shortCh(chLabel(e.channel_code, e.channel)) + (e.channel_detail ? '·' + e.channel_detail : '');
+  // a band row: label · 판매가 범위 · SKU count
+  const bandRow = (k, label, xs, sub) => el('div', { class: 'sub' + (OPEN.has(k) ? ' open' : ''), onclick: () => tog(k) },
+    el('span', { class: 'nm' }, label, sub ? el('small', {}, sub) : null), el('span', { class: 'pr' }, priceRange(xs)), el('span', { class: 'ct' }, `${xs.length}`), el('span', { class: 'ct' }, OPEN.has(k) ? '▲' : '▼'));
+  const bandHead = first => el('div', { class: 'bh' }, el('span', { class: 'nm' }, first), el('span', { class: 'pr' }, '판매가'), el('span', { class: 'ct' }, 'SKU'), el('span', { class: 'ct' }, ''));
+  const pgHead = g => el('div', { class: 'pgh' }, g);
+  // SKUs with the same 정상가 / 판매가 shown as one line (taste / pack variants)
+  function skuLines(xs) {
+    const g = [...groupBy(xs, x => `${x.list_price}|${x.sale_price}`).values()].sort((a, b) => a[0].sale_price - b[0].sale_price);
+    return el('div', { class: 'skus' }, ...g.map(ys => el('div', { class: 'sku', onclick: () => ys.length === 1 && openDetail(ys[0]) },
+      el('div', { class: 'grow' }, el('div', {}, ys[0].product_name), ys.length > 1 ? el('div', { class: 's' }, `외 ${ys.length - 1}개 같은 가격 · ` + ys.slice(1).map(y => y.product_name).join(', ')) : null),
+      el('div', { class: 'pc' }, el('b', {}, won(ys[0].sale_price)), Number(ys[0].list_price) !== Number(ys[0].sale_price) ? el('div', { class: 's' }, el('del', {}, won(ys[0].list_price))) : null))));
+  }
+  // 1번: 소분류 -> 가격 그룹 -> 채널별 판매가 범위 -> SKU
+  function subCard(s, xs) {
+    const k = 'S\u0001' + s, groups = [...groupBy(xs, pgOf).entries()].sort((a, b) => pgSort(a[0], b[0]));
+    const box = el('div', { class: 'promo' + (OPEN.has(k) ? ' open' : '') });
+    box.append(el('div', { class: 'ph', onclick: () => tog(k) },
+      el('div', { class: 'grow' }, el('div', { class: 't' }, s),
+        el('div', { class: 's' }, `채널 ${new Set(xs.map(x => x.channel_code + (x.channel_detail || ''))).size}곳 · ` + (groups.length > 4 ? `가격 그룹 ${groups.length}개 · ${priceRange(xs)}` : groups.map(([g, ys]) => `${g} ${priceRange(ys)}`).join(' · ')))),
+      el('div', { class: 'arr' }, '▶')));
+    if (OPEN.has(k)) {
+      const wrap = el('div', { class: 'subs' }, bandHead('채널 · 행사'));
+      for (const [g, ys] of groups) {
+        if (groups.length > 1 || g !== '기타') wrap.append(pgHead(g));
+        const chs = [...groupBy(ys, promoKey).values()].sort((a, b) => chIx(a[0].channel_code) - chIx(b[0].channel_code));
+        for (const zs of chs) { const kk = k + '\u0002' + g + '\u0002' + promoKey(zs[0]); wrap.append(bandRow(kk, chName(zs[0]), zs, `${zs[0].title} · ${fmtD(zs[0].start_date)}~${fmtD(zs[0].end_date)}`)); if (OPEN.has(kk)) wrap.append(skuLines(zs)); }
+      }
+      box.append(wrap);
+    }
+    return box;
+  }
+  // 2번: 채널 행사 -> 소분류별 판매가 범위 -> 가격 그룹 -> SKU
   function promoCard(p) {
-    const e = p.e, bySub = new Map();
-    for (const x of p.list) { const s = catOf(x).s || '(소분류 없음)'; if (!bySub.has(s)) bySub.set(s, []); bySub.get(s).push(x); }
-    const subs = [...bySub.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    const box = el('div', { class: 'promo' + (OPEN.has(p.key) ? ' open' : '') });
+    const e = p.e, k = 'P\u0001' + p.key, subs = [...groupBy(p.list, subOf).entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const box = el('div', { class: 'promo' + (OPEN.has(k) ? ' open' : '') });
     const pending = p.list.filter(x => S.requests.some(r => r.event_id === x.id && r.status === 'pending')).length;
-    const head = el('div', { class: 'ph', onclick: () => { OPEN.has(p.key) ? OPEN.delete(p.key) : OPEN.add(p.key); drawDay(); } },
+    box.append(el('div', { class: 'ph', onclick: () => tog(k) },
       el('div', { class: 'dot', style: 'background:' + colorOf(e.channel_code) }),
       el('div', { class: 'grow' },
         el('div', { class: 's' }, `${chDisp(e)} · ${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`),
         el('div', { class: 't' }, e.title),
-        el('div', { class: 's' }, `소분류 ${subs.length}개 · SKU ${p.list.length}개 · ${offRange(p.list)}`),
+        el('div', { class: 's' }, `소분류 ${subs.length}개 · SKU ${p.list.length}개`),
         pending ? el('div', { class: 'lock' }, `⏳ 수정 요청 승인 대기 ${pending}건`) : null),
-      el('div', { class: 'arr' }, '▶'));
-    box.append(head);
-    if (OPEN.has(p.key)) {
-      const wrap = el('div', { class: 'subs' });
+      el('div', { class: 'arr' }, '▶')));
+    if (OPEN.has(k)) {
+      const wrap = el('div', { class: 'subs' }, bandHead('소분류'));
       for (const [s, xs] of subs) {
-        const k = p.key + '\u0002' + s, open = OPEN.has(k);
-        wrap.append(el('div', { class: 'sub' + (open ? ' open' : ''), onclick: () => { open ? OPEN.delete(k) : OPEN.add(k); drawDay(); } },
-          el('span', { class: 'nm' }, s), el('span', { class: 'ct' }, `SKU ${xs.length}`), el('span', { class: 'off' }, offRange(xs)), el('span', { class: 'ct' }, open ? '▲' : '▼')));
-        if (open) wrap.append(el('div', { class: 'skus' }, ...xs.map(x => card(x, true))));
+        const kk = k + '\u0002' + s, groups = [...groupBy(xs, pgOf).entries()].sort((a, b) => pgSort(a[0], b[0]));
+        wrap.append(bandRow(kk, s, xs, groups.length > 1 ? groups.map(([g, ys]) => `${g} ${priceRange(ys)}`).join(' · ') : groups[0][0] !== '기타' ? groups[0][0] : ''));
+        if (OPEN.has(kk)) for (const [g, ys] of groups) { if (groups.length > 1) wrap.append(pgHead(g)); wrap.append(skuLines(ys)); }
       }
       box.append(wrap);
     }
