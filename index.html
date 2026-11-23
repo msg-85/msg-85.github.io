@@ -48,16 +48,23 @@ a { color: var(--out); }
 .trk-ctl { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 14px; }
 .trk-ctl select { font: inherit; padding: 3px 6px; background: var(--sheet); color: var(--fg); border: 1px solid var(--line); }
 #trkDate { font: inherit; font-weight: 700; padding: 4px 6px; background: var(--sheet); color: var(--fg); border: 1px solid var(--s2); }
-#trkSel { font-size: 16px; font-weight: 700; border-color: var(--s2); max-width: 100%; font-family: inherit; padding: 4px 6px; background: var(--sheet); color: var(--fg); border: 1px solid var(--s2); }
+#trkSel { font-size: 14px; font-weight: 700; border-color: var(--s2); max-width: 100%; font-family: inherit; padding: 4px 6px; background: var(--sheet); color: var(--fg); border: 1px solid var(--s2); }
 .trk-seg { display: inline-flex; align-items: center; gap: 0; }
 .trk-seg .muted { margin-right: 6px; font-size: 13px; }
 .trk-seg .btn { padding: 4px 14px; }
 .trk-seg .btn + .btn { border-left: 0; }
 .trk-seg .btn[aria-pressed="true"] { background: var(--s2); border-color: var(--s2); color: #fff; font-weight: 700; }
-.trk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.trk-chips:empty { display: none; }
-.trk-chips .btn { border-radius: 999px; padding: 3px 14px; font-size: 14px; }
-.trk-chips .btn[aria-pressed="true"] { border-color: var(--s2); color: var(--s2); font-weight: 700; box-shadow: inset 0 0 0 1px var(--s2); }
+.trk-ms .msp.stp { width: min(780px, calc(100vw - 32px)); }
+.stp-cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.stp-col { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); background: var(--sheet); }
+.stp-col > b { font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 4px; }
+.stp-col > b button { font: inherit; font-weight: 400; font-size: 11px; border: 0; background: none; color: var(--s2); cursor: pointer; padding: 0; }
+.stp-col .msl { max-height: 260px; padding: 2px 4px; }
+.stp-col .msl label small { color: var(--muted); margin-left: auto; }
+.stp-col .msl label.on { font-weight: 700; }
+.stp-out { font-size: 13px; color: var(--muted); max-height: 3.2em; overflow: hidden; }
+.stp-out b { color: var(--fg); }
+@media (max-width: 700px) { .stp-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stp-col .msl { max-height: 160px; } }
 .trk-tables { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
 .trk-tables h3 { font-size: 15px; margin: 0 0 4px; }
 .trk-t tbody tr.trk-brand th { background: var(--panel); color: var(--s2); font-weight: 700; }
@@ -459,10 +466,6 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
 
   <section class="pane" id="trackPane" hidden>
     <div class="bar">
-      <span class="muted" style="font-size:13px">조회 기준</span>
-      <select id="trkDate" aria-label="기준 날짜"></select>
-      <span class="trk-seg" role="group" aria-label="조회 기준"><button type="button" class="btn" data-by="prod" aria-pressed="true">제품</button><button type="button" class="btn" data-by="ch" aria-pressed="false">채널</button></span>
-      <select id="trkSel" aria-label="브랜드 또는 채널 고르기"></select>
       <span class="grow" id="trkInfo"></span>
       <span class="trk-seg" id="trkLay" role="group" aria-label="배치"><span class="muted" style="font-size:13px;margin-right:6px">배치</span><button type="button" class="btn" data-lay="h" aria-pressed="true">좌우</button><button type="button" class="btn" data-lay="v" aria-pressed="false">위아래</button></span>
       <button class="btn" id="trkRefresh" type="button">새로고침</button>
@@ -472,7 +475,6 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     </div>
     <details class="trk-stat" id="trkReq"><summary id="trkReqSum">요청 · 수정</summary><div id="trkReqBody"></div></details>
     <details class="trk-stat" id="trkStat"><summary id="trkStatSum">추적 현황</summary><div id="trkStatBody"></div></details>
-    <div class="trk-chips" id="trkChips" role="group" aria-label="세부 구분"></div>
     <div class="trk-split" id="trkView">
       <div class="trk-right">
         <h3 class="trk-h">판매가 시계열 흐름</h3>
@@ -490,6 +492,12 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       </div>
       <div class="trk-left">
         <h3 class="trk-h">특정일 판매현황 <small class="muted" id="trkAsOf"></small></h3>
+        <div class="trk-ctl">
+          <details class="ms trk-ms" id="trkTGms"><summary id="trkTGsum" title="표에 보일 제품 (품목군 → 제조사 → 브랜드 → 구분 순서로 고르기)">제품</summary></details>
+          <span>날짜 <select id="trkDate" aria-label="기준 날짜"></select></span>
+          <span class="trk-seg" role="group" aria-label="표 보기"><span class="muted">표</span><button type="button" class="btn" data-by="prod" aria-pressed="true">제품별</button><button type="button" class="btn" data-by="ch" aria-pressed="false">채널별</button></span>
+          <select id="trkSel" aria-label="채널 고르기" hidden></select>
+        </div>
         <div id="trkTables" class="trk-tables"></div>
         <p class="cn muted" id="trkNote" style="margin:0;font-size:13px;white-space:pre-line"></p>
       </div>
@@ -1261,7 +1269,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(10시 01분/23시 31분) 현황은 [엑셀로 내려받기] → 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고 「유사 상품」 시트에 따로 모았습니다. ★ = 정해진 시간 사이 6시간마다 감시해서 잡은 새 최저가. ⤴N = 지정 입수량을 파는 곳이 없어 바로 위 입수량(N) 가격을 넣은 칸.';
   const TRK_KEY = 'data-window-trk';
   try { Object.assign(TRK, JSON.parse(localStorage.getItem(TRK_KEY) || '{}'), { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [] }); } catch (e) {}
-  const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay, cg: TRK.cg, cch: TRK.cch })); } catch (e) {} };
+  const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay, cg: TRK.cg, cch: TRK.cch, tg: TRK.tg, tf: TRK.tf, cf: TRK.cf })); } catch (e) {} };
   const won = v => v == null ? '–' : Math.round(v).toLocaleString() + '원';
   function trkFlatten(cfg) {
     // old layout (groups[]) becomes one brand per group
@@ -1314,7 +1322,15 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     for (const r of TRK.rows) { const x = TRK.idx[r.group]; if (!x) continue; if (r.flag === '★') { x.star.push(r); continue; } if (/^상위/.test(r.flag)) r.upQty = +r.flag.split(':')[1] || 0; else if (r.flag) { x.sim.push(r); continue; } x.rows.push(r); x.cell.set(r.at + '|' + r.qty + '|' + r.ch, r); }
     for (const id in TRK.idx) TRK.idx[id].times = [...new Set(TRK.idx[id].rows.map(r => r.at))].sort();
   }
-  const trkScope = () => TRK.by === 'ch' ? `채널 기준 · ${TRK.sel.ch}` : (() => { const b = TRK.brands.find(x => x.id === TRK.sel.prod) || TRK.brands[0]; const v = b && b.variants.find(x => x.id === TRK.chip[b.id]); return `제품 기준 · ${b ? b.name : ''}${v ? ' ' + v.name : b && b.variants.length > 1 ? ' 전체' : ''}`; })();
+  // what the table shows, in words: 전체 제품 / 브랜드 (구분) / 제품 N개
+  function trkWhat(gs) {
+    if (!gs.length) return '';
+    if (gs.length === TRK.groups.length) return '전체 제품';
+    const bs = [...new Set(gs.map(g => g.brand))];
+    if (bs.length === 1) { const b = bs[0]; return gs.length === 1 ? gs[0].title : b.name + (gs.length < b.variants.length ? ` ${gs.length}개` : ''); }
+    return `제품 ${gs.length}개`;
+  }
+  const trkScope = () => { const w = trkWhat(trkViewGroups()); return TRK.by === 'ch' ? `채널 기준 · ${TRK.sel.ch} · ${w}` : `제품 기준 · ${w}`; };
   // share page (② 화면 고정 / ① 파일): the tables and chart as on screen
   function buildTrkShare() {
     if (!TRK.cfg) throw new Error('가격 추적을 먼저 열어 주세요.');
@@ -1351,7 +1367,7 @@ html, body { height: auto; }
   }
   // ③ 조작 가능: settings + all records, opened read-only in this page
   function trkLivePayload(id) {
-    return { kind: 'live', v: 1, view: 'trk', id, title: '가격 추적', cfg: TRK.cfg, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch },
+    return { kind: 'live', v: 1, view: 'trk', id, title: '가격 추적', cfg: TRK.cfg, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch, tg: TRK.tg, tf: TRK.tf, cf: TRK.cf },
       rows: TRK.rows.map(r => [r.at, r.group, r.qty, r.ch, r.price, r.listings, r.trend, r.name, r.flag || '']), req: reqTok || undefined };
   }
   function startTrkLive(L) {
@@ -1362,7 +1378,7 @@ html, body { height: auto; }
     TRK.live = { id: L.id, req: L.req || '' };
     TRK.cfg = L.cfg; Object.assign(TRK, trkFlatten(L.cfg));
     TRK.rows = (L.rows || []).map(r => ({ at: r[0], group: r[1], qty: r[2], ch: r[3], price: r[4], listings: r[5], trend: r[6], name: r[7], flag: r[8] || '' }));
-    if (L.state) { TRK.by = L.state.by || 'prod'; TRK.sel = L.state.sel || {}; TRK.chip = L.state.chip || {}; TRK.cg = L.state.cg || []; TRK.cch = L.state.cch || null; }
+    if (L.state) { TRK.by = L.state.by || 'prod'; TRK.sel = L.state.sel || {}; TRK.chip = L.state.chip || {}; TRK.cg = L.state.cg || []; TRK.cch = L.state.cch || null; TRK.tg = L.state.tg; TRK.tf = L.state.tf; TRK.cf = L.state.cf; }
     trkIndex(); trkRender();
     if (L.req) trkReqLoadLive();
   }
@@ -1484,7 +1500,7 @@ html, body { height: auto; }
   }
   // 제품 기준: one table, rows = 제품 × 입수량, columns = channels + 로켓 제외 최저가
   function trkProdTable(gs) {
-    const chs = [...new Set(gs.flatMap(g => g.channels))];
+    const chs = [...new Set(gs.flatMap(g => g.channels))], oneBrand = new Set(gs.map(g => g.brand)).size === 1;
     const tb = el('table', 'at trk-t'), thead = el('thead'), hr = el('tr');
     hr.appendChild(el('th', '', '제품')); hr.appendChild(el('th', '', '입수량'));
     for (const ch of chs) hr.appendChild(el('th', '', ch));
@@ -1492,7 +1508,7 @@ html, body { height: auto; }
     const tbody = el('tbody');
     for (const g of gs) g.qtys.forEach((q, qi) => {
       const tr = el('tr', qi === 0 ? 'trk-first' : '');
-      if (qi === 0) { const th = trkProdTh(g, g.brand.variants.length > 1 ? g.name : g.title); th.rowSpan = g.qtys.length; tr.appendChild(th); }
+      if (qi === 0) { const th = trkProdTh(g, oneBrand && g.brand.variants.length > 1 ? g.name : g.title); th.rowSpan = g.qtys.length; tr.appendChild(th); }
       tr.appendChild(el('th', '', q + g.unit));
       const ps = g.channels.map(ch => trkCell(g, q, ch)?.price).filter(v => v != null), min = Math.min(...ps);
       for (const ch of chs) tr.appendChild(g.channels.includes(ch) ? trkPriceTd(g, q, ch, trkCell(g, q, ch)?.price === min ? 'best' : '') : el('td', 'na', ''));
@@ -1533,33 +1549,90 @@ html, body { height: auto; }
     for (const { g, r } of L) d.appendChild(el('div', '', `${r.at} · ${g.title} ${r.qty}${g.unit} · ${r.ch} ${won(r.price)}`));
     box.appendChild(d);
   }
+  // products in the table: TRK.tg (ids, picked with the step picker; filters kept in TRK.tf)
   function trkViewGroups() {
-    if (TRK.by === 'ch') return TRK.groups;
-    const b = TRK.brands.find(x => x.id === TRK.sel.prod) || TRK.brands[0];
-    const chip = TRK.chip[b.id] || '';
-    return TRK.groups.filter(g => g.brand === b && (!chip || g.id === chip));
+    const ids = new Set(TRK.groups.map(g => g.id));
+    let tg = Array.isArray(TRK.tg) ? TRK.tg.filter(id => ids.has(id)) : [];
+    if (!tg.length) {
+      if (!Array.isArray(TRK.tg) && TRK.by === 'ch') tg = [...ids];   // old saved state in 채널 mode showed every product
+      else {   // first visit / old state: the brand (and 구분) picked before, else the first brand
+        const b = TRK.brands.find(x => x.id === (TRK.sel || {}).prod) || TRK.brands[0], chip = b && (TRK.chip || {})[b.id];
+        tg = TRK.groups.filter(g => g.brand === b && (!chip || g.id === chip)).map(g => g.id);
+      }
+      TRK.tf = trkFOf(tg);
+    }
+    TRK.tg = tg;
+    const on = new Set(tg); return TRK.groups.filter(g => on.has(g.id));
+  }
+  // step picker: ① 품목군 → ② 제조사 → ③ 브랜드 → ④ 구분; each level lists only what the levels above allow
+  const TRK_LV = [['g', '① 품목군'], ['m', '② 제조사'], ['b', '③ 브랜드'], ['v', '④ 구분']];
+  const trkLvOf = (g, k) => k === 'g' ? g.brand.group || '' : k === 'm' ? g.brand.maker || '' : k === 'b' ? g.brand.id : g.name;
+  const trkLvLabel = (g, k) => k === 'b' ? g.brand.name : trkLvOf(g, k) || '(없음)';
+  const trkStepMatch = (f, upto = 4) => TRK.groups.filter(g => TRK_LV.slice(0, upto).every(([k]) => !(f[k] || []).length || f[k].includes(trkLvOf(g, k))));
+  // filters that give exactly these products (brands + 구분 names) — used when the pick came from elsewhere
+  function trkFOf(ids) {
+    const gs = TRK.groups.filter(g => ids.includes(g.id));
+    if (!gs.length || gs.length === TRK.groups.length) return { g: [], m: [], b: [], v: [] };
+    const bs = [...new Set(gs.map(g => g.brand.id))], vs = [...new Set(gs.map(g => g.name))];
+    const all = TRK.groups.filter(g => bs.includes(g.brand.id));
+    return { g: [], m: [], b: bs, v: all.every(g => vs.includes(g.name)) ? [] : vs };
+  }
+  function trkStepPicker(det, f0, apply, max) {
+    const f = { g: [], m: [], b: [], v: [] };
+    for (const [k] of TRK_LV) f[k] = ((f0 || {})[k] || []).slice();
+    const pop = el('div', 'msp stp');
+    pop.innerHTML = `<input type="search" placeholder="찾기 (예: 앱솔루트, 두유, 1단계)"><div class="stp-cols">${TRK_LV.map(([k, t]) => `<div class="stp-col" data-k="${k}"><b>${t}<button type="button" data-all="${k}" title="이 단계 선택 해제 (= 전체)">전체</button></b><div class="msl"></div></div>`).join('')}</div><div class="stp-out"></div><div class="msa"><span class="muted grow" style="font-size:12px;align-self:center">아무것도 안 고른 단계 = 전체</span><button type="button" class="btn small" data-tp="clear">모두 해제</button><button type="button" class="btn small primary" data-tp="ok">적용</button></div>`;
+    det.appendChild(pop);
+    const q = pop.querySelector('input'), out = pop.querySelector('.stp-out'), ok = pop.querySelector('[data-tp="ok"]');
+    const draw = () => {
+      const t = q.value.trim().toLowerCase().replace(/\s+/g, '');
+      TRK_LV.forEach(([k], i) => {
+        const m = new Map();
+        for (const g of trkStepMatch(f, i)) { const v = trkLvOf(g, k); if (!m.has(v)) m.set(v, { v, t: trkLvLabel(g, k), n: 0 }); m.get(v).n++; }
+        f[k] = f[k].filter(v => m.has(v));   // drop picks the levels above no longer allow
+        const list = [...m.values()].filter(o => !t || f[k].includes(o.v) || o.t.toLowerCase().replace(/\s+/g, '').includes(t));
+        const col = pop.querySelector(`.stp-col[data-k="${k}"]`);
+        col.querySelector('.msl').innerHTML = list.map(o => { const on = f[k].includes(o.v); return `<label class="${on ? 'on' : ''}"><input type="checkbox" value="${esc(o.v)}"${on ? ' checked' : ''}> ${esc(o.t)} <small>${o.n}</small></label>`; }).join('') || '<span class="muted">없음</span>';
+        col.querySelector('[data-all]').textContent = f[k].length ? `${f[k].length}개 · 해제` : '전체';
+      });
+      const res = trkStepMatch(f);
+      out.innerHTML = `<b>고른 제품 ${res.length}개</b>${max && res.length > max ? ` (그래프 선은 ${max}개까지)` : ''} · ` + res.slice(0, 15).map(g => esc(g.title)).join(', ') + (res.length > 15 ? ' …' : '');
+      ok.disabled = !res.length;
+    };
+    pop.addEventListener('change', e => {
+      const c = e.target; if (c.type !== 'checkbox') return;
+      const a = f[c.closest('.stp-col').dataset.k];
+      if (c.checked) a.push(c.value); else a.splice(a.indexOf(c.value), 1);
+      draw();
+    });
+    pop.addEventListener('click', e => {
+      const a = e.target.closest('[data-all]'); if (a) { f[a.dataset.all] = []; draw(); return; }
+      const b = e.target.closest('[data-tp]'); if (!b) return;
+      if (b.dataset.tp === 'clear') { for (const [k] of TRK_LV) f[k] = []; q.value = ''; draw(); return; }
+      const res = trkStepMatch(f); if (!res.length) return;
+      det.open = false; apply(f, res.map(g => g.id));
+    });
+    q.addEventListener('input', draw);
+    draw();
+    // fixed, so the scrolling panels don't clip it; kept inside the window
+    const r = det.querySelector('summary').getBoundingClientRect();
+    Object.assign(pop.style, { position: 'fixed', top: r.bottom + 2 + 'px', left: Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8)) + 'px', maxHeight: Math.max(240, innerHeight - r.bottom - 12) + 'px', overflow: 'auto' });
+    q.focus();
   }
   function trkRender() {
     if (!TRK.cfg) return;
     for (const bt of document.querySelectorAll('.trk-seg .btn[data-by]')) bt.setAttribute('aria-pressed', String(bt.dataset.by === TRK.by));
-    const sel = $('trkSel'), chips = $('trkChips'), box = $('trkTables');
-    chips.replaceChildren(); box.replaceChildren();
+    const sel = $('trkSel'), box = $('trkTables');
+    box.replaceChildren();
     if (!TRK.brands.length) { $('trkInfo').textContent = '추적 중인 제품이 없습니다.'; return; }
+    TRK.sel = TRK.sel || {};
+    const vgs = trkViewGroups(), ts = $('trkTGsum');
+    ts.textContent = '제품: ' + trkWhat(vgs).replace(/^제품 /, '') + ' ▾';
+    ts.title = vgs.map(g => g.title).join('\n') + '\n(눌러서 품목군 → 제조사 → 브랜드 → 구분 순서로 고르기)';
+    $('trkTGms').classList.toggle('on', vgs.length > 1);
+    sel.hidden = TRK.by !== 'ch';
     if (TRK.by === 'prod') {
-      const byGrp = new Map(); for (const b of TRK.brands) { const k = b.group || ''; if (!byGrp.has(k)) byGrp.set(k, []); byGrp.get(k).push(b); }
-      sel.replaceChildren(...[...byGrp].map(([k, bs]) => { const opts = bs.map(b => { const o = el('option', '', b.name + (b.maker ? ' (' + b.maker + ')' : '')); o.value = b.id; return o; }); if (!k) return opts; const og = document.createElement('optgroup'); og.label = k; og.append(...opts); return [og]; }).flat());
-      if (!TRK.brands.some(b => b.id === TRK.sel.prod)) TRK.sel.prod = TRK.brands[0].id;
-      sel.value = TRK.sel.prod;
-      const b = TRK.brands.find(x => x.id === TRK.sel.prod);
-      if (b.variants.length > 1) {
-        const cur = TRK.chip[b.id] || '';
-        for (const [id, name] of [['', '전체'], ...b.variants.map(v => [v.id, v.name])]) {
-          const bt = el('button', 'btn', name); bt.type = 'button'; bt.setAttribute('aria-pressed', String(id === cur));
-          bt.addEventListener('click', () => { TRK.chip[b.id] = id; trkSave(); trkRender(); });
-          chips.appendChild(bt);
-        }
-      }
-      const gs = trkViewGroups();
+      const gs = vgs;
       box.appendChild(trkProdTable(gs)); trkStarList(box, gs);
       $('trkNote').textContent = '칸마다 그 채널에서 같은 입수량 상품 중 가장 싼 가격입니다 (폴센트 검색 기준). 초록 칸 = 그 줄 최저가, ▲▼ = 직전 기록 대비. 칸에 마우스를 올리면 상품명과 기록 최저·최고가가 보입니다. – = 검색에 안 잡힘.' + TRK_DL;
     } else {
@@ -1567,7 +1640,7 @@ html, body { height: auto; }
       sel.replaceChildren(...chs.map(c => { const o = el('option', '', c); o.value = c; return o; }));
       if (!chs.includes(TRK.sel.ch)) TRK.sel.ch = chs[0];
       sel.value = TRK.sel.ch;
-      box.appendChild(trkChTable(TRK.sel.ch, TRK.groups)); trkStarList(box, TRK.groups, TRK.sel.ch);
+      box.appendChild(trkChTable(TRK.sel.ch, vgs)); trkStarList(box, vgs, TRK.sel.ch);
       $('trkNote').textContent = `${TRK.sel.ch === OTHER ? '로켓배송을 뺀 채널 중 가장 싼 가격 (칸 아래에 채널 이름)' : TRK.sel.ch + '에서 같은 입수량 상품 중 가장 싼 가격'}입니다 (폴센트 검색 기준). 초록 칸 = 그 제품에서 개당 가격이 가장 싼 입수량, ▲▼ = 직전 기록 대비. – = 검색에 안 잡힘.` + TRK_DL;
     }
     const days = trkDays(), ds = $('trkDate');
@@ -1651,11 +1724,11 @@ html, body { height: auto; }
   // A single picked product/channel follows the table when the table's brand/channel changes; several stay put.
   function trkChartSel() {
     const vg = trkViewGroups(), ids = new Set(TRK.groups.map(g => g.id));
-    const vk = [TRK.by, TRK.sel.prod, TRK.chip[TRK.sel.prod] || '', TRK.sel.ch].join('|');
+    const vk = [TRK.by, vg.map(g => g.id).join(','), TRK.sel.ch].join('|');
     const moved = TRK._vk !== undefined && TRK._vk !== vk, byMoved = TRK._by !== undefined && TRK._by !== TRK.by;
     TRK._vk = vk; TRK._by = TRK.by;
     let cg = (Array.isArray(TRK.cg) ? TRK.cg : []).filter(id => ids.has(id));
-    if (!cg.length || (moved && TRK.by === 'prod' && cg.length === 1 && !vg.some(g => g.id === cg[0]))) cg = vg.length ? [vg[0].id] : [];
+    if (!cg.length || (moved && TRK.by === 'prod' && cg.length === 1 && !vg.some(g => g.id === cg[0]))) { cg = vg.length ? [vg[0].id] : []; TRK.cf = trkFOf(cg); }
     TRK.cg = cg;
     if (!Array.isArray(TRK.cch) || !TRK.cch.length) TRK.cch = null;
     if (moved && TRK.by === 'ch' && (!TRK.cch || TRK.cch.length === 1)) TRK.cch = [TRK.sel.ch];
@@ -1696,14 +1769,10 @@ html, body { height: auto; }
   function trkOpenPicker(det) {
     for (const o of document.querySelectorAll('details.ms[open]')) if (o !== det) o.open = false;
     const gs = trkChartGroups();
-    if (det.id === 'trkCGms') {
-      const items = [];
-      for (const b of TRK.brands) for (const v of b.variants) {
-        const g = TRK.groups.find(x => x.id === v.id); if (!g) continue;
-        const multi = b.variants.length > 1;
-        items.push({ v: g.id, t: multi ? g.name : g.title + (b.maker ? ` (${b.maker})` : ''), g: multi ? (b.group ? b.group + ' · ' : '') + b.name : b.group || '' });
-      }
-      trkPicker(det, items, gs.map(g => g.id), ids => { if (!ids.length) return; TRK.cg = ids; trkSave(); trkChartRender(); trkMarkProd(); });
+    if (det.id === 'trkTGms') {
+      trkStepPicker(det, TRK.tf || trkFOf(TRK.tg || []), (f, ids) => { TRK.tf = f; TRK.tg = ids; trkSave(); trkRender(); });
+    } else if (det.id === 'trkCGms') {
+      trkStepPicker(det, TRK.cf || trkFOf(gs.map(g => g.id)), (f, ids) => { TRK.cf = f; TRK.cg = ids; trkSave(); trkChartRender(); trkMarkProd(); }, 12);
     } else {
       const all = trkChAll(gs), items = [...all, OTHER].map(c => ({ v: c, t: c === OTHER ? OTHER + ' (로켓배송 뺀 채널 중 최저)' : c, g: '' }));
       trkPicker(det, items, TRK.cch || all, cs => {
@@ -1712,7 +1781,7 @@ html, body { height: auto; }
       });
     }
   }
-  for (const det of [$('trkCGms'), $('trkCHms')]) det.addEventListener('toggle', () => {
+  for (const det of [$('trkTGms'), $('trkCGms'), $('trkCHms')]) det.addEventListener('toggle', () => {
     const old = det.querySelector('.msp'); if (old) old.remove();
     if (det.open && TRK.cfg) trkOpenPicker(det);
   });
@@ -1802,7 +1871,7 @@ html, body { height: auto; }
         for (const r of x.sim) if (r.price != null) sim.push(line(g, r));
       }
       const blob = await buildXlsx([{ name: TRK.date ? TRK.date + ' 기준 가격' : '최근 가격', rows: now, header: true }, { name: '전체 기록', rows: all, header: true }, { name: '유사 상품', rows: sim.length > 1 ? sim : [['유사 상품으로 분류된 기록이 없습니다. (이름이 비슷하지만 다른 상품 — 예: 직구판 PRE·어드밴스 HMO — 은 여기에 따로 모입니다.)']], header: sim.length > 1 }]);
-      const what = TRK.by === 'ch' ? '전체 제품' : (TRK.brands.find(b => b.id === TRK.sel.prod) || {}).name || '';
+      const what = trkWhat(gs);
       const a = document.createElement('a'), url = URL.createObjectURL(blob);
       a.href = url; a.download = `가격 추적 - ${what}.xlsx`.replace(/[\\/:*?"<>|]+/g, ' ');
       document.body.appendChild(a); a.click(); a.remove();
@@ -1865,7 +1934,7 @@ html, body { height: auto; }
     const th = e.target.closest('th.trk-prod'); if (!th) return;
     const cg = (TRK.cg || []).slice(), i = cg.indexOf(th.dataset.g);
     if (i < 0) cg.push(th.dataset.g); else if (cg.length > 1) cg.splice(i, 1);
-    TRK.cg = cg; trkSave(); trkChartRender(); trkMarkProd();
+    TRK.cg = cg; TRK.cf = trkFOf(cg); trkSave(); trkChartRender(); trkMarkProd();
   });
   $('trkPick').addEventListener('change', trkChartRender);
   for (const r of document.querySelectorAll('input[name="trkMode"]')) r.addEventListener('change', trkChartRender);
@@ -3621,7 +3690,7 @@ ${parts.map(([id, , h], i) => `<div class="view" id="${id}"${i ? ' hidden' : ''}
     // private: what it was, for the list
     const meta = { id, url: SITE_URL + '?id=' + id, title: sh.title, scope: sh.scope, made: sh.made, ana: shareCtx === 'trk' ? 'tracker' : shareCtx === 'perf' ? 'perf/' + cur.name : cur.name, mode: auto ? 'live-auto' : mode };
     // 매일 자동 갱신: the private meta keeps the AES key (not the password) so the workflow can re-seal the same id after each run
-    if (auto) meta.auto = { key: sealed.key, salt: sealed.salt, it: sealed.it, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch }, title: '가격 추적', req: reqTok || undefined };
+    if (auto) meta.auto = { key: sealed.key, salt: sealed.salt, it: sealed.it, state: { by: TRK.by, sel: TRK.sel, chip: TRK.chip, cg: TRK.cg, cch: TRK.cch, tg: TRK.tg, tf: TRK.tf, cf: TRK.cf }, title: '가격 추적', req: reqTok || undefined };
     if (auto) { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); return meta; }
     try { await api(`/contents/shares/${id}.json`, { method: 'PUT', body: JSON.stringify({ message: 'share ' + id, content: utf8b64(JSON.stringify(meta)) }) }); } catch (e) { console.error(e); }
     return meta;
