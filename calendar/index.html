@@ -49,7 +49,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .chip { border: 1px solid var(--line); background: var(--sheet); border-radius: 18px; padding: 6px 12px; cursor: pointer; font-size: 14px; white-space: nowrap; }
 .filters { display: flex; gap: 8px; margin-top: 6px; overflow-x: auto; scrollbar-width: none; }
 .filters::-webkit-scrollbar { display: none; }
-.filters select { border: 1px solid var(--line); background: var(--sheet); border-radius: 18px; padding: 6px 10px; font-size: 14px; max-width: 40%; }
+.filters select { border: 1px solid var(--line); background: var(--sheet); border-radius: 18px; padding: 6px 10px; font-size: 14px; max-width: 46%; flex: none; }
 /* day list: 행사 -> 소분류 -> SKU */
 .promo { background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
 .promo .ph { display: flex; gap: 12px; padding: 12px 14px; cursor: pointer; }
@@ -205,9 +205,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
         <button class="ib" id="menuBtn" aria-label="메뉴" style="position:relative">☰<span id="menuBadge" class="nbadge" hidden></span></button>
       </div>
       <div class="filters">
+        <select id="fTeam" aria-label="팀"><option value="">전체 팀</option></select>
         <select id="fChannel" aria-label="채널"><option value="">전체 채널</option></select>
         <select id="fBrand" aria-label="브랜드"><option value="">전체 브랜드</option></select>
         <select id="fSub" aria-label="소분류"><option value="">전체 소분류</option></select>
+        <select id="fPg" aria-label="가격구분"><option value="">전체 가격구분</option></select>
       </div>
       <div id="demoBar" class="demo" hidden></div>
       <div id="installBar" class="ok row" style="margin:6px 0" hidden><span class="grow">📱 홈 화면에 앱으로 설치하면 아이콘으로 바로 열려요.</span><button class="btn pri" id="installBtn" style="padding:7px 12px">설치</button><button class="ib" id="installX" aria-label="닫기" style="width:32px;height:32px">✕</button></div>
