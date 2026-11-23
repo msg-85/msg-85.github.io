@@ -163,17 +163,20 @@
     drawDay();
   }
   function drawDay() {
-    const d = S.sel, list = visible().filter(e => e.start_date <= d && e.end_date >= d), ps = promos(list);
-    ps.sort((a, b) => chIx(a.e.channel_code) - chIx(b.e.channel_code) || (a.e.channel_detail || '').localeCompare(b.e.channel_detail || '') || a.e.start_date.localeCompare(b.e.start_date) || a.e.title.localeCompare(b.e.title));
-    const bySub = groupBy(list, subOf);
+    const d = S.sel, list = visible().filter(e => e.start_date <= d && e.end_date >= d);
     const seg = el('div', { class: 'seg' }, ...[['sub', '소분류별'], ['promo', '행사별']].map(([v, t]) => el('button', { class: S.dv === v ? 'on' : '', onclick: () => { S.dv = v; try { localStorage.setItem('evcal-dv', v); } catch (x) {} drawDay(); } }, t)));
-    $('dayHead').replaceChildren(el('span', {}, fmtD(d), ' ', el('small', {}, list.length ? (S.dv === 'sub' ? `소분류 ${bySub.size}개 · ` : `행사 ${ps.length}개 · `) + `SKU ${list.length}개` : '')), list.length ? seg : '');
+    $('dayHead').replaceChildren(el('span', {}, fmtD(d), ' ', el('small', {}, list.length ? `행사 ${promos(list).length}개 · SKU ${list.length}개` : '')), list.length ? seg : '');
     if (!list.length) return $('dayList').replaceChildren(el('div', { class: 'empty' }, '이 날 행사가 없습니다.'));
-    $('dayList').replaceChildren(...(S.dv === 'sub' ? [...bySub.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([s, xs]) => subCard(s, xs)) : ps.map(promoCard)));
+    if (S.dv === 'sub') $('dayList').replaceChildren(...sorted(groupBy(list, x => catOf(x).l || '(대분류 없음)')).map(([l, xs]) => catLCard(l, xs)));
+    else $('dayList').replaceChildren(...[...groupBy(list, x => divOf(x.channel_code)[0]).entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([dv, xs]) => divCard(dv, xs)));
   }
   const chIx = c => { const i = S.channels.findIndex(x => x.code === c); return i < 0 ? 1e9 : i; };
   const groupBy = (xs, f) => { const m = new Map(); for (const x of xs) { const k = f(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return m; };
+  const sorted = m => [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   const subOf = x => catOf(x).s || '(소분류 없음)';
+  // 부문 / 팀 by the channel code's letter (same structure as the 실적 data)
+  const DIV = { A: ['01.도매', 'A.상온'], B: ['01.도매', 'B.유제품'], C: ['02.유통', 'C.Hyper'], D: ['02.유통', 'D.SSM'], E: ['02.유통', 'E.CVS'], F: ['03.E커머스', 'F.E-1'], G: ['03.E커머스', 'G.E-2'], H: ['04.FS', 'H.FS기획'], I: ['04.FS', 'I.FS영업1'], J: ['04.FS', 'J.FS영업2'] };
+  const divOf = code => DIV[String(code)[0]] || ['09.기타', String(code)[0] + '.기타'];
   // 가격 그룹 from the product name: 단계 (1공관 / 2스틱 / 1단계) + 규격 (last size token: 800g, 250ml, 180+20T).
   // Taste and pack variants (12입 / 3*4입) fall into the same group. Later this can come from a 가격그룹 column in the product master.
   const PG = new Map();
@@ -187,17 +190,26 @@
     PG.set(name, g); return g;
   }
   const pgSort = (a, b) => (parseFloat(a.replace(/^\d단계\s*/, '')) || 0) - (parseFloat(b.replace(/^\d단계\s*/, '')) || 0) || a.localeCompare(b);
+  const pgroups = xs => [...groupBy(xs, pgOf).entries()].sort((a, b) => pgSort(a[0], b[0]));
   // open/closed state survives redraws
   const OPEN = new Set();
   const tog = k => { OPEN.has(k) ? OPEN.delete(k) : OPEN.add(k); drawDay(); };
   const rng = (a, b, f) => (a === b ? f(a) : `${f(a)}~${f(b)}`);
   const priceRange = list => { const r = list.map(e => Number(e.sale_price)).filter(x => x >= 0); if (!r.length) return ''; return rng(Math.min(...r), Math.max(...r), x => x.toLocaleString('ko-KR')) + '원'; };
   const chName = e => shortCh(chLabel(e.channel_code, e.channel)) + (e.channel_detail ? '·' + e.channel_detail : '');
-  // a band row: label · 판매가 범위 · SKU count
-  const bandRow = (k, label, xs, sub) => el('div', { class: 'sub' + (OPEN.has(k) ? ' open' : ''), onclick: () => tog(k) },
-    el('span', { class: 'nm' }, label, sub ? el('small', {}, sub) : null), el('span', { class: 'pr' }, priceRange(xs)), el('span', { class: 'ct' }, `${xs.length}`), el('span', { class: 'ct' }, OPEN.has(k) ? '▲' : '▼'));
-  const bandHead = first => el('div', { class: 'bh' }, el('span', { class: 'nm' }, first), el('span', { class: 'pr' }, '판매가'), el('span', { class: 'ct' }, 'SKU'), el('span', { class: 'ct' }, ''));
-  const pgHead = g => el('div', { class: 'pgh' }, g);
+  const pgSummary = gs => gs.length > 4 ? `가격 그룹 ${gs.length}개` : gs.map(([g, ys]) => `${g} ${priceRange(ys)}`).join(' · ');
+  // a drill-down row at depth 1..3: label (+ small line) · price range (optional) · count · arrow
+  const row = (k, depth, label, small, price, count) => el('div', { class: 'sub d' + depth + (OPEN.has(k) ? ' open' : ''), onclick: () => tog(k) },
+    el('span', { class: 'nm' }, label, small ? el('small', {}, small) : null), price != null ? el('span', { class: 'pr' }, price) : null, el('span', { class: 'ct' }, count), el('span', { class: 'ct' }, OPEN.has(k) ? '▲' : '▼'));
+  const pgHead = (g, depth) => el('div', { class: 'pgh d' + depth }, g);
+  // top-level card (대분류 / 부문)
+  function topCard(k, title, small, dot, body) {
+    const box = el('div', { class: 'promo' + (OPEN.has(k) ? ' open' : '') });
+    box.append(el('div', { class: 'ph', onclick: () => tog(k) }, dot ? el('div', { class: 'dot', style: 'background:' + dot }) : null,
+      el('div', { class: 'grow' }, el('div', { class: 't' }, title), el('div', { class: 's' }, small)), el('div', { class: 'arr' }, '▶')));
+    if (OPEN.has(k)) box.append(el('div', { class: 'subs' }, ...body()));
+    return box;
+  }
   // SKUs with the same 정상가 / 판매가 shown as one line (taste / pack variants)
   function skuLines(xs) {
     const g = [...groupBy(xs, x => `${x.list_price}|${x.sale_price}`).values()].sort((a, b) => a[0].sale_price - b[0].sale_price);
@@ -205,48 +217,56 @@
       el('div', { class: 'grow' }, el('div', {}, ys[0].product_name), ys.length > 1 ? el('div', { class: 's' }, `외 ${ys.length - 1}개 같은 가격 · ` + ys.slice(1).map(y => y.product_name).join(', ')) : null),
       el('div', { class: 'pc' }, el('b', {}, won(ys[0].sale_price)), Number(ys[0].list_price) !== Number(ys[0].sale_price) ? el('div', { class: 's' }, el('del', {}, won(ys[0].list_price))) : null))));
   }
-  // 1번: 소분류 -> 가격 그룹 -> 채널별 판매가 범위 -> SKU
-  function subCard(s, xs) {
-    const k = 'S\u0001' + s, groups = [...groupBy(xs, pgOf).entries()].sort((a, b) => pgSort(a[0], b[0]));
-    const box = el('div', { class: 'promo' + (OPEN.has(k) ? ' open' : '') });
-    box.append(el('div', { class: 'ph', onclick: () => tog(k) },
-      el('div', { class: 'grow' }, el('div', { class: 't' }, s),
-        el('div', { class: 's' }, `채널 ${new Set(xs.map(x => x.channel_code + (x.channel_detail || ''))).size}곳 · ` + (groups.length > 4 ? `가격 그룹 ${groups.length}개 · ${priceRange(xs)}` : groups.map(([g, ys]) => `${g} ${priceRange(ys)}`).join(' · ')))),
-      el('div', { class: 'arr' }, '▶')));
-    if (OPEN.has(k)) {
-      const wrap = el('div', { class: 'subs' }, bandHead('채널 · 행사'));
-      for (const [g, ys] of groups) {
-        if (groups.length > 1 || g !== '기타') wrap.append(pgHead(g));
-        const chs = [...groupBy(ys, promoKey).values()].sort((a, b) => chIx(a[0].channel_code) - chIx(b[0].channel_code));
-        for (const zs of chs) { const kk = k + '\u0002' + g + '\u0002' + promoKey(zs[0]); wrap.append(bandRow(kk, chName(zs[0]), zs, `${zs[0].title} · ${fmtD(zs[0].start_date)}~${fmtD(zs[0].end_date)}`)); if (OPEN.has(kk)) wrap.append(skuLines(zs)); }
+  // 소분류별: 대분류 -> 소분류 -> 가격 그룹 · 채널별 판매가 -> SKU
+  function catLCard(l, xs) {
+    const k = 'L\u0001' + l, subs = sorted(groupBy(xs, subOf));
+    return topCard(k, l, `소분류 ${subs.length}개 · SKU ${xs.length}개`, null, () => {
+      const out = [];
+      for (const [s, ys] of subs) {
+        const ks = k + '\u0002' + s, gs = pgroups(ys);
+        out.push(row(ks, 1, s, `채널 ${new Set(ys.map(x => x.channel_code + (x.channel_detail || ''))).size}곳 · ` + pgSummary(gs), null, ys.length));
+        if (!OPEN.has(ks)) continue;
+        for (const [g, zs] of gs) {
+          if (gs.length > 1 || g !== '기타') out.push(pgHead(g, 2));
+          for (const ws of [...groupBy(zs, promoKey).values()].sort((a, b) => chIx(a[0].channel_code) - chIx(b[0].channel_code))) {
+            const kc = ks + '\u0002' + g + '\u0002' + promoKey(ws[0]);
+            out.push(row(kc, 2, chName(ws[0]), `${ws[0].title} · ${fmtD(ws[0].start_date)}~${fmtD(ws[0].end_date)}`, priceRange(ws), ws.length));
+            if (OPEN.has(kc)) out.push(skuLines(ws));
+          }
+        }
       }
-      box.append(wrap);
-    }
-    return box;
+      return out;
+    });
   }
-  // 2번: 채널 행사 -> 소분류별 판매가 범위 -> 가격 그룹 -> SKU
-  function promoCard(p) {
-    const e = p.e, k = 'P\u0001' + p.key, subs = [...groupBy(p.list, subOf).entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    const box = el('div', { class: 'promo' + (OPEN.has(k) ? ' open' : '') });
-    const pending = p.list.filter(x => S.requests.some(r => r.event_id === x.id && r.status === 'pending')).length;
-    box.append(el('div', { class: 'ph', onclick: () => tog(k) },
-      el('div', { class: 'dot', style: 'background:' + colorOf(e.channel_code) }),
-      el('div', { class: 'grow' },
-        el('div', { class: 's' }, `${chDisp(e)} · ${fmtD(e.start_date)} ~ ${fmtD(e.end_date)}`),
-        el('div', { class: 't' }, e.title),
-        el('div', { class: 's' }, `소분류 ${subs.length}개 · SKU ${p.list.length}개`),
-        pending ? el('div', { class: 'lock' }, `⏳ 수정 요청 승인 대기 ${pending}건`) : null),
-      el('div', { class: 'arr' }, '▶')));
-    if (OPEN.has(k)) {
-      const wrap = el('div', { class: 'subs' }, bandHead('소분류'));
-      for (const [s, xs] of subs) {
-        const kk = k + '\u0002' + s, groups = [...groupBy(xs, pgOf).entries()].sort((a, b) => pgSort(a[0], b[0]));
-        wrap.append(bandRow(kk, s, xs, groups.length > 1 ? groups.map(([g, ys]) => `${g} ${priceRange(ys)}`).join(' · ') : groups[0][0] !== '기타' ? groups[0][0] : ''));
-        if (OPEN.has(kk)) for (const [g, ys] of groups) { if (groups.length > 1) wrap.append(pgHead(g)); wrap.append(skuLines(ys)); }
+  // 행사별: 부문 -> 팀 (when the 부문 has more than one that day) -> 채널 행사 -> 소분류 -> SKU
+  function divCard(dv, xs) {
+    const k = 'D\u0001' + dv, teams = sorted(groupBy(xs, x => divOf(x.channel_code)[1]));
+    const ps = promos(xs);
+    return topCard(k, dv, `${teams.length > 1 ? '팀 ' + teams.length + '개 · ' : ''}행사 ${ps.length}개 · SKU ${xs.length}개`, null, () => {
+      const out = [];
+      const promoRows = (ys, depth, kp) => {
+        const pl = promos(ys).sort((a, b) => chIx(a.e.channel_code) - chIx(b.e.channel_code) || (a.e.channel_detail || '').localeCompare(b.e.channel_detail || '') || a.e.start_date.localeCompare(b.e.start_date) || a.e.title.localeCompare(b.e.title));
+        for (const p of pl) {
+          const kk = kp + '\u0002' + p.key, subs = sorted(groupBy(p.list, subOf));
+          const pending = p.list.filter(x => S.requests.some(r => r.event_id === x.id && r.status === 'pending')).length;
+          out.push(row(kk, depth, el('span', {}, el('i', { class: 'cdot', style: 'background:' + colorOf(p.e.channel_code) }), `${chName(p.e)} · ${p.e.title}`),
+            `${fmtD(p.e.start_date)}~${fmtD(p.e.end_date)} · 소분류 ${subs.length}개` + (pending ? ` · ⏳ 승인 대기 ${pending}건` : ''), null, p.list.length));
+          if (!OPEN.has(kk)) continue;
+          for (const [s, zs] of subs) {
+            const ks = kk + '\u0002' + s, gs = pgroups(zs);
+            out.push(row(ks, depth + 1, s, gs.length > 1 ? pgSummary(gs) : gs[0][0] !== '기타' ? gs[0][0] : '', priceRange(zs), zs.length));
+            if (OPEN.has(ks)) for (const [g, ws] of gs) { if (gs.length > 1) out.push(pgHead(g, depth + 2)); out.push(skuLines(ws)); }
+          }
+        }
+      };
+      if (teams.length === 1) promoRows(xs, 1, k);
+      else for (const [t, ys] of teams) {
+        const kt = k + '\u0002' + t;
+        out.push(row(kt, 1, t, `행사 ${promos(ys).length}개`, null, ys.length));
+        if (OPEN.has(kt)) promoRows(ys, 2, kt);
       }
-      box.append(wrap);
-    }
-    return box;
+      return out;
+    });
   }
   function card(e, compact) { // compact: inside a 행사 / 소분류 group, so channel, dates and 행사명 are already shown
     return el('div', { class: 'card', onclick: () => openDetail(e) },
