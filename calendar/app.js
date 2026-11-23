@@ -7,7 +7,7 @@
   const useDemo = params.has('demo') || !cfg.url || !cfg.anonKey;
   const api = useDemo ? new Cal.DemoBackend() : new Cal.SupabaseBackend(cfg.url, cfg.anonKey);
 
-  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], requests: [], fCh: '', fBr: '', fSub: '', dv: (() => { try { return localStorage.getItem('evcal-dv') || 'sub'; } catch (e) { return 'sub'; } })() };
+  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], requests: [], fTeam: '', fCh: '', fBr: '', fSub: '', fPg: '', dv: (() => { try { return localStorage.getItem('evcal-dv') || 'sub'; } catch (e) { return 'sub'; } })() };
   const PALETTE = ['#2e7d6b', '#c2571a', '#3b62c4', '#a33ea1', '#b8860b', '#c0392b', '#00838f', '#6d4c41', '#5e35b1', '#558b2f'];
   const won = n => (n == null || n === '' ? '-' : Number(n).toLocaleString('ko-KR') + '원');
   const num = s => { if (s == null) return NaN; const t = String(s).replace(/[,\s원]/g, ''); return t === '' ? NaN : Number(t); };
@@ -95,23 +95,28 @@
     setTimeout(() => cur.focus(), 60);
   }
   function fail(x) { if (x.code === 401) { api.logout(); showLogin(); } else toast(x.message); }
+  // filters: 팀 -> 채널, 대분류 -> 소분류 -> 가격구분 (each list follows the one before it)
+  const opts = (sel, all, items, cur) => { sel.replaceChildren(el('option', { value: '' }, all), ...items.map(([v, t]) => el('option', { value: v }, t))); sel.value = items.some(([v]) => v === cur) ? cur : ''; return sel.value; };
   function fillFilters() {
-    const ch = $('fChannel'), br = $('fBrand');
-    ch.replaceChildren(el('option', { value: '' }, '전체 채널'), ...S.channels.map(c => el('option', { value: c.code }, chLabel(c.code))));
-    const cats = [...new Set(S.products.map(p => p.cat_l).filter(Boolean))].sort();
-    br.replaceChildren(el('option', { value: '' }, '전체 카테고리'), ...cats.map(b => el('option', { value: b }, b)));
-    ch.value = S.fCh; br.value = S.fBr;
+    const teams = [...new Set(S.channels.map(c => divOf(c.code)[1]))].sort();
+    S.fTeam = opts($('fTeam'), '전체 팀', teams.map(t => [t, t]), S.fTeam);
+    S.fCh = opts($('fChannel'), '전체 채널', S.channels.filter(c => !S.fTeam || divOf(c.code)[1] === S.fTeam).map(c => [c.code, chLabel(c.code)]), S.fCh);
+    S.fBr = opts($('fBrand'), '전체 대분류', [...new Set(S.products.map(p => p.cat_l).filter(Boolean))].sort().map(b => [b, b]), S.fBr);
     fillSub();
   }
-  function fillSub() { // 소분류 options follow the chosen 대카테고리
-    const sb = $('fSub'), subs = [...new Set(S.products.filter(p => !S.fBr || p.cat_l === S.fBr).map(p => p.cat_s).filter(Boolean))].sort();
-    if (!subs.includes(S.fSub)) S.fSub = '';
-    sb.replaceChildren(el('option', { value: '' }, '전체 소분류'), ...subs.map(s => el('option', { value: s }, s)));
-    sb.value = S.fSub;
+  function fillSub() {
+    S.fSub = opts($('fSub'), '전체 소분류', [...new Set(S.products.filter(p => !S.fBr || p.cat_l === S.fBr).map(p => p.cat_s).filter(Boolean))].sort().map(s => [s, s]), S.fSub);
+    fillPg();
   }
+  function fillPg() { // 가격구분 comes from the loaded events' product names
+    const xs = S.events.filter(e => (!S.fBr || catOf(e).l === S.fBr) && (!S.fSub || catOf(e).s === S.fSub));
+    S.fPg = opts($('fPg'), '전체 가격구분', [...new Set(xs.map(pgOf))].sort(pgSort).map(g => [g, g]), S.fPg);
+  }
+  $('fTeam').addEventListener('change', e => { S.fTeam = e.target.value; fillFilters(); draw(); });
   $('fChannel').addEventListener('change', e => { S.fCh = e.target.value; draw(); });
   $('fBrand').addEventListener('change', e => { S.fBr = e.target.value; fillSub(); draw(); });
-  $('fSub').addEventListener('change', e => { S.fSub = e.target.value; draw(); });
+  $('fSub').addEventListener('change', e => { S.fSub = e.target.value; fillPg(); draw(); });
+  $('fPg').addEventListener('change', e => { S.fPg = e.target.value; draw(); });
   // one 행사 = same channel, 세부채널, 행사명 and dates; its SKUs are grouped by 소분류
   const promoKey = e => [e.channel_code, e.channel_detail || '', e.title, e.start_date, e.end_date].join('\u0001');
   function promos(list) {
@@ -128,36 +133,53 @@
     try { S.events = await api.listEvents(from, to); } catch (x) { return fail(x); }
     draw();
   }
-  const visible = () => S.events.filter(e => (!S.fCh || e.channel_code === S.fCh) && (!S.fBr || catOf(e).l === S.fBr) && (!S.fSub || catOf(e).s === S.fSub));
+  const visible = () => S.events.filter(e => (!S.fTeam || divOf(e.channel_code)[1] === S.fTeam) && (!S.fPg || pgOf(e) === S.fPg) && (!S.fCh || e.channel_code === S.fCh) && (!S.fBr || catOf(e).l === S.fBr) && (!S.fSub || catOf(e).s === S.fSub));
+  // month grid: one lane per 팀, ranked by how many channels (incl. 세부채널) run a promo that week.
+  // Lanes 1-3 show the top 3 팀 as "Hyper · 이마트 외 2개처"; the rest is "+n팀" under the day.
   function draw() {
     $('monthLabel').textContent = `${S.y}년 ${S.m + 1}월`;
-    const { from, to } = gridRange(), evs = promos(visible()).map(p => ({ ...p.e, n: p.list.length })), today = todayKst(), grid = $('grid');
+    fillPg();
+    const { from, to } = gridRange(), evs = visible(), today = todayKst(), grid = $('grid');
     grid.replaceChildren();
     const LANES = 3, LH = 18, TOP = 28;
+    const chKey = e => e.channel_code + '\u0001' + (e.channel_detail || '');
     for (let ws = from; ws <= to; ws = addDays(ws, 7)) {
       const we = addDays(ws, 6), wk = el('div', { class: 'week' });
-      const inWeek = evs.filter(e => e.start_date <= we && e.end_date >= ws)
-        .sort((a, b) => a.start_date.localeCompare(b.start_date) || b.end_date.localeCompare(a.end_date));
-      const lanes = [], hidden = new Array(7).fill(0), bars = [];
-      for (const e of inWeek) {
-        const s = e.start_date < ws ? 0 : dow(e.start_date), en = e.end_date > we ? 6 : dow(e.end_date);
-        let li = lanes.findIndex(end => end < s); if (li < 0) { li = lanes.length; lanes.push(-1); } lanes[li] = en;
-        if (li < LANES) bars.push({ e, s, en, li }); else for (let d = s; d <= en; d++) hidden[d]++;
+      const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+      const teams = new Map(); // team -> { chs: Set, perDay: [Map chKey -> event] }
+      for (const e of evs) {
+        if (e.start_date > we || e.end_date < ws) continue;
+        const t = divOf(e.channel_code)[1];
+        if (!teams.has(t)) teams.set(t, { t, chs: new Set(), perDay: days.map(() => new Map()) });
+        const T = teams.get(t); T.chs.add(chKey(e));
+        days.forEach((d, i) => { if (e.start_date <= d && e.end_date >= d) T.perDay[i].set(chKey(e), e); });
       }
-      const used = Math.min(lanes.length, LANES), hasMore = hidden.some(Boolean);
-      wk.style.minHeight = (TOP + used * LH + (hasMore ? 14 : 0) + 6) + 'px';
-      for (let i = 0; i < 7; i++) {
-        const d = addDays(ws, i), [, mm, dd] = d.split('-').map(Number);
+      const ranked = [...teams.values()].sort((a, b) => b.chs.size - a.chs.size || a.t.localeCompare(b.t));
+      const shown = ranked.slice(0, LANES), rest = ranked.slice(LANES), hidden = days.map((_, i) => rest.filter(T => T.perDay[i].size).length);
+      const hasMore = hidden.some(Boolean);
+      wk.style.minHeight = (TOP + shown.length * LH + (hasMore ? 14 : 0) + 6) + 'px';
+      days.forEach((d, i) => {
+        const [, mm, dd] = d.split('-').map(Number);
         const cls = ['day', mm - 1 !== S.m && 'out', d === today && 'today', d === S.sel && 'sel'].filter(Boolean).join(' ');
         wk.append(el('div', { class: cls, onclick: () => { S.sel = d; draw(); } }, el('div', { class: 'n' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '') }, dd)));
-        if (hidden[i]) { const m = el('div', { class: 'more' }, '+' + hidden[i]); m.style.left = (i / 7 * 100) + '%'; m.style.width = (100 / 7) + '%'; m.style.top = (TOP + used * LH) + 'px'; wk.append(m); }
-      }
-      for (const b of bars) {
-        const bar = el('div', { class: 'bar' + (b.e.start_date < ws ? ' cont-l' : '') + (b.e.end_date > we ? ' cont-r' : '') }, `${shortCh(chLabel(b.e.channel_code, b.e.channel))}${b.e.channel_detail ? '·' + b.e.channel_detail : ''} ${b.e.title}${b.e.n > 1 ? ' (' + b.e.n + ')' : ''}`);
-        bar.style.left = `calc(${b.s / 7 * 100}% + 2px)`; bar.style.width = `calc(${(b.en - b.s + 1) / 7 * 100}% - 4px)`;
-        bar.style.top = (TOP + b.li * LH) + 'px'; bar.style.background = colorOf(b.e.channel_code);
-        wk.append(bar);
-      }
+        if (hidden[i]) { const m = el('div', { class: 'more' }, `+${hidden[i]}팀`); m.style.left = (i / 7 * 100) + '%'; m.style.width = (100 / 7) + '%'; m.style.top = (TOP + shown.length * LH) + 'px'; wk.append(m); }
+      });
+      shown.forEach((T, li) => {
+        // runs of consecutive days with at least one promo in this 팀
+        for (let s = 0; s < 7; s++) {
+          if (!T.perDay[s].size) continue;
+          let en = s; while (en + 1 < 7 && T.perDay[en + 1].size) en++;
+          const run = new Map(); for (let i = s; i <= en; i++) for (const [k, e] of T.perDay[i]) run.set(k, e);
+          const list = [...run.values()].sort((a, b) => chIx(a.channel_code) - chIx(b.channel_code));
+          const first = list[0], contL = s === 0 && list.some(e => e.start_date < ws), contR = en === 6 && list.some(e => e.end_date > we);
+          const label = `${T.t.replace(/^[A-Z]\./, '')} · ${chName(first)}${list.length > 1 ? ` 외 ${list.length - 1}개처` : ''}`;
+          const bar = el('div', { class: 'bar' + (contL ? ' cont-l' : '') + (contR ? ' cont-r' : '') }, label);
+          bar.style.left = `calc(${s / 7 * 100}% + 2px)`; bar.style.width = `calc(${(en - s + 1) / 7 * 100}% - 4px)`;
+          bar.style.top = (TOP + li * LH) + 'px'; bar.style.background = colorOf('team:' + T.t);
+          wk.append(bar);
+          s = en;
+        }
+      });
       grid.append(wk);
     }
     drawDay();
@@ -165,11 +187,14 @@
   function drawDay() {
     const d = S.sel, list = visible().filter(e => e.start_date <= d && e.end_date >= d);
     const seg = el('div', { class: 'seg' }, ...[['sub', '소분류별'], ['promo', '행사별']].map(([v, t]) => el('button', { class: S.dv === v ? 'on' : '', onclick: () => { S.dv = v; try { localStorage.setItem('evcal-dv', v); } catch (x) {} drawDay(); } }, t)));
-    $('dayHead').replaceChildren(el('span', {}, fmtD(d), ' ', el('small', {}, list.length ? `행사 ${promos(list).length}개 · SKU ${list.length}개` : '')), list.length ? seg : '');
+    $('dayHead').replaceChildren(el('span', {}, fmtD(d), ' ', el('small', {}, list.length ? `행사 채널 ${nCh(list)}곳 · SKU ${list.length}개` : '')), list.length ? seg : '');
     if (!list.length) return $('dayList').replaceChildren(el('div', { class: 'empty' }, '이 날 행사가 없습니다.'));
     if (S.dv === 'sub') $('dayList').replaceChildren(...sorted(groupBy(list, x => catOf(x).l || '(대분류 없음)')).map(([l, xs]) => catLCard(l, xs)));
-    else $('dayList').replaceChildren(...[...groupBy(list, x => divOf(x.channel_code)[0]).entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([dv, xs]) => divCard(dv, xs)));
+    else $('dayList').replaceChildren(...byChannels(groupBy(list, x => divOf(x.channel_code)[0])).map(([dv, xs]) => divCard(dv, xs)));
   }
+  // 행사 channels (incl. 세부채널) in a list; 부문 / 팀 are listed by this count, most first
+  const nCh = xs => new Set(xs.map(x => x.channel_code + '\u0001' + (x.channel_detail || ''))).size;
+  const byChannels = m => [...m.entries()].sort((a, b) => nCh(b[1]) - nCh(a[1]) || a[0].localeCompare(b[0]));
   const chIx = c => { const i = S.channels.findIndex(x => x.code === c); return i < 0 ? 1e9 : i; };
   const groupBy = (xs, f) => { const m = new Map(); for (const x of xs) { const k = f(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return m; };
   const sorted = m => [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
@@ -220,11 +245,11 @@
   // 소분류별: 대분류 -> 소분류 -> 가격 그룹 · 채널별 판매가 -> SKU
   function catLCard(l, xs) {
     const k = 'L\u0001' + l, subs = sorted(groupBy(xs, subOf));
-    return topCard(k, l, `소분류 ${subs.length}개 · SKU ${xs.length}개`, null, () => {
+    return topCard(k, l, `소분류 ${subs.length}개 · 행사 채널 ${nCh(xs)}곳 · SKU ${xs.length}개`, null, () => {
       const out = [];
       for (const [s, ys] of subs) {
         const ks = k + '\u0002' + s, gs = pgroups(ys);
-        out.push(row(ks, 1, s, `채널 ${new Set(ys.map(x => x.channel_code + (x.channel_detail || ''))).size}곳 · ` + pgSummary(gs), null, ys.length));
+        out.push(row(ks, 1, s, `채널 ${nCh(ys)}곳 · ` + pgSummary(gs), null, ys.length));
         if (!OPEN.has(ks)) continue;
         for (const [g, zs] of gs) {
           if (gs.length > 1 || g !== '기타') out.push(pgHead(g, 2));
@@ -240,9 +265,8 @@
   }
   // 행사별: 부문 -> 팀 (when the 부문 has more than one that day) -> 채널 행사 -> 소분류 -> SKU
   function divCard(dv, xs) {
-    const k = 'D\u0001' + dv, teams = sorted(groupBy(xs, x => divOf(x.channel_code)[1]));
-    const ps = promos(xs);
-    return topCard(k, dv, `${teams.length > 1 ? '팀 ' + teams.length + '개 · ' : ''}행사 ${ps.length}개 · SKU ${xs.length}개`, null, () => {
+    const k = 'D\u0001' + dv, teams = byChannels(groupBy(xs, x => divOf(x.channel_code)[1]));
+    return topCard(k, dv, `${teams.length > 1 ? '팀 ' + teams.length + '개 · ' : ''}행사 채널 ${nCh(xs)}곳 · SKU ${xs.length}개`, null, () => {
       const out = [];
       const promoRows = (ys, depth, kp) => {
         const pl = promos(ys).sort((a, b) => chIx(a.e.channel_code) - chIx(b.e.channel_code) || (a.e.channel_detail || '').localeCompare(b.e.channel_detail || '') || a.e.start_date.localeCompare(b.e.start_date) || a.e.title.localeCompare(b.e.title));
@@ -262,7 +286,7 @@
       if (teams.length === 1) promoRows(xs, 1, k);
       else for (const [t, ys] of teams) {
         const kt = k + '\u0002' + t;
-        out.push(row(kt, 1, t, `행사 ${promos(ys).length}개`, null, ys.length));
+        out.push(row(kt, 1, t, `행사 채널 ${nCh(ys)}곳 · ` + [...new Set(promos(ys).sort((a, b) => chIx(a.e.channel_code) - chIx(b.e.channel_code)).map(p => chName(p.e)))].join(', '), null, ys.length));
         if (OPEN.has(kt)) promoRows(ys, 2, kt);
       }
       return out;
