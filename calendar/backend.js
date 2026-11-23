@@ -139,6 +139,7 @@
     async importEvents(list) { for (const e of list) validate(e); return this._rest('events', { method: 'POST', body: list }); }
     async deleteEvent(id) { const r = await this._rest('events?id=eq.' + id, { method: 'DELETE' }); if (!r || !r.length) throw new AppError('삭제는 마스터만 직접 할 수 있습니다. 담당자는 행사를 누르고 [삭제 요청]을 보내 주세요.', 403); }
     listProducts() { return this._rest('products?select=*&order=code.asc'); }
+    listAliases() { return this._rest('product_alias?select=alias,code').catch(() => []); } // table missing -> no substitution
     listChannels() { return this._rest('channels?select=*&order=sort_no.asc,code.asc'); }
     upsertChannels(rows) { return this._rest('channels?on_conflict=code', { method: 'POST', body: rows, prefer: 'resolution=merge-duplicates,return=representation' }); }
     upsertProducts(rows) { return this._rest('products?on_conflict=code', { method: 'POST', body: rows, prefer: 'resolution=merge-duplicates,return=representation' }); }
@@ -236,6 +237,7 @@
       this.db.events = this.db.events.filter(x => x.id !== id); this._log('delete', cur, null); this._persist();
     }
     async listProducts() { this._guard(); return [...this.db.products].sort((a, b) => a.code.localeCompare(b.code)); }
+    async listAliases() { this._guard(); return this.db.aliases || [{ alias: 'TEMP-001', code: this.db.products[0]?.code }]; }
     async listChannels() { this._guard(); return [...this.db.channels].sort((a, b) => (a.sort_no || 0) - (b.sort_no || 0)); }
     async upsertChannels(rows) { this._master(); for (const r of rows) { const i = this.db.channels.findIndex(p => p.code === r.code); if (i >= 0) this.db.channels[i] = { ...this.db.channels[i], ...r }; else this.db.channels.push({ active: true, ...r }); } this._persist(); return rows; }
     async upsertProducts(rows) { this._master(); for (const r of rows) { const i = this.db.products.findIndex(p => p.code === r.code); if (i >= 0) this.db.products[i] = { ...this.db.products[i], ...r }; else this.db.products.push({ active: true, ...r }); } this._persist(); return rows; }
