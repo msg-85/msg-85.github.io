@@ -149,6 +149,10 @@
     async createInvite(role, note, channels) { const r = await this._rest('invites', { method: 'POST', body: { code: randomCode(), role, note: note || null, channels: channels || [], created_by: this.user.id } }); return r[0]; }
     revokeInvite(code) { return this._rest('invites?code=eq.' + encodeURIComponent(code), { method: 'PATCH', body: { revoked: true } }); }
     listLog(limit = 200) { return this._rest('event_log?select=*&order=at.desc&limit=' + limit); }
+    // change history / requests in a time range [from, to) (ISO strings), paged by 1000
+    async _pages(q) { const out = []; for (let off = 0; ; off += 1000) { const r = await this._rest(q + '&limit=1000&offset=' + off); out.push(...(r || [])); if (!r || r.length < 1000) return out; } }
+    listLogRange(from, to) { return this._pages(`event_log?select=*&at=gte.${encodeURIComponent(from)}&at=lt.${encodeURIComponent(to)}&order=at.asc,id.asc`); }
+    listRequestsRange(from, to) { return this._pages(`edit_requests?select=*&requested_at=gte.${encodeURIComponent(from)}&requested_at=lt.${encodeURIComponent(to)}&order=id.asc`); }
   }
 
   // ======================= Demo (this browser only) =======================
@@ -259,6 +263,8 @@
     async createInvite(role, note, channels) { this._master(); const inv = { code: randomCode(), role, note: note || null, channels: channels || [], created_by: this.user.id, created_at: new Date().toISOString(), used_by: null, used_at: null, revoked: false }; this.db.invites.push(inv); this._persist(); return inv; }
     async revokeInvite(code) { this._master(); const i = this.db.invites.find(x => x.code === code); if (i) i.revoked = true; this._persist(); }
     async listLog() { this._master(); return this.db.log; }
+    async listLogRange(from, to) { this._master(); return this.db.log.filter(l => l.at >= from && l.at < to).reverse(); }
+    async listRequestsRange(from, to) { this._master(); return (this.db.requests || []).filter(r => r.requested_at >= from && r.requested_at < to).sort((a, b) => a.id - b.id); }
     // ---- change requests (plan A: after the lock a manager asks, the master approves) ----
     async listRequests() {
       this._guard(); const all = this.db.requests || [];
