@@ -585,6 +585,7 @@
       isM ? mi('🔑 가입 코드 · 사용자 관리', manageUsers) : null,
       isM ? mi('📋 기준정보 (채널 · 제품) 올리기', masterData) : null,
       isM ? mi('🕘 변경 이력', showLog) : null,
+      isM ? mi('📥 변경 이력 엑셀로 받기', exportLog) : null,
       el('div', { class: 'sec' }, '기타'),
       mi('❓ 사용 안내', showHelp),
       mi('🔒 비밀번호 변경', () => changePw(false)),
@@ -820,6 +821,49 @@
         ch.length ? el('div', { style: 'font-size:13px;margin-top:4px' }, ch.join(' / ')) : null);
     }) : [el('div', { class: 'li' }, '변경 이력이 없습니다.')])));
   }
+  // master: change history (event_log) + requests (edit_requests) for a month range -> xlsx with 2 sheets
+  function exportLog() {
+    const t = todayKst().split('-').map(Number), cur = t[0] * 12 + t[1] - 1;
+    const ym = i => `${Math.floor(i / 12)}-${String(i % 12 + 1).padStart(2, '0')}`;
+    const kst0 = i => new Date(ym(i) + '-01T00:00:00+09:00').toISOString();
+    const opts = sel => { const s = el('select', { class: 'in' }); for (let i = cur; i >= 2026 * 12; i--) s.append(el('option', { value: i }, `${Math.floor(i / 12)}년 ${i % 12 + 1}월`)); s.value = sel; return s; };
+    const from = opts(cur), to = opts(cur), msg = el('div', { class: 'err' }); msg.hidden = true;
+    const go = el('button', { class: 'btn pri', style: 'margin-top:12px;width:100%' }, '엑셀로 받기');
+    const ACT = { insert: '등록', update: '수정', delete: '삭제' }, KIND = { create: '등록', update: '수정', delete: '삭제' }, ST = { pending: '대기', approved: '승인', rejected: '반려' };
+    const F = { channel_code: '채널', channel_detail: '세부채널명', title: '행사명', product_code: '제품번호', start_date: '시작일', end_date: '종료일', list_price: '단위당 정상가', sale_price: '단위당 판매가', pack_qty: '단위당 입수량', expected_qty: '예상수량', memo: '메모' };
+    const when = v => v ? new Date(v).toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).slice(0, 16) : '';
+    const val = (k, v) => v == null || v === '' ? '-' : k === 'channel_code' ? chLabel(v) : String(v);
+    const diff = (o, n) => Object.keys(F).filter(k => n && k in n && String(o?.[k] ?? '') !== String(n[k] ?? '')).map(k => `${F[k]}: ${val(k, o?.[k])} → ${val(k, n[k])}`).join('\n');
+    const pname = r => r.product_name || (pByCode(r.product_code) || {}).name || '';
+    const logRow = l => { const r = l.new_row || l.old_row || {};
+      return [when(l.at), userName(l.actor), ACT[l.action] || l.action, l.event_id ?? '', chLabel(r.channel_code, r.channel), r.channel_detail || '', r.title || '', r.product_code || '', pname(r), r.start_date || '', r.end_date || '',
+        l.action === 'update' ? diff(l.old_row, l.new_row) : l.action === 'delete' ? '행사 삭제' : '신규 등록', l.note || ''];
+    };
+    const reqRow = q => { const ch = q.changes || {}, r = { ...(q.before_row || {}), ...(q.kind === 'create' ? ch : {}) };
+      return [q.id, when(q.requested_at), userName(q.requested_by), KIND[q.kind] || q.kind, q.event_id ?? '', chLabel(r.channel_code, r.channel), r.channel_detail || '', r.title || '', r.product_code || '', pname(r), r.start_date || '', r.end_date || '',
+        q.kind === 'update' ? diff(q.before_row || {}, ch) : q.kind === 'delete' ? '행사 삭제' : '신규 등록', q.reason || '', ST[q.status] || q.status, q.decided_by ? userName(q.decided_by) : '', when(q.decided_at), q.comment || ''];
+    };
+    go.addEventListener('click', async () => {
+      let a = +from.value, b = +to.value; if (a > b) [a, b] = [b, a];
+      msg.hidden = true; go.disabled = true; go.textContent = '받는 중…';
+      try {
+        const [log, reqs] = await Promise.all([api.listLogRange(kst0(a), kst0(b + 1)), api.listRequestsRange(kst0(a), kst0(b + 1))]);
+        if (!log.length && !reqs.length) throw new Error('선택한 기간에 변경 이력이 없습니다.');
+        const s1 = [['일시', '작업자', '구분', '행사번호', '채널', '세부채널명', '행사명', '제품번호', '제품명', '시작일', '종료일', '바뀐 내용 (전 → 후)', '메모'], ...log.map(logRow)];
+        const s2 = [['요청번호', '요청 일시', '요청자', '구분', '행사번호', '채널', '세부채널명', '행사명', '제품번호', '제품명', '시작일', '종료일', '요청 내용 (전 → 후)', '사유', '결과', '처리자', '처리 일시', '처리 의견'], ...reqs.map(reqRow)];
+        const tag = ym(a).replace('-', '') + (a === b ? '' : '-' + ym(b).replace('-', ''));
+        download(await buildXlsx([{ name: '변경이력', rows: s1, header: true, wrap: [11], widths: [17, 10, 6, 8, 16, 12, 22, 10, 30, 11, 11, 40, 16] },
+          { name: '요청내역', rows: s2, header: true, wrap: [12, 13, 17], widths: [8, 17, 10, 6, 8, 16, 12, 22, 10, 30, 11, 11, 40, 24, 6, 10, 17, 24] }]), `행사캘린더_변경이력_${tag}.xlsx`);
+        close(); toast(`변경 ${log.length}건 · 요청 ${reqs.length}건 받았습니다.`);
+      } catch (x) { msg.textContent = x.message; msg.hidden = false; go.disabled = false; go.textContent = '엑셀로 받기'; }
+    });
+    const chip = (label, x, y) => el('button', { class: 'btn', style: 'flex:1;padding:8px 4px', onclick: () => { from.value = x; to.value = y; } }, label);
+    const close = sheet('변경 이력 엑셀로 받기', el('div', {},
+      el('p', { class: 's', style: 'color:var(--muted);margin-top:0' }, '변경이 일어난 연월을 고르세요. 시트1 변경이력(등록·수정·삭제, 누가·언제·전→후), 시트2 요청내역(요청·사유·승인/반려)으로 받습니다.'),
+      el('div', { style: 'display:flex;gap:6px;margin-bottom:10px' }, chip('이번 달', cur, cur), chip('지난 달', cur - 1, cur - 1), chip('최근 3개월', cur - 2, cur)),
+      el('div', { style: 'display:flex;gap:8px;align-items:center' }, el('div', { class: 'f', style: 'flex:1;margin:0' }, el('label', {}, '시작 월'), from), el('span', { style: 'padding-top:18px' }, '~'), el('div', { class: 'f', style: 'flex:1;margin:0' }, el('label', {}, '끝 월'), to)),
+      msg, go));
+  }
   // ---------------- in-app guide ----------------
   function showHelp() {
     const role = S.user ? S.user.role : 'manager', isM = role === 'master';
@@ -837,7 +881,8 @@
         '☰ 옆 빨간 숫자 = 승인 대기 요청 수. ☰ → 요청 승인에서 기존 값과 요청 값을 비교한 뒤 [승인] 또는 [반려]를 누릅니다.',
         '승인하면 바로 반영되고, 변경 이력에 "요청 #번호 승인"으로 남습니다. 반려 사유는 담당자에게 보입니다.',
         '☰ → 가입 코드 관리에서 담당자 코드를 만들어 전달합니다. 그만둔 사람은 [중지]합니다.',
-        '☰ → 기준정보 올리기에서 채널·제품 목록을 엑셀로 바꿉니다.')
+        '☰ → 기준정보 올리기에서 채널·제품 목록을 엑셀로 바꿉니다.',
+        '☰ → 변경 이력 엑셀로 받기: 고른 기간의 변경 이력(누가·언제·전→후)과 요청 내역(사유·승인/반려)을 시트 2개로 받습니다.')
       : sec('✍️ 담당자: 모든 변경은 요청으로',
         '신규 행사: 오른쪽 아래 ＋ → 내용 입력 → [마스터에게 요청 보내기]. 승인되면 달력에 올라갑니다.',
         '삭제 요청: 오른쪽 아래 − → 그 달 행사 중 지울 것을 체크 → 사유 적고 [삭제 요청 보내기]. 여러 건을 한 번에 보낼 수 있습니다.',
