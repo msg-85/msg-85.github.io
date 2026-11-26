@@ -2,7 +2,7 @@
 <html lang="ko">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src blob:; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
 <title>데이터 창구</title>
@@ -105,6 +105,15 @@ a { color: var(--out); }
 .drop::placeholder { color: var(--muted); }
 .drop:focus { border-color: var(--in); outline: none; }
 body.dragging .drop { border-color: var(--out); }
+.pptbox { flex: 1; min-height: 180px; border: 2px dashed var(--line); background: var(--sheet); padding: 14px; overflow: auto; outline: none; }
+.pptbox:focus { border-color: var(--in); }
+.pptbox .hint { color: var(--muted); text-align: center; margin: 24px 0; }
+.pptlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.pptitem { position: relative; border: 1px solid var(--line); background: var(--bg); padding: 6px; font-size: 12px; }
+.pptitem img { display: block; width: 100%; height: 120px; object-fit: contain; background: #fff; }
+.pptitem .txt { height: 120px; overflow: hidden; white-space: pre-wrap; color: var(--muted); }
+.pptitem .cap { margin-top: 4px; font-weight: 600; }
+.pptitem button { position: absolute; top: 4px; right: 4px; border: 1px solid var(--line); background: var(--sheet); cursor: pointer; padding: 0 6px; }
 .fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }
 .field { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); min-width: 0; }
 .field input { border: 1px solid var(--line); background: var(--sheet); padding: 6px 8px; color: var(--fg); width: 100%; font-size: 15px; }
@@ -396,6 +405,14 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   </section>
 
   <section class="pane" id="sendPane" hidden>
+    <div class="sub" role="tablist" id="sendKind">
+      <button type="button" role="tab" data-k="xl" aria-selected="true">엑셀 표</button>
+      <button type="button" role="tab" data-k="ppt" aria-selected="false">PPT·이미지</button>
+    </div>
+    <div class="pptbox" id="pptBox" tabindex="0" hidden aria-label="PPT 붙여넣기">
+      <p class="hint" id="pptHint">PowerPoint 왼쪽 슬라이드 목록에서 슬라이드를 골라 복사(Ctrl+C)한 뒤, 이 칸을 한 번 누르고 붙여넣기(Ctrl+V) 하세요.<br>여러 번 붙여넣으면 차례로 쌓입니다. 캡처 이미지(Win+Shift+S)나 .pptx 파일을 끌어다 놓아도 됩니다.</p>
+      <div class="pptlist" id="pptList"></div>
+    </div>
     <textarea class="drop" id="drop" aria-label="엑셀 데이터 붙여넣기" placeholder="엑셀에서 셀을 복사해 여기에 붙여넣거나, 파일을 이 창에 끌어다 놓으세요."></textarea>
     <div class="grid" id="draftGrid" hidden></div>
     <div class="fields">
@@ -551,7 +568,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   const PART = 8 * 1024 * 1024;              // bytes of compressed data per uploaded piece
   const MAX_ROWS = 500, MAX_CELLS = 30000;   // on-screen preview only
   const KEY = 'data-window-token';
-  let token = '', draft = null, files = [], reply = null, busy = false;
+  let token = '', draft = null, files = [], reply = null, busy = false, sendKindV = 'xl', ppt = [];
 
   // ---------- storage: may be unavailable, so never let it stop the page ----------
   const store = {
@@ -716,8 +733,9 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
 
   // ---------- choosing what to send ----------
   function ready() {
-    $('sendBtn').disabled = busy || !(draft || files.length);
-    $('clearBtn').hidden = !(draft || files.length);
+    const has = sendKindV === 'ppt' ? (ppt.length || files.length) : (draft || files.length);
+    $('sendBtn').disabled = busy || !has;
+    $('clearBtn').hidden = !has;
     $('saved').hidden = true; $('sendErr').hidden = true;
   }
   function takePaste(text) {
@@ -736,15 +754,67 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     $('draftGrid').hidden = true; $('draftGrid').replaceChildren(); $('drop').hidden = false;
     const total = files.reduce((s, f) => s + f.size, 0);
     $('draftInfo').textContent = `파일 ${files.length}개 · ${mb(total)} · ` + files.map(f => f.name).join(', ');
+    if (sendKindV === 'ppt') { $('drop').hidden = true; pptInfo(); }
     ready();
+  }
+  // ---------- PPT · images: each paste becomes one slide (picture + html + text, whatever the clipboard holds) ----------
+  function setSendKind(k) {
+    sendKindV = k;
+    for (const b of $('sendKind').querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.k === k));
+    const p = k === 'ppt';
+    $('pptBox').hidden = !p;
+    $('drop').hidden = p || !!draft; $('draftGrid').hidden = p || !draft;
+    pptInfo(); ready();
+  }
+  function pptInfo() {
+    if (sendKindV !== 'ppt') return;
+    const n = ppt.length, extra = files.length ? ` · 파일 ${files.length}개 (${files.map(f => f.name).join(', ')})` : '';
+    $('draftInfo').textContent = n || files.length ? `슬라이드 ${n}장${extra}` : 'PPT 슬라이드를 붙여넣거나 파일을 끌어다 놓으면 올릴 수 있습니다.';
+    $('pptHint').hidden = !!n;
+  }
+  function drawPpt() {
+    $('pptList').replaceChildren(...ppt.map((it, i) => {
+      const d = document.createElement('div'); d.className = 'pptitem';
+      if (it.img) { const im = document.createElement('img'); im.alt = ''; im.src = it.url || (it.url = URL.createObjectURL(it.img)); d.appendChild(im); }
+      else { const t = document.createElement('div'); t.className = 'txt'; t.textContent = it.text || '(서식만 있는 내용)'; d.appendChild(t); }
+      const c = document.createElement('div'); c.className = 'cap';
+      c.textContent = `${i + 1}번` + [it.img && '그림', it.html && '서식', it.text && '글자'].filter(Boolean).map(x => ' · ' + x).join('');
+      d.appendChild(c);
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.title = '빼기';
+      x.addEventListener('click', () => { if (busy) return; if (it.url) URL.revokeObjectURL(it.url); ppt.splice(i, 1); drawPpt(); pptInfo(); ready(); });
+      d.appendChild(x);
+      return d;
+    }));
+  }
+  function takePpt(cd) {
+    if (busy || !cd) return false;
+    const imgs = [...(cd.files || [])].filter(f => f.type.startsWith('image/'));
+    const html = cd.getData('text/html') || '', text = (cd.getData('text/plain') || '').trim();
+    if (!imgs.length && !html && !text) return false;
+    if (imgs.length) imgs.forEach((f, j) => ppt.push({ img: f, html: j ? '' : html, text: j ? '' : text }));
+    else ppt.push({ img: null, html, text });
+    drawPpt(); pptInfo(); ready();
+    return true;
+  }
+  function pptFiles() {
+    const out = [], p2 = n => String(n).padStart(2, '0');
+    ppt.forEach((it, i) => {
+      const b = `slide-${p2(i + 1)}`;
+      if (it.img) out.push(new File([it.img], `${b}.${(it.img.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: it.img.type }));
+      if (it.html) out.push(new File([it.html], `${b}.html`, { type: 'text/html' }));
+      if (it.text) out.push(new File([it.text], `${b}.txt`, { type: 'text/plain' }));
+    });
+    return out;
   }
   function clearDraft() {
     if (busy) return;
+    for (const it of ppt) if (it.url) URL.revokeObjectURL(it.url);
+    ppt = []; drawPpt();
     draft = null; files = [];
     $('draftGrid').hidden = true; $('draftGrid').replaceChildren();
     $('drop').hidden = false; $('drop').value = '';
     $('draftInfo').textContent = '표를 붙여넣거나 파일을 고르면 올릴 수 있습니다.';
-    ready();
+    setSendKind(sendKindV);
   }
 
   // ---------- upload ----------
@@ -780,11 +850,12 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     return { name: file.name, size: file.size, gzipBytes: stored, parts };
   }
   async function send() {
-    if (busy || !(draft || files.length)) return;
+    const isPpt = sendKindV === 'ppt';
+    if (busy || !(isPpt ? ppt.length || files.length : draft || files.length)) return;
     if (!('CompressionStream' in window)) { $('sendErr').textContent = '이 브라우저는 너무 오래돼서 올리기를 지원하지 않습니다. 최신 Chrome이나 Edge를 써주세요.'; $('sendErr').hidden = false; return; }
     const p2 = n => String(n).padStart(2, '0'), d = new Date();
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
-    const list = draft ? [new File([draft.raw], 'paste.tsv', { type: 'text/tab-separated-values' })] : files;
+    const list = isPpt ? [...pptFiles(), ...files] : draft ? [new File([draft.raw], 'paste.tsv', { type: 'text/tab-separated-values' })] : files;
     const total = list.reduce((s, f) => s + f.size, 0) || 1;
     busy = true; $('sendBtn').disabled = true; $('upPick').disabled = true; $('clearBtn').disabled = true;
     $('saved').hidden = true; $('sendErr').hidden = true; $('prog').hidden = false; $('prog').value = 0;
@@ -798,6 +869,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
         before += list[i].size;
       }
       const manifest = { title: $('title').value.trim(), note: $('note').value.trim(), createdAt: d.toISOString(), files: out };
+      if (isPpt) manifest.kind = 'ppt';
       const json = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
       await put(`inbox/${stamp}/manifest.json`, toBase64(json), `upload ${stamp} done`);
       const kept = out.reduce((s, f) => s + f.gzipBytes, 0);
@@ -816,11 +888,19 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     if (!token) return;
     const t = e.target;
     if (t.tagName === 'INPUT' || (t.tagName === 'TEXTAREA' && t.id !== 'drop')) return;
-    const text = e.clipboardData && e.clipboardData.getData('text/plain');
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const text = cd.getData('text/plain'), hasImg = [...(cd.files || [])].some(f => f.type.startsWith('image/'));
+    // a picture with no table text (or the PPT tab open) goes to PPT; tab-separated text goes to the table
+    if (sendKindV === 'ppt' || (hasImg && !(text && text.includes('\t')))) {
+      e.preventDefault(); tab('send'); if (sendKindV !== 'ppt') setSendKind('ppt'); takePpt(cd); return;
+    }
     if (text) { e.preventDefault(); tab('send'); takePaste(text); }
   });
   $('drop').addEventListener('input', () => { const v = $('drop').value; if (v) { $('drop').value = ''; takePaste(v); } });
   $('clearBtn').addEventListener('click', clearDraft);
+  $('sendKind').addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if (b && !busy) setSendKind(b.dataset.k); });
+  $('pptBox').addEventListener('click', () => $('pptBox').focus());
   $('sendBtn').addEventListener('click', send);
   $('upPick').addEventListener('click', () => $('upIn').click());
   $('upIn').addEventListener('change', e => { takeFiles(e.target.files); e.target.value = ''; });
