@@ -3422,12 +3422,13 @@ html, body { height: auto; }
     const cat = d.multi
       ? `<c:cat><c:multiLvlStrRef><c:f>Sheet1!$A$2:$B$${last}</c:f><c:multiLvlStrCache><c:ptCount val="${n}"/><c:lvl>${strPts(d.rows.map(r => r.i))}</c:lvl><c:lvl>${strPts(d.rows.map(r => r.o))}</c:lvl></c:multiLvlStrCache></c:multiLvlStrRef></c:cat>`
       : `<c:cat><c:strRef><c:f>Sheet1!$A$2:$A$${last}</c:f><c:strCache><c:ptCount val="${n}"/>${strPts(d.rows.map(r => r.o))}</c:strCache></c:strRef></c:cat>`;
-    const S = [['기준', 'base', null, null], ['합계', 'tot', 'accent3', d.nfTot], ['증가', 'up', 'accent1', d.nfUp], ['감소', 'dn', 'accent2', d.nfDn]];
+    const G = '63BE7B', R = 'F8696B', ug = d.pct ? R : G, dg = d.pct ? G : R;
+    const S = [['기준', 'base', null, null], ['합계', 'tot', '5B9BD5', d.nfTot], ['증가', 'up', ug, d.nfUp], ['감소', 'dn', dg, d.nfDn]];
     const ser = S.map(([nm, key, clr, nf], s) => {
       const c = col(s), pts = d.rows.map((r, i) => r[key] == null ? '' : `<c:pt idx="${i}"><c:v>${+r[key].toPrecision(12)}</c:v></c:pt>`).join('');
       return `<c:ser><c:idx val="${s}"/><c:order val="${s}"/><c:tx><c:strRef><c:f>Sheet1!$${c}$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${nm}</c:v></c:pt></c:strCache></c:strRef></c:tx>` +
-        `<c:spPr>${clr ? `<a:solidFill><a:schemeClr val="${clr}"/></a:solidFill>` : '<a:noFill/>'}<a:ln><a:noFill/></a:ln></c:spPr><c:invertIfNegative val="0"/>` +
-        (nf ? `<c:dLbls><c:numFmt formatCode="${xesc(nf)}" sourceLinked="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(lbl, '404040', key === 'tot')}<c:dLblPos val="${key === 'tot' ? 'inEnd' : 'ctr'}"/><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>` : '') +
+        `<c:spPr>${clr ? `<a:solidFill><a:srgbClr val="${clr}"/></a:solidFill>` : '<a:noFill/>'}<a:ln><a:noFill/></a:ln></c:spPr><c:invertIfNegative val="0"/>` +
+        (nf ? `<c:dLbls><c:numFmt formatCode="${xesc(nf)}" sourceLinked="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(lbl, '262626', key === 'tot')}<c:dLblPos val="${key === 'tot' ? 'inEnd' : 'ctr'}"/><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>` : '') +
         cat + `<c:val><c:numRef><c:f>Sheet1!$${c}$2:$${c}$${last}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${n}"/>${pts}</c:numCache></c:numRef></c:val></c:ser>`;
     }).join('');
     const grid = '<a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill><a:round/></a:ln>';
