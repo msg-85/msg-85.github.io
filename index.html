@@ -1170,7 +1170,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const enc = new TextEncoder(), out = [], dir = []; let off = 0;
     const u16 = v => [v & 255, (v >>> 8) & 255], u32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
     for (const e of entries) {
-      const parts = (Array.isArray(e.data) ? e.data : [e.data]).map(s => enc.encode(s));
+      const parts = (Array.isArray(e.data) ? e.data : [e.data]).map(s => typeof s === "string" ? enc.encode(s) : s);
       let c = 0xffffffff, rawLen = 0;
       for (const p of parts) { c = crc32(p, c); rawLen += p.length; }
       const crc = (c ^ 0xffffffff) >>> 0, raw = new Blob(parts); parts.length = 0;
@@ -3151,7 +3151,6 @@ html, body { height: auto; }
   // ---------- ④ 브릿지 (waterfall): 26 → 27 매출, and the cost rate split per item into 율 효과 + 믹스 효과 ----------
   // 부문 브릿지: one 부문 (or all), steps = 대분류. 제품 브릿지: one 대분류 (optionally one 소분류), steps = 팀.
   // The layout is built once as primitives (rect / text / line in abstract units) and drawn as SVG on screen or as shapes in a pptx.
-  const BR_COL = { tot: '2A78D6', up: '1D7A4A', dn: 'C0262D', txt: '333333', mut: '888888', ln: 'B0B0B0' };
   function brDims(M) {
     const f = re => M.dims.findIndex(d => re.test(d));
     return { B: f(/부문/), T: f(/^팀|팀$/), L: f(/대분류|대카테고리/), S: f(/소분류|소카테고리/) };
@@ -3357,8 +3356,14 @@ html, body { height: auto; }
     saveState(); drawAnalysis();
   });
 
-  // ---------- 브릿지 → pptx (shapes, so every bar and label stays editable) ----------
+  // ---------- 브릿지 → pptx ----------
+  // 4:3 slides in the look of the user's 보고 deck: dark title bar, gray label + boxed one-line summary, [구간] labels with (단위 : …),
+  // light-blue table rules, good = green / bad = red, page number -n- at the bottom.
+  // The two waterfalls are real Excel charts (stacked columns over an invisible 기준 series, Office default theme colors:
+  // 증가 = accent1 blue, 감소 = accent2 orange, 합계 = accent3 gray, as Excel's own waterfall) with the workbook embedded,
+  // so PowerPoint's 「데이터 편집」 opens the numbers in Excel.
   const EMU = 914400;
+  const PP = { bar: '404040', lab: '7F7F7F', box: 'A6A6A6', line: '9DC3E6', tint: 'DBEEF4', txt: '262626', mut: '7F7F7F', good: '339933', bad: 'E00000' };
   function brPptSlides(scope) {
     const M = AS.model, D = brDims(M), st = brState(), C = compute(), out = [];
     const code = (d, n) => d < 0 || !n ? -1 : M.vals[d].indexOf(n);
@@ -3375,15 +3380,96 @@ html, body { height: auto; }
     }
     return out;
   }
+  // waterfall rows for a stacked-column chart: 기준 (invisible) + 합계 | 증가 | 감소
+  function brWf(start, end, steps) {
+    const rows = [{ o: start.label, i: '', base: 0, tot: start.v }];
+    let run = start.v, lo = run, hi = run;
+    for (const s of steps) {
+      const b = run + s.v;
+      rows.push({ o: s.o, i: s.i, base: Math.min(run, b), up: s.v > 0 ? s.v : null, dn: s.v < 0 ? -s.v : null });
+      run = b; lo = Math.min(lo, b); hi = Math.max(hi, b);
+    }
+    rows.push({ o: end.label, i: '', base: 0, tot: end.v });
+    lo = Math.min(lo, end.v); hi = Math.max(hi, end.v);
+    // zoom the value axis onto the moves (the totals are cut at the bottom), like the on-screen chart
+    const span = hi - lo || Math.abs(hi) * 0.1 || 1, raw = (span * 1.9) / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), unit = [1, 2, 5, 10].map(k => k * p).find(k => k >= raw);
+    let min = Math.floor((lo - span * 0.7) / unit) * unit;
+    if (lo >= 0 && min < 0) min = 0;
+    if (lo < 0) min = null;   // a negative level breaks the invisible-base trick's zoom: let Excel pick
+    const max = Math.ceil((hi + span * 0.2) / unit) * unit;
+    return { rows, min, max, cut: min != null && min > 0 };
+  }
+  function brXl(sp) {
+    const [a, b] = yrs(), dv = AS.s.div || 1;
+    const sh = n => String(n).replace(/^[A-Za-z0-9]{1,4}[.)]\s*/, '');
+    const sales = brWf({ label: a, v: sp.t.S0 / dv }, { label: b, v: sp.t.S1 / dv }, sp.sales.map(r => ({ o: sh(r.name), i: '', v: r.d / dv })));
+    Object.assign(sales, { multi: false, nfTot: '#,##0', nfUp: '+#,##0;-#,##0;;', nfDn: '-#,##0;+#,##0;;' });
+    const steps = [];
+    for (const r of sp.cost) {
+      const r2 = v => Math.round(v * 100 * 100) / 100;
+      if (r.adj) steps.push({ o: sh(r.name), i: '계', v: r2(r.tot) });
+      else steps.push({ o: sh(r.name), i: '율', v: r2(r.rate) }, { o: '', i: '믹스', v: r2(r.mix) });
+    }
+    const cost = brWf({ label: a, v: sp.R0 * 100 }, { label: b, v: sp.R1 * 100 }, steps);
+    Object.assign(cost, { multi: true, nfTot: '0.0"%"', nfUp: '+0.00;-0.00;;', nfDn: '-0.00;+0.00;;' });
+    return { sales, cost };
+  }
+  // the chart part (c:chartSpace) for one waterfall; the same numbers go into the embedded workbook's Sheet1
+  function xlChartXml(d) {
+    const n = d.rows.length, k = d.multi ? 2 : 1, last = n + 1, col = s => String.fromCharCode(65 + k + s);
+    const lbl = n > 14 ? 650 : n > 9 ? 700 : 800;
+    const txPr = (sz, clr, b) => `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}" b="${b ? 1 : 0}"><a:solidFill><a:srgbClr val="${clr}"/></a:solidFill><a:latin typeface="맑은 고딕"/><a:ea typeface="맑은 고딕"/></a:defRPr></a:pPr><a:endParaRPr lang="ko-KR"/></a:p></c:txPr>`;
+    const strPts = arr => arr.map((v, i) => v === '' || v == null ? '' : `<c:pt idx="${i}"><c:v>${xesc(v)}</c:v></c:pt>`).join('');
+    const cat = d.multi
+      ? `<c:cat><c:multiLvlStrRef><c:f>Sheet1!$A$2:$B$${last}</c:f><c:multiLvlStrCache><c:ptCount val="${n}"/><c:lvl>${strPts(d.rows.map(r => r.i))}</c:lvl><c:lvl>${strPts(d.rows.map(r => r.o))}</c:lvl></c:multiLvlStrCache></c:multiLvlStrRef></c:cat>`
+      : `<c:cat><c:strRef><c:f>Sheet1!$A$2:$A$${last}</c:f><c:strCache><c:ptCount val="${n}"/>${strPts(d.rows.map(r => r.o))}</c:strCache></c:strRef></c:cat>`;
+    const S = [['기준', 'base', null, null], ['합계', 'tot', 'accent3', d.nfTot], ['증가', 'up', 'accent1', d.nfUp], ['감소', 'dn', 'accent2', d.nfDn]];
+    const ser = S.map(([nm, key, clr, nf], s) => {
+      const c = col(s), pts = d.rows.map((r, i) => r[key] == null ? '' : `<c:pt idx="${i}"><c:v>${+r[key].toPrecision(12)}</c:v></c:pt>`).join('');
+      return `<c:ser><c:idx val="${s}"/><c:order val="${s}"/><c:tx><c:strRef><c:f>Sheet1!$${c}$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${nm}</c:v></c:pt></c:strCache></c:strRef></c:tx>` +
+        `<c:spPr>${clr ? `<a:solidFill><a:schemeClr val="${clr}"/></a:solidFill>` : '<a:noFill/>'}<a:ln><a:noFill/></a:ln></c:spPr><c:invertIfNegative val="0"/>` +
+        (nf ? `<c:dLbls><c:numFmt formatCode="${xesc(nf)}" sourceLinked="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(lbl, '404040', key === 'tot')}<c:dLblPos val="${key === 'tot' ? 'inEnd' : 'ctr'}"/><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>` : '') +
+        cat + `<c:val><c:numRef><c:f>Sheet1!$${c}$2:$${c}$${last}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${n}"/>${pts}</c:numCache></c:numRef></c:val></c:ser>`;
+    }).join('');
+    const grid = '<a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill><a:round/></a:ln>';
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<c:date1904 val="0"/><c:lang val="ko-KR"/><c:roundedCorners val="0"/><c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/>' +
+      `<c:barChart><c:barDir val="col"/><c:grouping val="stacked"/><c:varyColors val="0"/>${ser}<c:gapWidth val="${d.multi ? 40 : 60}"/><c:overlap val="100"/><c:axId val="5001"/><c:axId val="5002"/></c:barChart>` +
+      `<c:catAx><c:axId val="5001"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="low"/><c:spPr><a:noFill/>${grid}</c:spPr>${txPr(d.multi ? 700 : 800, '595959')}<c:crossAx val="5002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>` +
+      `<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/>${d.min != null ? `<c:max val="${+d.max.toPrecision(12)}"/><c:min val="${+d.min.toPrecision(12)}"/>` : ''}</c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines><c:spPr>${grid}</c:spPr></c:majorGridlines><c:numFmt formatCode="${xesc(d.multi ? '0.0' : '#,##0')}" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(800, '595959')}<c:crossAx val="5001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>` +
+      `<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea><c:legend><c:legendPos val="b"/><c:legendEntry><c:idx val="0"/><c:delete val="1"/></c:legendEntry><c:overlay val="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(800, '595959')}</c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>` +
+      `<c:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>${grid}</c:spPr>${txPr(900, '595959')}<c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
+  }
+  async function xlChartBook(d) {
+    const head = d.multi ? ['', '', '기준', '합계', '증가', '감소'] : ['', '기준', '합계', '증가', '감소'];
+    const rows = [head, ...d.rows.map(r => [...(d.multi ? [r.o, r.i] : [r.o]), ...['base', 'tot', 'up', 'dn'].map(k => r[k] == null ? '' : +r[k].toPrecision(12))])];
+    const blob = await buildXlsx([{ name: 'Sheet1', rows, header: false }]);
+    return new Uint8Array(await blob.arrayBuffer());
+  }
   async function brDownload(btn) {
     const info = $('brInfo'), scope = $('brScope').value;
     btn.disabled = true; info.textContent = 'PPT 만드는 중…';
     try {
       const sps = brPptSlides(scope);
       if (!sps.length) throw new Error('만들 장표가 없습니다.');
-      const [a, b] = yrs(), meta = { sub: `${a} → ${b}${perText() ? ' · ' + perText() : ''} · 금액 ${divName()} · ${costName()} %`, src: AS.c.extra && AS.c.extra.title || AS.c.name };
-      const slides = sps.map(sp => ({ title: `${sp.name} 브릿지`, sub: `하단 ${sp.step} · ` + meta.sub, charts: brCharts(sp), table: brTable(sp), foot: meta.src }));
-      const blob = await zip(pptxEntries(slides));
+      const [a, b] = yrs(), cn = costName(), pt = perText(), src = AS.c.extra && AS.c.extra.title || AS.c.name;
+      const slides = sps.map((sp, i) => {
+        const t = sp.t, xl = brXl(sp);
+        const topS = sp.sales.filter(r => !r.other).slice().sort((x, y) => Math.abs(y.d) - Math.abs(x.d))[0];
+        const topC = sp.cost.filter(r => !r.other).slice().sort((x, y) => Math.abs(y.tot) - Math.abs(x.tot))[0];
+        return {
+          title: `${i + 1}. ${sp.mode === 'div' ? '부문' : '제품'}별 매출·${cn} 브릿지 (${a} → ${b}${pt ? ', ' + pt : ''})`,
+          label: sp.name,
+          sum1: `매출 ${fN(t.S0)} → ${fN(t.S1)} (${fD(t.dS)}${fin2(t.gS) ? ', ' + fG(t.gS) : ''})  /  ${cn} ${fP(sp.R0)} → ${fP(sp.R1)} (${fPP(sp.R1 - sp.R0, 2)})  /  CM ${fD(t.dM)}`,
+          sum2: [topS ? `매출 主 요인 : ${topS.name} ${fD(topS.d)}` : '', topC ? `${cn} 主 요인 : ${topC.name} ${fPP(topC.tot, 2)}` : ''].filter(Boolean).join('  ·  '),
+          secS: `[매출 브릿지 : ${sp.step}별]`, unitS: `(단위 : ${divName()}${xl.sales.cut ? ', 세로축 일부 생략' : ''})`,
+          secC: `[${cn} 브릿지 : ${sp.step}별 율·믹스]`, unitC: `(단위 : %, %p${xl.cost.cut ? ', 세로축 일부 생략' : ''})`,
+          secT: `[${sp.step}별 상세]`, unitT: `(단위 : ${divName()}, %, %p)`,
+          xl, table: brTable(sp),
+          foot: `※ 율 효과 = 각 ${sp.step}의 ${cn} 변화 × ${b} 매출 비중, 믹스 효과 = 매출 비중 변화·신규/종료.  출처 : ${src}`,
+        };
+      });
+      const blob = await zip(await pptxEntries(slides));
       const url = URL.createObjectURL(new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' }));
       const aEl = document.createElement('a'); aEl.href = url; aEl.download = niceName(AS.c.name, ` (브릿지 ${slides.length}장).pptx`); document.body.appendChild(aEl); aEl.click(); aEl.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
@@ -3391,80 +3477,87 @@ html, body { height: auto; }
     } catch (e) { info.textContent = 'PPT를 만들지 못했습니다: ' + (e.message || e); console.error(e); }
     btn.disabled = false;
   }
-  // primitives (abstract units) → DrawingML shapes placed in the box (x, y, w, h) in inches
-  function pptShapes(L, bx, by, bw, bh, idRef) {
-    const sx = bw / L.W, sy = bh / L.H, e = v => Math.round(v * EMU);
-    let xml = '';
-    const nv = (kind, name) => { const id = idRef.n++; return kind === 'cxn' ? `<p:nvCxnSpPr><p:cNvPr id="${id}" name="${name} ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>` : `<p:nvSpPr><p:cNvPr id="${id}" name="${name} ${id}"/><p:cNvSpPr${kind === 'tx' ? ' txBox="1"' : ''}/><p:nvPr/></p:nvSpPr>`; };
-    for (const p of L.P) {
-      if (p.t === 'rect') {
-        const fillX = `<a:solidFill><a:srgbClr val="${BR_COL[p.c]}">${p.light ? '<a:alpha val="45000"/>' : ''}</a:srgbClr></a:solidFill>`;
-        const lnX = p.light ? `<a:ln w="6350"><a:solidFill><a:srgbClr val="${BR_COL[p.c]}"/></a:solidFill></a:ln>` : '<a:ln><a:noFill/></a:ln>';
-        xml += `<p:sp>${nv('sp', 'Bar')}<p:spPr><a:xfrm><a:off x="${e(bx + p.x * sx)}" y="${e(by + p.y * sy)}"/><a:ext cx="${Math.max(1, e(p.w * sx))}" cy="${Math.max(1, e(p.h * sy))}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${fillX}${lnX}</p:spPr></p:sp>`;
-      } else if (p.t === 'line') {
-        const x1 = bx + p.x1 * sx, y1 = by + p.y1 * sy, x2 = bx + p.x2 * sx, y2 = by + p.y2 * sy;
-        const flip = y2 < y1 ? ' flipV="1"' : '';
-        xml += `<p:cxnSp>${nv('cxn', 'Line')}<p:spPr><a:xfrm${flip}><a:off x="${e(Math.min(x1, x2))}" y="${e(Math.min(y1, y2))}"/><a:ext cx="${e(Math.abs(x2 - x1))}" cy="${e(Math.abs(y2 - y1))}"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="6350"><a:solidFill><a:srgbClr val="${BR_COL[p.c]}"/></a:solidFill>${p.dash ? '<a:prstDash val="dash"/>' : ''}</a:ln></p:spPr></p:cxnSp>`;
-      } else {
-        const lines = p.wrap ? brWrap(p.s, p.w, p.size) : String(p.s).split('\n');
-        const pt = Math.round(p.size * sy * 72 * 100 * 0.92) / 100, sz = Math.max(600, Math.round(pt * 100));
-        xml += `<p:sp>${nv('tx', 'Text')}<p:spPr><a:xfrm><a:off x="${e(bx + p.x * sx)}" y="${e(by + p.y * sy)}"/><a:ext cx="${e(p.w * sx)}" cy="${e(Math.max(p.h, lines.length * p.size * 1.2) * sy)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
-          `<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>` +
-          lines.map(ln => `<a:p><a:pPr algn="${p.al === 'c' ? 'ctr' : 'l'}"/><a:r>${pptRun(sz, p.bold, BR_COL[p.c])}<a:t>${xesc(ln)}</a:t></a:r></a:p>`).join('') + '</p:txBody></p:sp>';
-      }
-    }
-    return xml;
-  }
   const pptRun = (sz, bold, col) => `<a:rPr lang="ko-KR" sz="${sz}"${bold ? ' b="1"' : ''} dirty="0"><a:solidFill><a:srgbClr val="${col}"/></a:solidFill><a:latin typeface="맑은 고딕"/><a:ea typeface="맑은 고딕"/></a:rPr>`;
-  function pptText(idRef, x, y, w, h, s, sz, bold, col, al) {
-    const id = idRef.n++, e = v => Math.round(v * EMU);
-    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Text ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(w)}" cy="${e(h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
-      `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/><a:p><a:pPr algn="${al || 'l'}"/><a:r>${pptRun(sz, bold, col)}<a:t>${xesc(s)}</a:t></a:r></a:p></p:txBody></p:sp>`;
+  // a box: o = {fill, line, al: 'l'|'ctr'|'r', anchor, ins (inches), lines: [{s, sz, b, c}]}
+  function pptBox(idRef, x, y, w, h, o) {
+    const id = idRef.n++, e = v => Math.round(v * EMU), ins = e(o.ins || 0);
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Box ${id}"/><p:cNvSpPr${o.fill || o.line ? '' : ' txBox="1"'}/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(w)}" cy="${e(h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+      (o.fill ? `<a:solidFill><a:srgbClr val="${o.fill}"/></a:solidFill>` : '<a:noFill/>') + (o.line ? `<a:ln w="9525"><a:solidFill><a:srgbClr val="${o.line}"/></a:solidFill></a:ln>` : '<a:ln><a:noFill/></a:ln>') + '</p:spPr>' +
+      `<p:txBody><a:bodyPr wrap="square" lIns="${ins}" tIns="0" rIns="${ins}" bIns="0" anchor="${o.anchor || 'ctr'}"><a:normAutofit/></a:bodyPr><a:lstStyle/>` +
+      o.lines.map(l => `<a:p><a:pPr algn="${o.al || 'l'}"/><a:r>${pptRun(l.sz, l.b, l.c)}<a:t>${xesc(l.s)}</a:t></a:r></a:p>`).join('') + '</p:txBody></p:sp>';
   }
-  function pptTable(idRef, x, y, w, head, rows) {
-    const id = idRef.n++, e = v => Math.round(v * EMU), rh = 0.24;
-    const widths = head.map((_, i) => i === 0 ? 2.2 : 1), tw = widths.reduce((a, b) => a + b, 0), cw = widths.map(v => e(v / tw * w));
-    const cell = (s, j, hd, tot) => `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr algn="${j ? 'r' : 'l'}"/><a:r>${pptRun(800, hd || tot, hd ? 'FFFFFF' : brBad(s, j) ? 'C0262D' : '333333')}<a:t>${xesc(s)}</a:t></a:r></a:p></a:txBody>` +
-      `<a:tcPr marL="45720" marR="45720" marT="9144" marB="9144" anchor="ctr"><a:lnB w="6350"><a:solidFill><a:srgbClr val="D0D0D0"/></a:solidFill></a:lnB>${hd ? '<a:solidFill><a:srgbClr val="44546A"/></a:solidFill>' : tot ? '<a:solidFill><a:srgbClr val="EEF2F7"/></a:solidFill>' : '<a:noFill/>'}</a:tcPr></a:tc>`;
-    const tr = (r, hd, tot) => `<a:tr h="${e(rh)}">${r.map((s, j) => cell(String(s), j, hd, tot)).join('')}</a:tr>`;
+  function pptChartFrame(idRef, x, y, w, h, rid) {
+    const id = idRef.n++, e = v => Math.round(v * EMU);
+    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Chart ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(w)}" cy="${e(h)}"/></p:xfrm>` +
+      `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="${rid}"/></a:graphicData></a:graphic></p:graphicFrame>`;
+  }
+  // the deck's table: no header fill, light-blue rules (thick at top/bottom), vertical rules between column groups, tinted 합계 row
+  function pptTable(idRef, x, y, w, head, rows, rh) {
+    const id = idRef.n++, e = v => Math.round(v * EMU);
+    const widths = head.map((_, i) => i === 0 ? 1.9 : i === 5 ? 1.35 : 1), tw = widths.reduce((a, b) => a + b, 0), cw = widths.map(v => e(v / tw * w));
+    const vr = new Set([0, 4, 8]);
+    const ln = (tag, wd) => `<a:${tag} w="${wd}" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:srgbClr val="${PP.line}"/></a:solidFill><a:prstDash val="solid"/></a:${tag}>`;
+    const nol = tag => `<a:${tag} w="0"><a:noFill/></a:${tag}>`, N = rows.length;
+    const cell = (s, j, hd, tot, ri) => {
+      const T = hd ? ln('lnT', 19050) : ri === 0 || tot ? ln('lnT', 12700) : nol('lnT');
+      const B = hd ? ln('lnB', 12700) : tot ? ln('lnB', 19050) : ri === N - 2 ? ln('lnB', 12700) : nol('lnB');
+      const col = hd ? PP.txt : brBad(s, j) ? PP.bad : brGood(s, j) ? PP.good : PP.txt;
+      return `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr algn="${j || hd ? 'ctr' : 'l'}"/><a:r>${pptRun(800, hd || tot || j === 0, col)}<a:t>${xesc(s)}</a:t></a:r><a:endParaRPr lang="ko-KR" sz="800"/></a:p></a:txBody>` +
+        `<a:tcPr marL="54000" marR="36000" marT="0" marB="0" anchor="ctr">${vr.has(j - 1) ? ln('lnL', 9525) : nol('lnL')}${vr.has(j) ? ln('lnR', 9525) : nol('lnR')}${T}${B}` +
+        `${tot ? `<a:solidFill><a:srgbClr val="${PP.tint}"/></a:solidFill>` : '<a:noFill/>'}</a:tcPr></a:tc>`;
+    };
+    const tr = (r, hd, tot, ri) => `<a:tr h="${e(rh)}">${r.map((s, j) => cell(String(s), j, hd, tot, ri)).join('')}</a:tr>`;
     return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Table ${id}"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>` +
       `<p:xfrm><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(w)}" cy="${e(rh * (rows.length + 1))}"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr firstRow="1"/><a:tblGrid>${cw.map(v => `<a:gridCol w="${v}"/>`).join('')}</a:tblGrid>` +
-      tr(head, true, false) + rows.map((r, i) => tr(r, false, i === rows.length - 1)).join('') + '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>';
+      tr(head, true, false, -1) + rows.map((r, i) => tr(r, false, i === rows.length - 1, i)).join('') + '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>';
   }
-  function pptxEntries(slides) {
+  async function pptxEntries(slides) {
     const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
     const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n', REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
     const rels = list => X + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.map(([id, type, target]) => `<Relationship Id="${id}" Type="${type.startsWith('http') ? type : REL + '/' + type}" Target="${target}"/>`).join('')}</Relationships>`;
     const tree = inner => `<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${inner}</p:spTree>`;
-    const E = [];
-    E.push({ name: '[Content_Types].xml', data: X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+    const E = [], nC = slides.length * 2;
+    E.push({ name: '[Content_Types].xml', data: X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>' +
       '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
-      slides.map((_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('') + '</Types>' });
+      slides.map((_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('') +
+      Array.from({ length: nC }, (_, i) => `<Override PartName="/ppt/charts/chart${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`).join('') + '</Types>' });
     E.push({ name: '_rels/.rels', data: rels([['rId1', 'officeDocument', 'ppt/presentation.xml']]) });
-    E.push({ name: 'ppt/presentation.xml', data: X + `<p:presentation ${NS} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 3}"/>`).join('')}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>` });
+    E.push({ name: 'ppt/presentation.xml', data: X + `<p:presentation ${NS} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 3}"/>`).join('')}</p:sldIdLst><p:sldSz cx="9144000" cy="6858000" type="screen4x3"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>` });
     E.push({ name: 'ppt/_rels/presentation.xml.rels', data: rels([['rId1', 'slideMaster', 'slideMasters/slideMaster1.xml'], ['rId2', 'theme', 'theme/theme1.xml'], ...slides.map((_, i) => [`rId${i + 3}`, 'slide', `slides/slide${i + 1}.xml`])]) });
     E.push({ name: 'ppt/slideMasters/slideMaster1.xml', data: X + `<p:sldMaster ${NS}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>${tree('')}</p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>` });
     E.push({ name: 'ppt/slideMasters/_rels/slideMaster1.xml.rels', data: rels([['rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml'], ['rId2', 'theme', '../theme/theme1.xml']]) });
     E.push({ name: 'ppt/slideLayouts/slideLayout1.xml', data: X + `<p:sldLayout ${NS} type="blank" preserve="1"><p:cSld name="빈 화면">${tree('')}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>` });
     E.push({ name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels', data: rels([['rId1', 'slideMaster', '../slideMasters/slideMaster1.xml']]) });
+    // Office default theme colors, so the charts carry Excel's default look
     const clr = (n, v) => `<a:${n}><a:srgbClr val="${v}"/></a:${n}>`;
     const fill3 = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
-    E.push({ name: 'ppt/theme/theme1.xml', data: X + `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Bridge"><a:themeElements><a:clrScheme name="Bridge"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>${clr('dk2', '44546A')}${clr('lt2', 'E7E6E6')}${clr('accent1', '2A78D6')}${clr('accent2', 'EB6834')}${clr('accent3', '1BAF7A')}${clr('accent4', 'EDA100')}${clr('accent5', 'E87BA4')}${clr('accent6', '7D5BD6')}${clr('hlink', '0563C1')}${clr('folHlink', '954F72')}</a:clrScheme>` +
-      `<a:fontScheme name="Bridge"><a:majorFont><a:latin typeface="맑은 고딕"/><a:ea typeface="맑은 고딕"/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="맑은 고딕"/><a:ea typeface="맑은 고딕"/><a:cs typeface=""/></a:minorFont></a:fontScheme>` +
-      `<a:fmtScheme name="Bridge"><a:fillStyleLst>${fill3}</a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst>${fill3}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>` });
-    slides.forEach((s, i) => {
-      const idRef = { n: 2 };
-      let inner = `<p:sp><p:nvSpPr><p:cNvPr id="${idRef.n++}" name="Top bar"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="91440"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="44546A"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
-      inner += pptText(idRef, 0.4, 0.22, 12.5, 0.5, s.title, 2200, true, '222222');
-      inner += pptText(idRef, 0.4, 0.70, 12.5, 0.3, s.sub, 1100, false, '666666');
-      inner += pptShapes(s.charts.sales, 0.35, 1.1, 6.2, 2.75, idRef);
-      inner += pptShapes(s.charts.cost, 6.8, 1.1, 6.2, 2.75, idRef);
-      inner += pptTable(idRef, 0.4, 4.05, 12.5, s.table.head, s.table.rows);
-      inner += pptText(idRef, 0.4, 7.15, 9, 0.25, s.foot, 800, false, '999999');
-      inner += pptText(idRef, 11.9, 7.15, 1, 0.25, String(i + 1), 800, false, '999999', 'r');
+    E.push({ name: 'ppt/theme/theme1.xml', data: X + `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office 테마"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>${clr('dk2', '44546A')}${clr('lt2', 'E7E6E6')}${clr('accent1', '4472C4')}${clr('accent2', 'ED7D31')}${clr('accent3', 'A5A5A5')}${clr('accent4', 'FFC000')}${clr('accent5', '5B9BD5')}${clr('accent6', '70AD47')}${clr('hlink', '0563C1')}${clr('folHlink', '954F72')}</a:clrScheme>` +
+      `<a:fontScheme name="Office"><a:majorFont><a:latin typeface="맑은 고딕"/><a:ea typeface="맑은 고딕"/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="맑은 고딕"/><a:ea typeface="맑은 고딕"/><a:cs typeface=""/></a:minorFont></a:fontScheme>` +
+      `<a:fmtScheme name="Office"><a:fillStyleLst>${fill3}</a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst>${fill3}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>` });
+    for (let i = 0; i < slides.length; i++) {
+      const s = slides[i], idRef = { n: 2 }, c1 = i * 2 + 1, c2 = c1 + 1;
+      const sec = (x, w, t, u) => pptBox(idRef, x, 1.36, w, 0.24, { lines: [{ s: t, sz: 1000, b: true, c: PP.txt }], anchor: 'b' }) +
+        pptBox(idRef, x, 1.36, w, 0.24, { al: 'r', lines: [{ s: u, sz: 750, c: PP.txt }], anchor: 'b' });
+      let inner = pptBox(idRef, 0.3, 0.25, 9.4, 0.38, { fill: PP.bar, ins: 0.12, lines: [{ s: s.title, sz: 1500, b: true, c: 'FFFFFF' }] });
+      inner += pptBox(idRef, 0.3, 0.78, 1.55, 0.48, { fill: PP.lab, line: PP.box, al: 'ctr', ins: 0.05, lines: [{ s: s.label, sz: 1000, b: true, c: 'FFFFFF' }] });
+      inner += pptBox(idRef, 1.85, 0.78, 7.85, 0.48, { line: PP.box, ins: 0.1, lines: [{ s: s.sum1, sz: 1050, b: true, c: PP.txt }, ...(s.sum2 ? [{ s: s.sum2, sz: 850, c: PP.mut }] : [])] });
+      inner += sec(0.3, 3.85, s.secS, s.unitS) + sec(4.3, 5.4, s.secC, s.unitC);
+      inner += pptChartFrame(idRef, 0.3, 1.64, 3.85, 2.72, 'rId2');
+      inner += pptChartFrame(idRef, 4.3, 1.64, 5.4, 2.72, 'rId3');
+      inner += pptBox(idRef, 0.3, 4.46, 4.7, 0.24, { lines: [{ s: s.secT, sz: 1000, b: true, c: PP.txt }], anchor: 'b' });
+      inner += pptBox(idRef, 5.0, 4.46, 4.7, 0.24, { al: 'r', lines: [{ s: s.unitT, sz: 750, c: PP.txt }], anchor: 'b' });
+      const rh = Math.min(0.21, 2.1 / (s.table.rows.length + 1));
+      inner += pptTable(idRef, 0.3, 4.74, 9.4, s.table.head, s.table.rows, rh);
+      inner += pptBox(idRef, 0.3, 4.74 + rh * (s.table.rows.length + 1) + 0.06, 9.4, 0.2, { lines: [{ s: s.foot, sz: 700, c: PP.mut }] });
+      inner += pptBox(idRef, 4.5, 7.16, 1, 0.22, { al: 'ctr', lines: [{ s: `-${i + 1}-`, sz: 900, c: PP.mut }] });
       E.push({ name: `ppt/slides/slide${i + 1}.xml`, data: X + `<p:sld ${NS}><p:cSld>${tree(inner)}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>` });
-      E.push({ name: `ppt/slides/_rels/slide${i + 1}.xml.rels`, data: rels([['rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml']]) });
-    });
+      E.push({ name: `ppt/slides/_rels/slide${i + 1}.xml.rels`, data: rels([['rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml'], ['rId2', 'chart', `../charts/chart${c1}.xml`], ['rId3', 'chart', `../charts/chart${c2}.xml`]]) });
+      for (const [k, d] of [[c1, s.xl.sales], [c2, s.xl.cost]]) {
+        E.push({ name: `ppt/charts/chart${k}.xml`, data: xlChartXml(d) });
+        E.push({ name: `ppt/charts/_rels/chart${k}.xml.rels`, data: rels([['rId1', 'package', `../embeddings/Microsoft_Excel_Worksheet${k}.xlsx`]]) });
+        E.push({ name: `ppt/embeddings/Microsoft_Excel_Worksheet${k}.xlsx`, data: await xlChartBook(d) });
+      }
+    }
     return E;
   }
 
