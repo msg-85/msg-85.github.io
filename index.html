@@ -304,6 +304,21 @@ td.num { text-align: right; font-family: var(--mono); }
 .at tr.dr:hover td { background: var(--head); }
 .at thead th.s { cursor: pointer; }
 .neg { color: var(--neg); } .pos { color: var(--pos); }
+.brbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin: 4px 0 10px; }
+.brbar .seg { display: inline-flex; border: 1px solid var(--line); }
+.brbar .seg button { border: 0; background: var(--sheet); color: var(--muted); padding: 7px 12px; cursor: pointer; font-weight: 600; }
+.brbar .seg button[aria-pressed="true"] { background: var(--s1); color: #fff; }
+.brbar .seg button small { font-weight: 400; }
+.brh { margin: 6px 0 2px; font-size: 17px; } .brh small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+.brsum { margin: 0 0 10px; font-size: 13px; }
+.brgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.brc { border: 1px solid var(--line); background: var(--sheet); padding: 8px; min-width: 0; }
+.brsvg { display: block; width: 100%; height: auto; font-family: inherit; }
+.brt { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.brt th, .brt td { border-bottom: 1px solid var(--line); padding: 4px 8px; white-space: nowrap; text-align: left; }
+.brt td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.brt tr.tot td { font-weight: 700; background: var(--panel); }
+@media (max-width: 560px) { .brgrid { grid-template-columns: 1fr; } }
 .j { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .j.red { background: var(--jr); color: var(--jrf); } .j.warn { background: var(--jw); color: var(--jwf); } .j.up { background: var(--ju); color: var(--juf); }
 .j.ok { background: var(--jo); color: var(--jof); } .j.new { background: var(--jn); color: var(--jnf); } .j.end { background: var(--je); color: var(--jef); } .j.na { color: var(--muted); }
@@ -443,6 +458,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
       <button type="button" role="tab" data-v="vSum" data-m="ana">요약표</button>
       <button type="button" role="tab" data-v="vJudge" data-m="ana">판정표</button>
       <button type="button" role="tab" data-v="vIns" data-m="ana">INSIGHT</button>
+      <button type="button" role="tab" data-v="vBridge" data-m="ana">브릿지</button>
       <button type="button" role="tab" data-v="vPerf" data-m="perf">실적 현황</button>
       <button type="button" role="tab" data-v="vPivot" data-m="perf">자유 피벗</button>
       <button type="button" role="tab" data-v="vReq" data-m="ana perf">요청 · 추가 분석</button>
@@ -461,6 +477,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     <div class="view" id="vSum" hidden></div>
     <div class="view" id="vJudge" hidden></div>
     <div class="view" id="vIns" hidden></div>
+    <div class="view" id="vBridge" hidden></div>
     <div class="view" id="vReq" hidden></div>
     <div class="view" id="vTable" hidden>
       <div class="grid" id="rGrid" hidden></div>
@@ -1034,7 +1051,7 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
     const c = cur, host = $('vNote'); if (!c) return;
     host.innerHTML = c.note ? `<p class="summary">${esc(c.note)}</p>` : '<p class="muted">이 답장에는 메모가 없습니다. 결과표 탭을 보세요.</p>';
   }
-  const AVIEWS = ['vSum', 'vJudge', 'vIns'], VIEWS = ['vNote', 'vSum', 'vJudge', 'vIns', 'vPerf', 'vPivot', 'vReq', 'vTable', 'vSrc'];
+  const AVIEWS = ['vSum', 'vJudge', 'vIns', 'vBridge'], VIEWS = ['vNote', 'vSum', 'vJudge', 'vIns', 'vBridge', 'vPerf', 'vPivot', 'vReq', 'vTable', 'vSrc'];
   let curView = 'vSum';
   function view(id) {
     curView = id;
@@ -2858,7 +2875,7 @@ html, body { height: auto; }
     const M = AS.model, s = AS.s, filt = {};
     s.filt.forEach((f, d) => { if (f) filt[M.dims[d]] = [...f].map(k => M.vals[d][k]); });
     const pn = i => M.years[Math.floor(i / M.nP)] + '|' + M.periods[i % M.nP];
-    return { filt, unit: M.dims[s.unit], split: M.dims[s.split], merge: s.merge, base: [pn(s.a0), pn(s.a1)], comp: [pn(s.b0), pn(s.b1)], agg: s.agg, thr: s.thr, div: s.div, jl: s.jl === M.dims.length ? '*' : M.dims[s.jl] };
+    return { filt, unit: M.dims[s.unit], split: M.dims[s.split], merge: s.merge, base: [pn(s.a0), pn(s.a1)], comp: [pn(s.b0), pn(s.b1)], agg: s.agg, thr: s.thr, div: s.div, jl: s.jl === M.dims.length ? '*' : M.dims[s.jl], br: s.br || undefined };
   }
   const nPer = () => AS.model.nY * AS.model.nP;
   function applyState(M, s, o) {
@@ -2881,6 +2898,7 @@ html, body { height: auto; }
     if (o.jl === '*') s.jl = M.dims.length; else if (o.jl && di(o.jl) >= 0) s.jl = di(o.jl);   // 판정표 단위
     if (typeof o.thr === 'number') s.thr = o.thr;
     if ([1, 1e3, 1e6, 1e8].includes(o.div)) s.div = o.div;
+    if (o.br && typeof o.br === 'object') s.br = { mode: o.br.mode === 'prod' ? 'prod' : 'div', div: String(o.br.div || ''), cat: String(o.br.cat || ''), sub: String(o.br.sub || ''), top: [5, 6, 8, 10, 12, 15].includes(o.br.top) ? o.br.top : 8 };
   }
 
   // ---------- numbers ----------
@@ -3126,8 +3144,328 @@ html, body { height: auto; }
     const C = compute();
     if (!C.sel.length) { host.innerHTML = '<p class="empty">고른 범위에 숫자가 없습니다. 필터를 바꿔 주세요.</p>'; return; }
     try {
-      if (curView === 'vSum') drawSum(C); else if (curView === 'vJudge') drawJudge(C); else drawIns(C);
+      if (curView === 'vSum') drawSum(C); else if (curView === 'vJudge') drawJudge(C); else if (curView === 'vBridge') drawBridge(C); else drawIns(C);
     } catch (e) { host.innerHTML = `<p class="err">화면을 그리지 못했습니다: ${esc(e.message)}</p>`; console.error(e); }
+  }
+
+  // ---------- ④ 브릿지 (waterfall): 26 → 27 매출, and the cost rate split per item into 율 효과 + 믹스 효과 ----------
+  // 부문 브릿지: one 부문 (or all), steps = 대분류. 제품 브릿지: one 대분류 (optionally one 소분류), steps = 팀.
+  // The layout is built once as primitives (rect / text / line in abstract units) and drawn as SVG on screen or as shapes in a pptx.
+  const BR_COL = { tot: '2A78D6', up: '1D7A4A', dn: 'C0262D', txt: '333333', mut: '888888', ln: 'B0B0B0' };
+  function brDims(M) {
+    const f = re => M.dims.findIndex(d => re.test(d));
+    return { B: f(/부문/), T: f(/^팀|팀$/), L: f(/대분류|대카테고리/), S: f(/소분류|소카테고리/) };
+  }
+  function brState() {
+    const s = AS.s;
+    if (!s.br) s.br = { mode: 'div', div: '', cat: '', sub: '', top: 8 };
+    return s.br;
+  }
+  // fold everything after the first n rows into one 기타 row
+  function brTop(rows, n, fold) {
+    if (rows.length <= n + 1) return rows;
+    const keep = rows.slice(0, n), rest = rows.slice(n), o = fold(rest);
+    o.name = `기타 ${rest.length}개`; o.other = true;
+    return [...keep, o];
+  }
+  // the numbers for one bridge
+  function brSpec(C, mode, c1, c2, top) {
+    const M = AS.model, D = brDims(M);
+    let leaves = C.sel, name, stepDim;
+    if (mode === 'div') {
+      if (c1 >= 0) leaves = leaves.filter(l => M.leafDim[D.B][l] === c1);
+      name = c1 >= 0 ? M.vals[D.B][c1] : '전체';
+      stepDim = D.L;
+    } else {
+      leaves = leaves.filter(l => M.leafDim[D.L][l] === c1);
+      name = M.vals[D.L][c1];
+      if (c2 >= 0) { leaves = leaves.filter(l => M.leafDim[D.S][l] === c2); name += ' › ' + M.vals[D.S][c2]; }
+      stepDim = D.T;
+    }
+    if (!leaves.length) return null;
+    const gs = groupsOf(C, leaves, stepDim), t = stat(sumOf(C.T, leaves)), key = M.has.C ? 'c' : 'v';
+    const sales = brTop(gs.map(g => ({ name: g.name, d: g.s.dS, S0: g.s.S0, S1: g.s.S1, dM: g.s.dM, c0: g.s[key + '0'], c1: g.s[key + '1'] }))
+      .filter(r => Math.abs(r.d) > 0.5).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)), top,
+      rest => ({ d: rest.reduce((x, r) => x + r.d, 0), S0: rest.reduce((x, r) => x + r.S0, 0), S1: rest.reduce((x, r) => x + r.S1, 0), dM: rest.reduce((x, r) => x + r.dM, 0), c0: null, c1: null }));
+    const pz = puzzle(gs, key);
+    const cost = brTop(pz.rows.map(r => ({ name: r.name, rate: r.rate, mix: r.mix + r.ne, tot: r.tot, r0: r.r0, r1: r.r1, S0: r.S0, S1: r.S1, adj: r.adj }))
+      .filter(r => Math.abs(r.tot) > 5e-6 || Math.abs(r.rate) > 5e-6).sort((a, b) => Math.abs(b.tot) - Math.abs(a.tot)), top,
+      rest => ({ rate: rest.reduce((x, r) => x + r.rate, 0), mix: rest.reduce((x, r) => x + r.mix, 0), tot: rest.reduce((x, r) => x + r.tot, 0), r0: null, r1: null }));
+    const pzBy = new Map(pz.rows.map(r => [r.name, r]));
+    return { name, mode, step: M.dims[stepDim], key, t, R0: pz.R0, R1: pz.R1, sales, cost, pzBy, n: gs.length };
+  }
+  // waterfall layout in abstract units: W × H, bars between y = top and y = base
+  function brLayout(o) {
+    const W = 640, H = 300, top = 44, base = 206, padL = 10, padR = 10;
+    const slots = o.steps.length + 2, sw = (W - padL - padR) / slots, bw = sw * 0.62;
+    const lv = [o.start.v]; let run = o.start.v;
+    for (const st of o.steps) for (const p of st.parts) { run += p.v; lv.push(run); }
+    lv.push(o.end.v);
+    const lo = Math.min(...lv), hi = Math.max(...lv);
+    let span = hi - lo || Math.abs(hi) * 0.1 || 1;
+    let y0 = lo - span * 0.9; if (lo >= 0 && y0 < 0) y0 = 0;
+    const y1 = hi + span * 0.18, Y = v => base - (v - y0) / (y1 - y0) * (base - top);
+    const P = [];
+    P.push({ t: 'text', x: 0, y: 0, w: W, h: 30, s: o.title, size: 14, bold: true, c: 'txt', al: 'l' });
+    if (y0 > 0) P.push({ t: 'text', x: 0, y: 24, w: W, h: 16, s: '※ 세로축 아래쪽은 생략 (변화를 크게 보이도록)', size: 8.5, c: 'mut', al: 'l' });
+    P.push({ t: 'line', x1: padL, y1: base, x2: W - padR, y2: base, c: 'ln' });
+    const lab = (x, s, bold, c) => P.push({ t: 'text', x: x - sw / 2, y: base + 6, w: sw, h: 40, s, size: 10, bold, c: c || 'txt', al: 'c', wrap: true });
+    // start bar
+    let x = padL + sw / 2;
+    P.push({ t: 'rect', x: x - bw / 2, y: Y(o.start.v), w: bw, h: base - Y(o.start.v), c: 'tot' });
+    P.push({ t: 'text', x: x - sw / 2, y: Y(o.start.v) - 20, w: sw, h: 18, s: o.fv(o.start.v), size: 11, bold: true, c: 'txt', al: 'c' });
+    lab(x, o.start.label, true);
+    run = o.start.v; let prevX = x + bw / 2;
+    for (const st of o.steps) {
+      x += sw;
+      const n = st.parts.length, pw = bw / n;
+      const sum = st.parts.reduce((a, p) => a + p.v, 0);
+      st.parts.forEach((p, i) => {
+        const a = run, b = run + p.v, px = x - bw / 2 + i * pw;
+        P.push({ t: 'line', x1: prevX, y1: Y(a), x2: px, y2: Y(a), c: 'ln', dash: true });
+        if (Math.abs(p.v) < (o.eps || 0)) { prevX = px + pw * (n > 1 ? 0.92 : 1); return; }
+        const good = o.upGood ? p.v >= 0 : p.v <= 0;
+        const yy = Math.min(Y(a), Y(b)), hh = Math.max(1.5, Math.abs(Y(a) - Y(b)));
+        P.push({ t: 'rect', x: px, y: yy, w: pw * (n > 1 ? 0.92 : 1), h: hh, c: good ? 'up' : 'dn', light: !!p.light });
+        run = b; prevX = px + pw * (n > 1 ? 0.92 : 1);
+      });
+      const yTop = Math.min(Y(run - sum), Y(run)), yBot = Math.max(Y(run - sum), Y(run));
+      const above = sum >= 0 === o.upGood ? true : sum >= 0;
+      const ty = sum >= 0 ? yTop - 19 : yBot + 2;
+      P.push({ t: 'text', x: x - sw / 2, y: Math.min(ty, base - 18), w: sw, h: 17, s: o.fd(sum), size: 10.5, bold: true, c: (o.upGood ? sum >= 0 : sum <= 0) ? 'up' : 'dn', al: 'c' });
+      if (n > 1) P.push({ t: 'text', x: x - sw / 2, y: base + 44, w: sw, h: 24, s: st.parts.map(p => o.fd(p.v)).join('\n'), size: 7.5, c: 'mut', al: 'c' });
+      lab(x, st.label, false, st.other ? 'mut' : 'txt');
+      void above;
+    }
+    x += sw;
+    P.push({ t: 'line', x1: prevX, y1: Y(run), x2: x - bw / 2, y2: Y(run), c: 'ln', dash: true });
+    P.push({ t: 'rect', x: x - bw / 2, y: Y(o.end.v), w: bw, h: base - Y(o.end.v), c: 'tot' });
+    P.push({ t: 'text', x: x - sw / 2, y: Y(o.end.v) - 20, w: sw, h: 18, s: o.fv(o.end.v), size: 11, bold: true, c: 'txt', al: 'c' });
+    lab(x, o.end.label, true);
+    if (o.legend) P.push({ t: 'text', x: 0, y: H - 26, w: W, h: 24, s: o.legend, size: 8.5, wrap: true, c: 'mut', al: 'l' });
+    return { W, H, P };
+  }
+  const brEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  function brSvg(L) {
+    const fill = { tot: 'var(--s1)', up: 'var(--pos)', dn: 'var(--neg)', txt: 'var(--fg)', mut: 'var(--muted)', ln: 'var(--line)' };
+    let h = `<svg class="brsvg" viewBox="0 0 ${L.W} ${L.H}" role="img" xmlns="http://www.w3.org/2000/svg">`;
+    for (const p of L.P) {
+      if (p.t === 'rect') h += `<rect x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" width="${p.w.toFixed(1)}" height="${p.h.toFixed(1)}" fill="${fill[p.c]}"${p.light ? ' fill-opacity="0.45" stroke="' + fill[p.c] + '" stroke-width="1"' : ''}/>`;
+      else if (p.t === 'line') h += `<line x1="${p.x1.toFixed(1)}" y1="${p.y1.toFixed(1)}" x2="${p.x2.toFixed(1)}" y2="${p.y2.toFixed(1)}" stroke="${fill[p.c]}" stroke-width="1"${p.dash ? ' stroke-dasharray="3 3"' : ''}/>`;
+      else {
+        const lines = p.wrap ? brWrap(p.s, p.w, p.size) : String(p.s).split('\n');
+        const ax = p.al === 'c' ? p.x + p.w / 2 : p.x, anchor = p.al === 'c' ? 'middle' : 'start';
+        h += `<text x="${ax.toFixed(1)}" y="${(p.y + p.size + 1).toFixed(1)}" font-size="${p.size}" text-anchor="${anchor}" fill="${fill[p.c]}"${p.bold ? ' font-weight="700"' : ''}>` +
+          lines.map((ln, i) => `<tspan x="${ax.toFixed(1)}" dy="${i ? (p.size * 1.15).toFixed(1) : 0}">${brEsc(ln)}</tspan>`).join('') + '</text>';
+      }
+    }
+    return h + '</svg>';
+  }
+  // split a label into at most 3 lines that fit the slot (Korean ≈ 1 em per char, latin ≈ 0.55 em)
+  function brWrap(s, w, size) {
+    const out = [];
+    for (const part of String(s).split('\n')) {
+      let line = '', lw = 0;
+      for (const ch of part) {
+        const cw = /[ㄱ-힝]/.test(ch) ? size : size * 0.58;
+        if (lw + cw > w - 4 && line) { out.push(line); line = ''; lw = 0; }
+        line += ch; lw += cw;
+      }
+      out.push(line);
+    }
+    if (out.length > 3) { out.length = 3; out[2] = out[2].slice(0, -1) + '…'; }
+    return out;
+  }
+  // the two charts of one bridge
+  function brCharts(sp) {
+    const [a, b] = yrs(), M = AS.model, cn = costName();
+    const sales = brLayout({ title: `매출 브릿지 (${divName()})`, upGood: true, eps: 0.5, fv: fN, fd: fD,
+      start: { label: a, v: sp.t.S0 }, end: { label: b, v: sp.t.S1 },
+      steps: sp.sales.map(r => ({ label: r.name, other: r.other, parts: [{ v: r.d }] })) });
+    const cost = brLayout({ title: `${cn} 브릿지 (%)`, upGood: false, eps: 5e-5, fv: v => (v * 100).toFixed(1) + '%', fd: v => Math.abs(v) < 5e-5 ? '0.00' : (v > 0 ? '+' : '') + (v * 100).toFixed(2),
+      start: { label: a, v: sp.R0 }, end: { label: b, v: sp.R1 },
+      steps: sp.cost.map(r => ({ label: r.name, other: r.other, parts: r.adj ? [{ v: r.tot }] : [{ v: r.rate }, { v: r.mix, light: true }] })),
+      legend: `막대 아래 숫자: 위 = 율 효과, 아래 = 믹스 효과. 항목마다 왼쪽 진한 막대 = 율 효과 (그 ${sp.step}의 ${cn} 변화 × 27년 비중), 오른쪽 연한 막대 = 믹스 효과 (매출 비중 변화·신규/종료). 단위 %p` });
+    void M;
+    return { sales, cost };
+  }
+  function brTable(sp) {
+    const cn = costName(), [a, b] = yrs();
+    const rows = sp.sales.map(r => {
+      const p = r.other ? null : sp.pzBy.get(r.name);
+      return [r.name, fN(r.S0), fN(r.S1), fD(r.d), fin2(r.S0) && r.S0 > 0 ? fG(r.d / r.S0) : '',
+        r.other || !fin2(r.c0) || !fin2(r.c1) ? '' : `${fP(r.c0)}→${fP(r.c1)}`,
+        p ? fPP(p.rate, 2) : '', p ? fPP(p.mix + p.ne, 2) : '', p ? fPP(p.tot, 2) : '', fD(r.dM)];
+    });
+    const t = sp.t;
+    rows.push(['합계', fN(t.S0), fN(t.S1), fD(t.dS), fin2(t.gS) ? fG(t.gS) : '', `${fP(sp.R0)}→${fP(sp.R1)}`, fPP(sp.cost.reduce((x, r) => x + (r.adj ? 0 : r.rate), 0), 2), fPP(sp.cost.reduce((x, r) => x + (r.adj ? r.tot : r.mix), 0), 2), fPP(sp.R1 - sp.R0, 2), fD(t.dM)]);
+    return { head: [sp.step, `매출 ${a}`, `매출 ${b}`, '증감', '증감률', cn, '율 효과', '믹스 효과', `${cn} 기여`, 'CM 증감'], rows };
+  }
+  // red = bad: a fall in 매출/CM (cols 3, 4, 9) or a rise in the cost rate (cols 6–8)
+  const brZero = s => !/[1-9]/.test(s);
+  const brBad = (s, j) => brZero(s) ? false : [3, 4, 9].includes(j) ? s.startsWith('-') : [6, 7, 8].includes(j) ? s.startsWith('+') : false;
+  const brGood = (s, j) => brZero(s) ? false : [3, 4, 9].includes(j) ? s.startsWith('+') : [6, 7, 8].includes(j) ? s.startsWith('-') : false;
+  function drawBridge(C) {
+    const M = AS.model, D = brDims(M), host = $('vBridge'), st = brState();
+    if (D.L < 0 || (D.B < 0 && D.T < 0)) { host.innerHTML = '<p class="empty">브릿지는 부문·팀·대분류 열이 있는 분석표에서 쓸 수 있습니다.</p>'; return; }
+    const present = d => { const set = new Set(C.sel.map(l => M.leafDim[d][l])); return [...set].map(k => [k, M.vals[d][k]]).sort((x, y) => String(x[1]).localeCompare(String(y[1]), 'ko')); };
+    if (st.mode === 'div' && D.B < 0) st.mode = 'prod';
+    if (st.mode === 'prod' && D.T < 0) st.mode = 'div';
+    const code = (d, n) => d < 0 || !n ? -1 : M.vals[d].indexOf(n);
+    let c1, c2 = -1;
+    const cats = present(D.L);
+    if (st.mode === 'div') { c1 = code(D.B, st.div); }
+    else {
+      c1 = code(D.L, st.cat);
+      if (c1 < 0 || !cats.some(([k]) => k === c1)) { const big = groupsOf(C, C.sel, D.L)[0]; c1 = big ? big.code : -1; st.cat = c1 >= 0 ? M.vals[D.L][c1] : ''; }
+      if (D.S >= 0) c2 = code(D.S, st.sub);
+    }
+    const sp = brSpec(C, st.mode, c1, c2, st.top);
+    const opt = (list, v, all) => (all ? `<option value=""${v < 0 ? ' selected' : ''}>${all}</option>` : '') + list.map(([k, n]) => `<option value="${esc(n)}"${k === v ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    let bar = `<div class="brbar"><div class="seg" role="group" aria-label="브릿지 종류">` +
+      (D.B >= 0 ? `<button type="button" data-brm="div" aria-pressed="${st.mode === 'div'}">부문 브릿지 <small>(하단 ${esc(M.dims[D.L])})</small></button>` : '') +
+      (D.T >= 0 ? `<button type="button" data-brm="prod" aria-pressed="${st.mode === 'prod'}">제품 브릿지 <small>(하단 ${esc(M.dims[D.T])})</small></button>` : '') + '</div>';
+    if (st.mode === 'div') bar += `<label class="f">${esc(M.dims[D.B])}<select data-br="div">${opt(present(D.B), c1, '전체')}</select></label>`;
+    else {
+      bar += `<label class="f">${esc(M.dims[D.L])}<select data-br="cat">${opt(cats, c1)}</select></label>`;
+      if (D.S >= 0) { const subs = present(D.S).filter(([k]) => C.sel.some(l => M.leafDim[D.S][l] === k && M.leafDim[D.L][l] === c1)); bar += `<label class="f">${esc(M.dims[D.S])}<select data-br="sub">${opt(subs, c2, '전체')}</select></label>`; }
+    }
+    bar += `<label class="f">항목 수<select data-br="top">${[5, 6, 8, 10, 12, 15].map(n => `<option value="${n}"${n === st.top ? ' selected' : ''}>${n}개 (나머지 기타)</option>`).join('')}</select></label>`;
+    bar += `<label class="f">PPT 범위<select id="brScope"><option value="cur">지금 화면 1장</option>` +
+      (st.mode === 'div' ? `<option value="all">전체 + ${esc(M.dims[D.B])}마다 1장</option>` : `<option value="all">${esc(M.dims[D.L])}마다 1장</option>` + (D.S >= 0 && c1 >= 0 ? `<option value="subs">이 ${esc(M.dims[D.L])}의 ${esc(M.dims[D.S])}마다 1장</option>` : '')) +
+      `</select></label><button type="button" class="btn primary" id="brPpt">PPT 받기</button><span class="muted" id="brInfo"></span></div>`;
+    if (!sp) { host.innerHTML = bar + '<p class="empty">고른 범위에 숫자가 없습니다.</p>'; return; }
+    const ch = brCharts(sp), tb = brTable(sp), [a, b] = yrs();
+    const t = sp.t;
+    const head = `<h3 class="brh">${esc(sp.name)} 브릿지 <small>${esc(a)} → ${esc(b)}${perText() ? ' · ' + esc(perText()) : ''} · 하단 ${esc(sp.step)} · 금액 ${divName()}</small></h3>` +
+      `<p class="brsum">매출 ${fN(t.S0)} → ${fN(t.S1)} (<b class="${sg(t.dS)}">${fD(t.dS)}</b>${fin2(t.gS) ? ', ' + fG(t.gS) : ''}) · ${costName()} ${fP(sp.R0)} → ${fP(sp.R1)} (<b class="${sgc(sp.R1 - sp.R0)}">${fPP(sp.R1 - sp.R0, 2)}</b>) · CM ${fN(t.M0)} → ${fN(t.M1)} (<b class="${sg(t.dM)}">${fD(t.dM)}</b>)` +
+      (AS.s.filt.some(f => f) ? ' · <span class="muted">위 필터도 같이 적용됨</span>' : '') + '</p>';
+    const table = `<div class="tw"><table class="brt"><thead><tr>${tb.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>` +
+      tb.rows.map((r, i) => `<tr${i === tb.rows.length - 1 ? ' class="tot"' : ''}>${r.map((v, j) => `<td${j ? ` class="n${brBad(v, j) ? ' neg' : brGood(v, j) ? ' pos' : ''}"` : ''}>${esc(v)}</td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
+    host.innerHTML = bar + head + `<div class="brgrid"><div class="brc">${brSvg(ch.sales)}</div><div class="brc">${brSvg(ch.cost)}</div></div>` + table;
+  }
+  $('vBridge').addEventListener('click', e => {
+    const m = e.target.closest('[data-brm]');
+    if (m) { brState().mode = m.dataset.brm; saveState(); drawAnalysis(); return; }
+    if (e.target.closest('#brPpt')) brDownload(e.target.closest('#brPpt'));
+  });
+  $('vBridge').addEventListener('change', e => {
+    const k = e.target.dataset.br; if (!k) return;
+    const st = brState();
+    if (k === 'top') st.top = +e.target.value; else st[k] = e.target.value;
+    if (k === 'cat') st.sub = '';
+    saveState(); drawAnalysis();
+  });
+
+  // ---------- 브릿지 → pptx (shapes, so every bar and label stays editable) ----------
+  const EMU = 914400;
+  function brPptSlides(scope) {
+    const M = AS.model, D = brDims(M), st = brState(), C = compute(), out = [];
+    const code = (d, n) => d < 0 || !n ? -1 : M.vals[d].indexOf(n);
+    const present = d => [...new Set(C.sel.map(l => M.leafDim[d][l]))].sort((x, y) => String(M.vals[d][x]).localeCompare(String(M.vals[d][y]), 'ko'));
+    const add = (c1, c2) => { const sp = brSpec(C, st.mode, c1, c2, st.top); if (sp && (sp.t.S0 > 0 || sp.t.S1 > 0)) out.push(sp); };
+    if (st.mode === 'div') {
+      if (scope === 'all') { add(-1, -1); for (const k of present(D.B)) add(k, -1); }
+      else add(code(D.B, st.div), -1);
+    } else {
+      const c1 = code(D.L, st.cat);
+      if (scope === 'all') { for (const k of present(D.L)) add(k, -1); }
+      else if (scope === 'subs') { add(c1, -1); for (const k of present(D.S).filter(k => C.sel.some(l => M.leafDim[D.S][l] === k && M.leafDim[D.L][l] === c1))) add(c1, k); }
+      else add(c1, code(D.S, st.sub));
+    }
+    return out;
+  }
+  async function brDownload(btn) {
+    const info = $('brInfo'), scope = $('brScope').value;
+    btn.disabled = true; info.textContent = 'PPT 만드는 중…';
+    try {
+      const sps = brPptSlides(scope);
+      if (!sps.length) throw new Error('만들 장표가 없습니다.');
+      const [a, b] = yrs(), meta = { sub: `${a} → ${b}${perText() ? ' · ' + perText() : ''} · 금액 ${divName()} · ${costName()} %`, src: AS.c.extra && AS.c.extra.title || AS.c.name };
+      const slides = sps.map(sp => ({ title: `${sp.name} 브릿지`, sub: `하단 ${sp.step} · ` + meta.sub, charts: brCharts(sp), table: brTable(sp), foot: meta.src }));
+      const blob = await zip(pptxEntries(slides));
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' }));
+      const aEl = document.createElement('a'); aEl.href = url; aEl.download = niceName(AS.c.name, ` (브릿지 ${slides.length}장).pptx`); document.body.appendChild(aEl); aEl.click(); aEl.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      info.textContent = `${slides.length}장 받았습니다.`;
+    } catch (e) { info.textContent = 'PPT를 만들지 못했습니다: ' + (e.message || e); console.error(e); }
+    btn.disabled = false;
+  }
+  // primitives (abstract units) → DrawingML shapes placed in the box (x, y, w, h) in inches
+  function pptShapes(L, bx, by, bw, bh, idRef) {
+    const sx = bw / L.W, sy = bh / L.H, e = v => Math.round(v * EMU);
+    let xml = '';
+    const nv = (kind, name) => { const id = idRef.n++; return kind === 'cxn' ? `<p:nvCxnSpPr><p:cNvPr id="${id}" name="${name} ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>` : `<p:nvSpPr><p:cNvPr id="${id}" name="${name} ${id}"/><p:cNvSpPr${kind === 'tx' ? ' txBox="1"' : ''}/><p:nvPr/></p:nvSpPr>`; };
+    for (const p of L.P) {
+      if (p.t === 'rect') {
+        const fillX = `<a:solidFill><a:srgbClr val="${BR_COL[p.c]}">${p.light ? '<a:alpha val="45000"/>' : ''}</a:srgbClr></a:solidFill>`;
+        const lnX = p.light ? `<a:ln w="6350"><a:solidFill><a:srgbClr val="${BR_COL[p.c]}"/></a:solidFill></a:ln>` : '<a:ln><a:noFill/></a:ln>';
+        xml += `<p:sp>${nv('sp', 'Bar')}<p:spPr><a:xfrm><a:off x="${e(bx + p.x * sx)}" y="${e(by + p.y * sy)}"/><a:ext cx="${Math.max(1, e(p.w * sx))}" cy="${Math.max(1, e(p.h * sy))}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${fillX}${lnX}</p:spPr></p:sp>`;
+      } else if (p.t === 'line') {
+        const x1 = bx + p.x1 * sx, y1 = by + p.y1 * sy, x2 = bx + p.x2 * sx, y2 = by + p.y2 * sy;
+        const flip = y2 < y1 ? ' flipV="1"' : '';
+        xml += `<p:cxnSp>${nv('cxn', 'Line')}<p:spPr><a:xfrm${flip}><a:off x="${e(Math.min(x1, x2))}" y="${e(Math.min(y1, y2))}"/><a:ext cx="${e(Math.abs(x2 - x1))}" cy="${e(Math.abs(y2 - y1))}"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="6350"><a:solidFill><a:srgbClr val="${BR_COL[p.c]}"/></a:solidFill>${p.dash ? '<a:prstDash val="dash"/>' : ''}</a:ln></p:spPr></p:cxnSp>`;
+      } else {
+        const lines = p.wrap ? brWrap(p.s, p.w, p.size) : String(p.s).split('\n');
+        const pt = Math.round(p.size * sy * 72 * 100 * 0.92) / 100, sz = Math.max(600, Math.round(pt * 100));
+        xml += `<p:sp>${nv('tx', 'Text')}<p:spPr><a:xfrm><a:off x="${e(bx + p.x * sx)}" y="${e(by + p.y * sy)}"/><a:ext cx="${e(p.w * sx)}" cy="${e(Math.max(p.h, lines.length * p.size * 1.2) * sy)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
+          `<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>` +
+          lines.map(ln => `<a:p><a:pPr algn="${p.al === 'c' ? 'ctr' : 'l'}"/><a:r>${pptRun(sz, p.bold, BR_COL[p.c])}<a:t>${xesc(ln)}</a:t></a:r></a:p>`).join('') + '</p:txBody></p:sp>';
+      }
+    }
+    return xml;
+  }
+  const pptRun = (sz, bold, col) => `<a:rPr lang="ko-KR" sz="${sz}"${bold ? ' b="1"' : ''} dirty="0"><a:solidFill><a:srgbClr val="${col}"/></a:solidFill><a:latin typeface="맑은 고딕"/><a:ea typeface="맑은 고딕"/></a:rPr>`;
+  function pptText(idRef, x, y, w, h, s, sz, bold, col, al) {
+    const id = idRef.n++, e = v => Math.round(v * EMU);
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Text ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(w)}" cy="${e(h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
+      `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/><a:p><a:pPr algn="${al || 'l'}"/><a:r>${pptRun(sz, bold, col)}<a:t>${xesc(s)}</a:t></a:r></a:p></p:txBody></p:sp>`;
+  }
+  function pptTable(idRef, x, y, w, head, rows) {
+    const id = idRef.n++, e = v => Math.round(v * EMU), rh = 0.24;
+    const widths = head.map((_, i) => i === 0 ? 2.2 : 1), tw = widths.reduce((a, b) => a + b, 0), cw = widths.map(v => e(v / tw * w));
+    const cell = (s, j, hd, tot) => `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr algn="${j ? 'r' : 'l'}"/><a:r>${pptRun(800, hd || tot, hd ? 'FFFFFF' : brBad(s, j) ? 'C0262D' : '333333')}<a:t>${xesc(s)}</a:t></a:r></a:p></a:txBody>` +
+      `<a:tcPr marL="45720" marR="45720" marT="9144" marB="9144" anchor="ctr"><a:lnB w="6350"><a:solidFill><a:srgbClr val="D0D0D0"/></a:solidFill></a:lnB>${hd ? '<a:solidFill><a:srgbClr val="44546A"/></a:solidFill>' : tot ? '<a:solidFill><a:srgbClr val="EEF2F7"/></a:solidFill>' : '<a:noFill/>'}</a:tcPr></a:tc>`;
+    const tr = (r, hd, tot) => `<a:tr h="${e(rh)}">${r.map((s, j) => cell(String(s), j, hd, tot)).join('')}</a:tr>`;
+    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Table ${id}"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>` +
+      `<p:xfrm><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(w)}" cy="${e(rh * (rows.length + 1))}"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr firstRow="1"/><a:tblGrid>${cw.map(v => `<a:gridCol w="${v}"/>`).join('')}</a:tblGrid>` +
+      tr(head, true, false) + rows.map((r, i) => tr(r, false, i === rows.length - 1)).join('') + '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>';
+  }
+  function pptxEntries(slides) {
+    const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+    const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n', REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const rels = list => X + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.map(([id, type, target]) => `<Relationship Id="${id}" Type="${type.startsWith('http') ? type : REL + '/' + type}" Target="${target}"/>`).join('')}</Relationships>`;
+    const tree = inner => `<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${inner}</p:spTree>`;
+    const E = [];
+    E.push({ name: '[Content_Types].xml', data: X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+      slides.map((_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('') + '</Types>' });
+    E.push({ name: '_rels/.rels', data: rels([['rId1', 'officeDocument', 'ppt/presentation.xml']]) });
+    E.push({ name: 'ppt/presentation.xml', data: X + `<p:presentation ${NS} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 3}"/>`).join('')}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>` });
+    E.push({ name: 'ppt/_rels/presentation.xml.rels', data: rels([['rId1', 'slideMaster', 'slideMasters/slideMaster1.xml'], ['rId2', 'theme', 'theme/theme1.xml'], ...slides.map((_, i) => [`rId${i + 3}`, 'slide', `slides/slide${i + 1}.xml`])]) });
+    E.push({ name: 'ppt/slideMasters/slideMaster1.xml', data: X + `<p:sldMaster ${NS}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg>${tree('')}</p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>` });
+    E.push({ name: 'ppt/slideMasters/_rels/slideMaster1.xml.rels', data: rels([['rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml'], ['rId2', 'theme', '../theme/theme1.xml']]) });
+    E.push({ name: 'ppt/slideLayouts/slideLayout1.xml', data: X + `<p:sldLayout ${NS} type="blank" preserve="1"><p:cSld name="빈 화면">${tree('')}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>` });
+    E.push({ name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels', data: rels([['rId1', 'slideMaster', '../slideMasters/slideMaster1.xml']]) });
+    const clr = (n, v) => `<a:${n}><a:srgbClr val="${v}"/></a:${n}>`;
+    const fill3 = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
+    E.push({ name: 'ppt/theme/theme1.xml', data: X + `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Bridge"><a:themeElements><a:clrScheme name="Bridge"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>${clr('dk2', '44546A')}${clr('lt2', 'E7E6E6')}${clr('accent1', '2A78D6')}${clr('accent2', 'EB6834')}${clr('accent3', '1BAF7A')}${clr('accent4', 'EDA100')}${clr('accent5', 'E87BA4')}${clr('accent6', '7D5BD6')}${clr('hlink', '0563C1')}${clr('folHlink', '954F72')}</a:clrScheme>` +
+      `<a:fontScheme name="Bridge"><a:majorFont><a:latin typeface="맑은 고딕"/><a:ea typeface="맑은 고딕"/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="맑은 고딕"/><a:ea typeface="맑은 고딕"/><a:cs typeface=""/></a:minorFont></a:fontScheme>` +
+      `<a:fmtScheme name="Bridge"><a:fillStyleLst>${fill3}</a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst>${fill3}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>` });
+    slides.forEach((s, i) => {
+      const idRef = { n: 2 };
+      let inner = `<p:sp><p:nvSpPr><p:cNvPr id="${idRef.n++}" name="Top bar"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="91440"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="44546A"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
+      inner += pptText(idRef, 0.4, 0.22, 12.5, 0.5, s.title, 2200, true, '222222');
+      inner += pptText(idRef, 0.4, 0.70, 12.5, 0.3, s.sub, 1100, false, '666666');
+      inner += pptShapes(s.charts.sales, 0.35, 1.1, 6.2, 2.75, idRef);
+      inner += pptShapes(s.charts.cost, 6.8, 1.1, 6.2, 2.75, idRef);
+      inner += pptTable(idRef, 0.4, 4.05, 12.5, s.table.head, s.table.rows);
+      inner += pptText(idRef, 0.4, 7.15, 9, 0.25, s.foot, 800, false, '999999');
+      inner += pptText(idRef, 11.9, 7.15, 1, 0.25, String(i + 1), 800, false, '999999', 'r');
+      E.push({ name: `ppt/slides/slide${i + 1}.xml`, data: X + `<p:sld ${NS}><p:cSld>${tree(inner)}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>` });
+      E.push({ name: `ppt/slides/_rels/slide${i + 1}.xml.rels`, data: rels([['rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml']]) });
+    });
+    return E;
   }
 
   // ---------- ① 요약표 ----------
