@@ -2181,7 +2181,7 @@ html, body { height: auto; }
       if (ocols) { for (const [k, names] of Object.entries(ocols)) for (const n of [].concat(names)) { const c = colAt(H, n); if (c >= 0 && k in SLOT_A) mcols.push({ c, m: { k, rate: false }, s: SLOT_A[k] }); } }
       else H.forEach((c, i) => { if (i === yearCol || i === perCol) return; const m = measOf(c); if (m && slotOf(m) >= 0) mcols.push({ c: i, m, s: slotOf(m) }); });
       // opts.names: { 'SKU ID': 'SKU 명' } = group by the ID, show the latest name; opts.rename: { 'SKU ID': 'SKU' }
-      if (opts.dims) for (const n of opts.dims) { const c = colAt(H, n); if (c >= 0) { dimCols.push(c); dimNames.push((opts.rename && opts.rename[n]) || n.replace(/#\d+$/, '')); nmCols.push(opts.names && opts.names[n] ? colAt(H, opts.names[n]) : -1); fixes.push(opts.fix && opts.fix[n] || null); } }   // opts.fix: { '대분류': { '03. 단백질': 'A. 단백질' } }
+      if (opts.dims) for (const n of opts.dims) { const dv = opts.derive && opts.derive[n]; if (dv && colAt(H, n) < 0) { const c = colAt(H, dv.from); if (c >= 0) { dimCols.push(c); dimNames.push(n); nmCols.push(-1); fixes.push(dv.map || {}); } continue; } const c = colAt(H, n); if (c >= 0) { dimCols.push(c); dimNames.push((opts.rename && opts.rename[n]) || n.replace(/#\d+$/, '')); nmCols.push(opts.names && opts.names[n] ? colAt(H, opts.names[n]) : -1); fixes.push(opts.fix && opts.fix[n] || null); } }   // opts.fix: { '대분류': { '03. 단백질': 'A. 단백질' } }
       if (!opts.dims) for (let c = 0; c < H.length; c++) {
         if (!H[c] || c === yearCol || c === perCol || mcols.some(m => m.c === c)) continue;
         let n = 0, k = 0;
@@ -3153,11 +3153,13 @@ html, body { height: auto; }
   // The layout is built once as primitives (rect / text / line in abstract units) and drawn as SVG on screen or as shapes in a pptx.
   function brDims(M) {
     const f = re => M.dims.findIndex(d => re.test(d));
-    return { B: f(/부문/), T: f(/^팀|팀$/), L: f(/대분류|대카테고리/), S: f(/소분류|소카테고리/) };
+    return { B: f(/부문/), T: f(/^팀|팀$/), G: f(/제품구분/), L: f(/대분류|대카테고리/), S: f(/소분류|소카테고리/) };
   }
   function brState() {
     const s = AS.s;
-    if (!s.br) s.br = { mode: 'div', div: '', cat: '', sub: '', top: 8 };
+    if (!s.br) s.br = { mode: 'div', lvl: 'grp', div: '', grp: '', cat: '', sub: '', top: 8 };
+    if (!s.br.lvl) s.br.lvl = 'grp';
+    if (s.br.grp == null) s.br.grp = '';
     return s.br;
   }
   // fold everything after the first n rows into one 기타 row
@@ -3168,17 +3170,18 @@ html, body { height: auto; }
     return [...keep, o];
   }
   // the numbers for one bridge
-  function brSpec(C, mode, c1, c2, top) {
+  // the numbers for one bridge. q = {b, g, l, s}: codes of 부문 / 제품구분 / 대분류 / 소분류 (-1 = all), q.lvl = 'grp' | 'cat' (부문 브릿지 하단)
+  function brSpec(C, mode, q, top) {
     const M = AS.model, D = brDims(M);
     let leaves = C.sel, name, stepDim;
+    const only = (d, k) => { if (d >= 0 && k >= 0) leaves = leaves.filter(l => M.leafDim[d][l] === k); };
     if (mode === 'div') {
-      if (c1 >= 0) leaves = leaves.filter(l => M.leafDim[D.B][l] === c1);
-      name = c1 >= 0 ? M.vals[D.B][c1] : '전체';
-      stepDim = D.L;
+      only(D.B, q.b);
+      name = q.b >= 0 ? M.vals[D.B][q.b] : '전체';
+      stepDim = q.lvl === 'grp' && D.G >= 0 ? D.G : D.L;
     } else {
-      leaves = leaves.filter(l => M.leafDim[D.L][l] === c1);
-      name = M.vals[D.L][c1];
-      if (c2 >= 0) { leaves = leaves.filter(l => M.leafDim[D.S][l] === c2); name += ' › ' + M.vals[D.S][c2]; }
+      only(D.G, q.g); only(D.L, q.l); only(D.S, q.s);
+      name = [[D.G, q.g], [D.L, q.l], [D.S, q.s]].filter(([d, k]) => d >= 0 && k >= 0).map(([d, k]) => M.vals[d][k]).join(' › ') || '전체';
       stepDim = D.T;
     }
     if (!leaves.length) return null;
@@ -3304,35 +3307,51 @@ html, body { height: auto; }
   const brZero = s => !/[1-9]/.test(s);
   const brBad = (s, j) => brZero(s) ? false : [3, 4, 9].includes(j) ? s.startsWith('-') : [6, 7, 8].includes(j) ? s.startsWith('+') : false;
   const brGood = (s, j) => brZero(s) ? false : [3, 4, 9].includes(j) ? s.startsWith('+') : [6, 7, 8].includes(j) ? s.startsWith('-') : false;
+  // the current picks as codes, checked against what the filters leave (C.sel)
+  function brPick(C) {
+    const M = AS.model, D = brDims(M), st = brState();
+    const code = (d, n) => d < 0 || !n ? -1 : M.vals[d].indexOf(n);
+    const inSel = (d, k, also) => C.sel.some(l => M.leafDim[d][l] === k && (!also || also(l)));
+    const q = { b: -1, g: -1, l: -1, s: -1, lvl: st.lvl === 'cat' || D.G < 0 ? 'cat' : 'grp' };
+    if (st.mode === 'div') { q.b = code(D.B, st.div); if (q.b >= 0 && !inSel(D.B, q.b)) q.b = -1; return q; }
+    if (D.G >= 0) { q.g = code(D.G, st.grp); if (q.g >= 0 && !inSel(D.G, q.g)) q.g = -1; }
+    q.l = code(D.L, st.cat);
+    if (q.l >= 0 && !inSel(D.L, q.l, l => q.g < 0 || M.leafDim[D.G][l] === q.g)) q.l = -1;
+    if (q.g < 0 && q.l < 0) {   // nothing picked: start from the biggest 제품구분 (or 대분류 when there is none)
+      const d = D.G >= 0 ? D.G : D.L, big = groupsOf(C, C.sel, d)[0];
+      if (big) { if (d === D.G) { q.g = big.code; st.grp = M.vals[D.G][q.g]; } else { q.l = big.code; st.cat = M.vals[D.L][q.l]; } }
+    }
+    if (D.S >= 0 && q.l >= 0) { q.s = code(D.S, st.sub); if (q.s >= 0 && !inSel(D.S, q.s, l => M.leafDim[D.L][l] === q.l)) q.s = -1; }
+    return q;
+  }
   function drawBridge(C) {
     const M = AS.model, D = brDims(M), host = $('vBridge'), st = brState();
     if (D.L < 0 || (D.B < 0 && D.T < 0)) { host.innerHTML = '<p class="empty">브릿지는 부문·팀·대분류 열이 있는 분석표에서 쓸 수 있습니다.</p>'; return; }
-    const present = d => { const set = new Set(C.sel.map(l => M.leafDim[d][l])); return [...set].map(k => [k, M.vals[d][k]]).sort((x, y) => String(x[1]).localeCompare(String(y[1]), 'ko')); };
+    const present = (d, also) => { const set = new Set(C.sel.filter(l => !also || also(l)).map(l => M.leafDim[d][l])); return [...set].map(k => [k, M.vals[d][k]]).sort((x, y) => String(x[1]).localeCompare(String(y[1]), 'ko')); };
     if (st.mode === 'div' && D.B < 0) st.mode = 'prod';
     if (st.mode === 'prod' && D.T < 0) st.mode = 'div';
-    const code = (d, n) => d < 0 || !n ? -1 : M.vals[d].indexOf(n);
-    let c1, c2 = -1;
-    const cats = present(D.L);
-    if (st.mode === 'div') { c1 = code(D.B, st.div); }
-    else {
-      c1 = code(D.L, st.cat);
-      if (c1 < 0 || !cats.some(([k]) => k === c1)) { const big = groupsOf(C, C.sel, D.L)[0]; c1 = big ? big.code : -1; st.cat = c1 >= 0 ? M.vals[D.L][c1] : ''; }
-      if (D.S >= 0) c2 = code(D.S, st.sub);
-    }
-    const sp = brSpec(C, st.mode, c1, c2, st.top);
+    const q = brPick(C), sp = brSpec(C, st.mode, q, st.top);
+    const lowName = q.lvl === 'grp' ? M.dims[D.G] : M.dims[D.L];
     const opt = (list, v, all) => (all ? `<option value=""${v < 0 ? ' selected' : ''}>${all}</option>` : '') + list.map(([k, n]) => `<option value="${esc(n)}"${k === v ? ' selected' : ''}>${esc(n)}</option>`).join('');
     let bar = `<div class="brbar"><div class="seg" role="group" aria-label="브릿지 종류">` +
-      (D.B >= 0 ? `<button type="button" data-brm="div" aria-pressed="${st.mode === 'div'}">부문 브릿지 <small>(하단 ${esc(M.dims[D.L])})</small></button>` : '') +
+      (D.B >= 0 ? `<button type="button" data-brm="div" aria-pressed="${st.mode === 'div'}">부문 브릿지 <small>(하단 ${esc(lowName)})</small></button>` : '') +
       (D.T >= 0 ? `<button type="button" data-brm="prod" aria-pressed="${st.mode === 'prod'}">제품 브릿지 <small>(하단 ${esc(M.dims[D.T])})</small></button>` : '') + '</div>';
-    if (st.mode === 'div') bar += `<label class="f">${esc(M.dims[D.B])}<select data-br="div">${opt(present(D.B), c1, '전체')}</select></label>`;
-    else {
-      bar += `<label class="f">${esc(M.dims[D.L])}<select data-br="cat">${opt(cats, c1)}</select></label>`;
-      if (D.S >= 0) { const subs = present(D.S).filter(([k]) => C.sel.some(l => M.leafDim[D.S][l] === k && M.leafDim[D.L][l] === c1)); bar += `<label class="f">${esc(M.dims[D.S])}<select data-br="sub">${opt(subs, c2, '전체')}</select></label>`; }
+    let scopes = '';
+    if (st.mode === 'div') {
+      bar += `<label class="f">${esc(M.dims[D.B])}<select data-br="div">${opt(present(D.B), q.b, '전체')}</select></label>`;
+      if (D.G >= 0) bar += `<label class="f">하단<select data-br="lvl"><option value="grp"${q.lvl === 'grp' ? ' selected' : ''}>${esc(M.dims[D.G])}</option><option value="cat"${q.lvl === 'cat' ? ' selected' : ''}>${esc(M.dims[D.L])}</option></select></label>`;
+      scopes = `<option value="all">전체 + ${esc(M.dims[D.B])}마다 1장</option>`;
+    } else {
+      if (D.G >= 0) bar += `<label class="f">${esc(M.dims[D.G])}<select data-br="grp">${opt(present(D.G), q.g, '전체')}</select></label>`;
+      bar += `<label class="f">${esc(M.dims[D.L])}<select data-br="cat">${opt(present(D.L, l => q.g < 0 || M.leafDim[D.G][l] === q.g), q.l, D.G >= 0 ? '전체' : '')}</select></label>`;
+      if (D.S >= 0 && q.l >= 0) bar += `<label class="f">${esc(M.dims[D.S])}<select data-br="sub">${opt(present(D.S, l => M.leafDim[D.L][l] === q.l), q.s, '전체')}</select></label>`;
+      const top = D.G >= 0 ? D.G : D.L;
+      scopes = `<option value="all">${esc(M.dims[top])}마다 1장</option>`;
+      if (q.l >= 0 && D.S >= 0) scopes += `<option value="subs">이 ${esc(M.dims[D.L])}의 ${esc(M.dims[D.S])}마다 1장</option>`;
+      else if (q.g >= 0 && q.l < 0) scopes += `<option value="subs">이 ${esc(M.dims[D.G])}의 ${esc(M.dims[D.L])}마다 1장</option>`;
     }
     bar += `<label class="f">항목 수<select data-br="top">${[5, 6, 8, 10, 12, 15].map(n => `<option value="${n}"${n === st.top ? ' selected' : ''}>${n}개 (나머지 기타)</option>`).join('')}</select></label>`;
-    bar += `<label class="f">PPT 범위<select id="brScope"><option value="cur">지금 화면 1장</option>` +
-      (st.mode === 'div' ? `<option value="all">전체 + ${esc(M.dims[D.B])}마다 1장</option>` : `<option value="all">${esc(M.dims[D.L])}마다 1장</option>` + (D.S >= 0 && c1 >= 0 ? `<option value="subs">이 ${esc(M.dims[D.L])}의 ${esc(M.dims[D.S])}마다 1장</option>` : '')) +
-      `</select></label><button type="button" class="btn primary" id="brPpt">PPT 받기</button><span class="muted" id="brInfo"></span></div>`;
+    bar += `<label class="f">PPT 범위<select id="brScope"><option value="cur">지금 화면 1장</option>${scopes}</select></label><button type="button" class="btn primary" id="brPpt">PPT 받기</button><span class="muted" id="brInfo"></span></div>`;
     if (!sp) { host.innerHTML = bar + '<p class="empty">고른 범위에 숫자가 없습니다.</p>'; return; }
     const ch = brCharts(sp), tb = brTable(sp), [a, b] = yrs();
     const t = sp.t;
@@ -3352,6 +3371,7 @@ html, body { height: auto; }
     const k = e.target.dataset.br; if (!k) return;
     const st = brState();
     if (k === 'top') st.top = +e.target.value; else st[k] = e.target.value;
+    if (k === 'grp') { st.cat = ''; st.sub = ''; }
     if (k === 'cat') st.sub = '';
     saveState(); drawAnalysis();
   });
@@ -3360,24 +3380,27 @@ html, body { height: auto; }
   // 4:3 slides in the look of the user's 보고 deck: dark title bar, gray label + boxed one-line summary, [구간] labels with (단위 : …),
   // light-blue table rules, good = green / bad = red, page number -n- at the bottom.
   // The two waterfalls are real Excel charts (stacked columns over an invisible 기준 series, Office default theme colors:
-  // 증가 = accent1 blue, 감소 = accent2 orange, 합계 = accent3 gray, as Excel's own waterfall) with the workbook embedded,
+  // 합계 blue, good move green, bad move red, as on the analysis page) with the workbook embedded,
   // so PowerPoint's 「데이터 편집」 opens the numbers in Excel.
   const EMU = 914400;
   const PP = { bar: '404040', lab: '7F7F7F', box: 'A6A6A6', line: '9DC3E6', tint: 'DBEEF4', txt: '262626', mut: '7F7F7F', good: '339933', bad: 'E00000' };
   function brPptSlides(scope) {
-    const M = AS.model, D = brDims(M), st = brState(), C = compute(), out = [];
-    const code = (d, n) => d < 0 || !n ? -1 : M.vals[d].indexOf(n);
-    const present = d => [...new Set(C.sel.map(l => M.leafDim[d][l]))].sort((x, y) => String(M.vals[d][x]).localeCompare(String(M.vals[d][y]), 'ko'));
-    const add = (c1, c2) => { const sp = brSpec(C, st.mode, c1, c2, st.top); if (sp && (sp.t.S0 > 0 || sp.t.S1 > 0)) out.push(sp); };
+    const M = AS.model, D = brDims(M), st = brState(), C = compute(), out = [], q = brPick(C);
+    const present = (d, also) => [...new Set(C.sel.filter(l => !also || also(l)).map(l => M.leafDim[d][l]))].sort((x, y) => String(M.vals[d][x]).localeCompare(String(M.vals[d][y]), 'ko'));
+    const add = o => { const sp = brSpec(C, st.mode, { b: -1, g: -1, l: -1, s: -1, lvl: q.lvl, ...o }, st.top); if (sp && (sp.t.S0 > 0 || sp.t.S1 > 0)) out.push(sp); };
     if (st.mode === 'div') {
-      if (scope === 'all') { add(-1, -1); for (const k of present(D.B)) add(k, -1); }
-      else add(code(D.B, st.div), -1);
-    } else {
-      const c1 = code(D.L, st.cat);
-      if (scope === 'all') { for (const k of present(D.L)) add(k, -1); }
-      else if (scope === 'subs') { add(c1, -1); for (const k of present(D.S).filter(k => C.sel.some(l => M.leafDim[D.S][l] === k && M.leafDim[D.L][l] === c1))) add(c1, k); }
-      else add(c1, code(D.S, st.sub));
-    }
+      if (scope === 'all') { add({}); for (const k of present(D.B)) add({ b: k }); }
+      else add({ b: q.b });
+    } else if (scope === 'all') {
+      if (D.G >= 0) for (const k of present(D.G)) add({ g: k });
+      else for (const k of present(D.L)) add({ l: k });
+    } else if (scope === 'subs' && q.l >= 0) {
+      add({ g: q.g, l: q.l });
+      for (const k of present(D.S, l => M.leafDim[D.L][l] === q.l)) add({ g: q.g, l: q.l, s: k });
+    } else if (scope === 'subs' && q.g >= 0) {
+      add({ g: q.g });
+      for (const k of present(D.L, l => M.leafDim[D.G][l] === q.g)) add({ g: q.g, l: k });
+    } else add({ g: q.g, l: q.l, s: q.s });
     return out;
   }
   // waterfall rows for a stacked-column chart: 기준 (invisible) + 합계 | 증가 | 감소
