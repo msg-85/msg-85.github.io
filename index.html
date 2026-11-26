@@ -3283,8 +3283,8 @@ html, body { height: auto; }
       steps: sp.sales.map(r => ({ label: r.name, other: r.other, parts: [{ v: r.d }] })) });
     const cost = brLayout({ title: `${cn} 브릿지 (%)`, upGood: false, eps: 5e-5, fv: v => (v * 100).toFixed(1) + '%', fd: v => Math.abs(v) < 5e-5 ? '0.00' : (v > 0 ? '+' : '') + (v * 100).toFixed(2),
       start: { label: a, v: sp.R0 }, end: { label: b, v: sp.R1 },
-      steps: sp.cost.map(r => ({ label: r.name, other: r.other, parts: r.adj ? [{ v: r.tot }] : [{ v: r.rate }, { v: r.mix, light: true }] })),
-      legend: `막대 아래 숫자: 위 = 율 효과, 아래 = 믹스 효과. 항목마다 왼쪽 진한 막대 = 율 효과 (그 ${sp.step}의 ${cn} 변화 × 27년 비중), 오른쪽 연한 막대 = 믹스 효과 (매출 비중 변화·신규/종료). 단위 %p` });
+      steps: sp.cost.map(r => ({ label: r.name, other: r.other, parts: [{ v: r.tot }] })),
+      legend: `막대 = 그 ${sp.step}의 ${cn} 기여 (율 효과 + 제품 믹스 효과, 단위 %p). 율·믹스 나눠 보기는 아래 표에 있습니다.` });
     void M;
     return { sales, cost };
   }
@@ -3407,11 +3407,10 @@ html, body { height: auto; }
     const steps = [];
     for (const r of sp.cost) {
       const r2 = v => Math.round(v * 100 * 100) / 100;
-      if (r.adj) steps.push({ o: sh(r.name), i: '계', v: r2(r.tot) });
-      else steps.push({ o: sh(r.name), i: '율', v: r2(r.rate) }, { o: '', i: '믹스', v: r2(r.mix) });
+      steps.push({ o: sh(r.name), i: '', v: r2(r.tot) });
     }
     const cost = brWf({ label: a, v: sp.R0 * 100 }, { label: b, v: sp.R1 * 100 }, steps);
-    Object.assign(cost, { multi: true, nfTot: '0.0"%"', nfUp: '+0.00;-0.00;;', nfDn: '-0.00;+0.00;;' });
+    Object.assign(cost, { multi: false, pct: true, nfTot: '0.0"%"', nfUp: '+0.00;-0.00;;', nfDn: '-0.00;+0.00;;' });
     return { sales, cost };
   }
   // the chart part (c:chartSpace) for one waterfall; the same numbers go into the embedded workbook's Sheet1
@@ -3436,7 +3435,7 @@ html, body { height: auto; }
       '<c:date1904 val="0"/><c:lang val="ko-KR"/><c:roundedCorners val="0"/><c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/>' +
       `<c:barChart><c:barDir val="col"/><c:grouping val="stacked"/><c:varyColors val="0"/>${ser}<c:gapWidth val="${d.multi ? 40 : 60}"/><c:overlap val="100"/><c:axId val="5001"/><c:axId val="5002"/></c:barChart>` +
       `<c:catAx><c:axId val="5001"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="low"/><c:spPr><a:noFill/>${grid}</c:spPr>${txPr(d.multi ? 700 : 800, '595959')}<c:crossAx val="5002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>` +
-      `<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/>${d.min != null ? `<c:max val="${+d.max.toPrecision(12)}"/><c:min val="${+d.min.toPrecision(12)}"/>` : ''}</c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines><c:spPr>${grid}</c:spPr></c:majorGridlines><c:numFmt formatCode="${xesc(d.multi ? '0.0' : '#,##0')}" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(800, '595959')}<c:crossAx val="5001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>` +
+      `<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/>${d.min != null ? `<c:max val="${+d.max.toPrecision(12)}"/><c:min val="${+d.min.toPrecision(12)}"/>` : ''}</c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines><c:spPr>${grid}</c:spPr></c:majorGridlines><c:numFmt formatCode="${xesc(d.pct ? '0.0' : '#,##0')}" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(800, '595959')}<c:crossAx val="5001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>` +
       `<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea><c:legend><c:legendPos val="b"/><c:legendEntry><c:idx val="0"/><c:delete val="1"/></c:legendEntry><c:overlay val="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>${txPr(800, '595959')}</c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>` +
       `<c:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>${grid}</c:spPr>${txPr(900, '595959')}<c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
   }
@@ -3463,7 +3462,7 @@ html, body { height: auto; }
           sum1: `매출 ${fN(t.S0)} → ${fN(t.S1)} (${fD(t.dS)}${fin2(t.gS) ? ', ' + fG(t.gS) : ''})  /  ${cn} ${fP(sp.R0)} → ${fP(sp.R1)} (${fPP(sp.R1 - sp.R0, 2)})  /  CM ${fD(t.dM)}`,
           sum2: [topS ? `매출 主 요인 : ${topS.name} ${fD(topS.d)}` : '', topC ? `${cn} 主 요인 : ${topC.name} ${fPP(topC.tot, 2)}` : ''].filter(Boolean).join('  ·  '),
           secS: `[매출 브릿지 : ${sp.step}별]`, unitS: `(단위 : ${divName()}${xl.sales.cut ? ', 세로축 일부 생략' : ''})`,
-          secC: `[${cn} 브릿지 : ${sp.step}별 율·믹스]`, unitC: `(단위 : %, %p${xl.cost.cut ? ', 세로축 일부 생략' : ''})`,
+          secC: `[${cn} 브릿지 : ${sp.step}별 기여 (율+믹스)]`, unitC: `(단위 : %, %p${xl.cost.cut ? ', 세로축 일부 생략' : ''})`,
           secT: `[${sp.step}별 상세]`, unitT: `(단위 : ${divName()}, %, %p)`,
           xl, table: brTable(sp),
           foot: `※ 율 효과 = 각 ${sp.step}의 ${cn} 변화 × ${b} 매출 비중, 믹스 효과 = 매출 비중 변화·신규/종료.  출처 : ${src}`,
