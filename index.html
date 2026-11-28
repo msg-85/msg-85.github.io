@@ -1374,6 +1374,8 @@ details.memo > summary { cursor: pointer; color: var(--muted); }
   const TRK = { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [], by: 'prod', sel: {}, chip: {} };
   const OTHER = '로켓 제외 최저가';
   const TRK_DL = '\n📥 표는 고른 날짜의 마지막 기록입니다. 일자별·조회 차수별(10시 01분/23시 31분) 현황은 [엑셀로 내려받기]에서 기간을 골라 받은 「전체 기록」 시트에서 보세요. 이름이 비슷한 다른 상품(유사 상품)은 표 가격에서 빼고, 엑셀의 「기준/유사/감시」 칸에 「유사 상품」으로 표시했습니다. ★ = 정해진 시간 사이 6시간마다 감시해서 잡은 새 최저가. ⤴N = 지정 입수량을 파는 곳이 없어 바로 위 입수량(N) 가격을 넣은 칸.';
+  const TRK_VIEW_DL = '\n이 화면은 조회 전용입니다 (쿠팡 계열 · 최근 4주). ★ = 정해진 시간 사이 6시간마다 감시해서 잡은 새 최저가. ⤴N = 지정 입수량을 파는 곳이 없어 바로 위 입수량(N) 가격을 넣은 칸.';
+  const trkDl = () => TRK.viewOnly ? TRK_VIEW_DL : TRK_DL;
   const TRK_KEY = 'data-window-trk';
   try { Object.assign(TRK, JSON.parse(localStorage.getItem(TRK_KEY) || '{}'), { cfg: null, rows: null, latest: null, loading: null, groups: [], brands: [] }); } catch (e) {}
   const trkSave = () => { try { localStorage.setItem(TRK_KEY, JSON.stringify({ by: TRK.by, sel: TRK.sel, chip: TRK.chip, lay: TRK.lay, cg: TRK.cg, cch: TRK.cch, tg: TRK.tg, tf: TRK.tf, cf: TRK.cf })); } catch (e) {} };
@@ -1482,6 +1484,13 @@ html, body { height: auto; }
     document.querySelector('.top h1').textContent = '공유된 가격 추적 (보기 전용)';
     $('loginPane').hidden = true; $('sendPane').hidden = true; $('readPane').hidden = true; $('trackPane').hidden = false;
     $('trkRefresh').hidden = true; $('trkShare').hidden = true; $('trkReq').hidden = !L.req;
+    TRK.viewOnly = !!L.viewOnly;
+    if (TRK.viewOnly) {
+      // 조회 전용 (캘린더의 마스터 외 계정): no downloads, no requests, no tracking status
+      document.querySelector('.top h1').textContent = '쿠팡 가격 추적 (조회 전용 · 최근 4주)';
+      for (const id of ['trkXlsx', 'trkList', 'trkReq', 'trkStat']) $(id).hidden = true;
+      L.req = '';
+    }
     TRK.live = { id: L.id, req: L.req || '' };
     TRK.cfg = L.cfg; Object.assign(TRK, trkFlatten(L.cfg));
     TRK.rows = (L.rows || []).map(r => ({ at: r[0], group: r[1], qty: r[2], ch: r[3], price: r[4], listings: r[5], trend: r[6], name: r[7], flag: r[8] || '' }));
@@ -1741,14 +1750,14 @@ html, body { height: auto; }
     if (TRK.by === 'prod') {
       const gs = vgs;
       box.appendChild(trkProdTable(gs)); trkStarList(box, gs);
-      $('trkNote').textContent = '칸마다 그 채널에서 같은 입수량 상품 중 가장 싼 가격입니다 (폴센트 검색 기준). 초록 칸 = 그 줄 최저가, ▲▼ = 직전 기록 대비. 칸에 마우스를 올리면 상품명과 기록 최저·최고가가 보입니다. – = 검색에 안 잡힘.' + TRK_DL;
+      $('trkNote').textContent = '칸마다 그 채널에서 같은 입수량 상품 중 가장 싼 가격입니다 (폴센트 검색 기준). 초록 칸 = 그 줄 최저가, ▲▼ = 직전 기록 대비. 칸에 마우스를 올리면 상품명과 기록 최저·최고가가 보입니다. – = 검색에 안 잡힘.' + trkDl();
     } else {
       const chs = trkChannels();
       sel.replaceChildren(...chs.map(c => { const o = el('option', '', c); o.value = c; return o; }));
       if (!chs.includes(TRK.sel.ch)) TRK.sel.ch = chs[0];
       sel.value = TRK.sel.ch;
       box.appendChild(trkChTable(TRK.sel.ch, vgs)); trkStarList(box, vgs, TRK.sel.ch);
-      $('trkNote').textContent = `${TRK.sel.ch === OTHER ? '로켓배송을 뺀 채널 중 가장 싼 가격 (칸 아래에 채널 이름)' : TRK.sel.ch + '에서 같은 입수량 상품 중 가장 싼 가격'}입니다 (폴센트 검색 기준). 초록 칸 = 그 제품에서 개당 가격이 가장 싼 입수량, ▲▼ = 직전 기록 대비. – = 검색에 안 잡힘.` + TRK_DL;
+      $('trkNote').textContent = `${TRK.sel.ch === OTHER ? '로켓배송을 뺀 채널 중 가장 싼 가격 (칸 아래에 채널 이름)' : TRK.sel.ch + '에서 같은 입수량 상품 중 가장 싼 가격'}입니다 (폴센트 검색 기준). 초록 칸 = 그 제품에서 개당 가격이 가장 싼 입수량, ▲▼ = 직전 기록 대비. – = 검색에 안 잡힘.` + trkDl();
     }
     const days = trkDays(), ds = $('trkDate');
     if (TRK.date && !days.includes(TRK.date)) TRK.date = '';
@@ -1881,7 +1890,7 @@ html, body { height: auto; }
     } else if (det.id === 'trkCGms') {
       trkStepPicker(det, TRK.cf || trkFOf(gs.map(g => g.id)), (f, ids) => { TRK.cf = f; TRK.cg = ids; trkSave(); trkChartRender(); trkMarkProd(); }, 12);
     } else {
-      const all = trkChAll(gs), items = [...all, OTHER].map(c => ({ v: c, t: c === OTHER ? OTHER + ' (로켓배송 뺀 채널 중 최저)' : c, g: '' }));
+      const all = trkChAll(gs), items = [...all, ...(TRK.viewOnly ? [] : [OTHER])].map(c => ({ v: c, t: c === OTHER ? OTHER + ' (로켓배송 뺀 채널 중 최저)' : c, g: '' }));
       trkPicker(det, items, TRK.cch || all, cs => {
         TRK.cch = !cs.length || (cs.length === all.length && cs.every(c => all.includes(c))) ? null : cs;
         trkSave(); trkChartRender();
