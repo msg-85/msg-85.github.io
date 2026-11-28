@@ -120,6 +120,8 @@ body.dragging .drop { border-color: var(--out); }
 .check { display: flex; gap: 6px; align-items: center; font-size: 14px; }
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .bar .grow { flex: 1; min-width: 0; color: var(--muted); font-size: 13px; }
+#trkInfo { flex: 1 1 260px; } /* narrow screens: the info line wraps onto its own row instead of shrinking to one character */
+@media (max-width: 900px) { #trkLay { display: none; } } /* the split already stacks here, so 좌우/위아래 does nothing */
 .btn { border: 1px solid var(--line); background: var(--sheet); padding: 6px 12px; cursor: pointer; font-weight: 500; }
 .btn:hover { background: var(--head); }
 .btn.small { padding: 1px 8px; font-size: 13px; }
