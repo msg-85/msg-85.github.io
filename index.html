@@ -93,7 +93,7 @@ a { color: var(--out); }
 .trk-t tbody th.trk-prod:hover { text-decoration: underline; }
 .trk-t tbody th.trk-prod.on { color: var(--s2); }
 .trk-t tbody tr.trk-first > * { border-top: 2px solid var(--line); }
-@media (max-width: 900px) { .trk-split { display: flex; flex-direction: column; overflow: auto; } .trk-left, .trk-right { overflow: visible; } }
+@media (max-width: 900px) { .trk-split { display: flex; flex-direction: column; overflow: auto; } .trk-left, .trk-right { overflow: visible; flex-shrink: 0; } } /* no shrink: otherwise the chart squeezes to the pane height and the table draws over it */
 .who { margin-left: auto; color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: center; }
 
 .pane { background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; min-width: 0; }
