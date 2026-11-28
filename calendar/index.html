@@ -158,6 +158,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* sheets */
 .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
 .sheet { background: var(--sheet); width: 100%; max-width: 760px; max-height: 92vh; overflow: auto; border-radius: 18px 18px 0 0; padding: 8px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow: var(--shadow); }
+.fullview { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; }
+.fullview .fvh { display: flex; align-items: center; gap: 8px; padding: calc(6px + env(safe-area-inset-top)) 10px 6px; border-bottom: 1px solid var(--line); background: var(--sheet); }
+.fullview .fvh h2 { font-size: 16px; margin: 0; flex: 1; }
+.fullview iframe { flex: 1; width: 100%; border: 0; background: var(--bg); }
 .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 4px auto 8px; }
 .sh { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; position: sticky; top: -8px; background: var(--sheet); padding: 6px 0; z-index: 1; }
 .sh h2 { font-size: 18px; margin: 0; flex: 1; }
