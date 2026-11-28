@@ -49,6 +49,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .chip { border: 1px solid var(--line); background: var(--sheet); border-radius: 18px; padding: 6px 12px; cursor: pointer; font-size: 14px; white-space: nowrap; }
 .filters { display: flex; gap: 8px; margin-top: 6px; overflow-x: auto; scrollbar-width: none; }
 .filters::-webkit-scrollbar { display: none; }
+.fsel { border: 1px solid var(--line); background: var(--sheet); color: var(--ink); border-radius: 18px; padding: 6px 26px 6px 12px; font-size: 14px; max-width: 46%; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; position: relative; font-family: inherit; }
+.fsel::after { content: '▾'; position: absolute; right: 10px; color: var(--muted); }
+.fsel.on { border-color: var(--brand); background: var(--soft); font-weight: 600; }
+.fpick { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 2px 10px; }
+.fpick label { display: flex; gap: 10px; align-items: center; padding: 9px 0; font-size: 15px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.fpick label:last-child { border-bottom: 0; }
+.fpick input { width: 18px; height: 18px; flex: none; accent-color: var(--brand); }
+.fpick-h { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.fpick-h .chip { padding: 5px 10px; font-size: 13px; }
+.fpick-n { font-size: 13px; color: var(--muted); }
 .filters select { border: 1px solid var(--line); background: var(--sheet); border-radius: 18px; padding: 6px 10px; font-size: 14px; max-width: 46%; flex: none; }
 /* day list: 행사 -> 소분류 -> SKU */
 .promo { background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
@@ -222,11 +232,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
         <button class="ib" id="menuBtn" aria-label="메뉴" style="position:relative">☰<span id="menuBadge" class="nbadge" hidden></span></button>
       </div>
       <div class="filters">
-        <select id="fTeam" aria-label="팀"><option value="">전체 팀</option></select>
-        <select id="fChannel" aria-label="채널"><option value="">전체 채널</option></select>
-        <select id="fBrand" aria-label="브랜드"><option value="">전체 브랜드</option></select>
-        <select id="fSub" aria-label="소분류"><option value="">전체 소분류</option></select>
-        <select id="fPg" aria-label="가격구분"><option value="">전체 가격구분</option></select>
+        <button class="fsel" id="fTeam" aria-label="팀 고르기">전체 팀</button>
+        <button class="fsel" id="fChannel" aria-label="채널 고르기">전체 채널</button>
+        <button class="fsel" id="fBrand" aria-label="대분류 고르기">전체 대분류</button>
+        <button class="fsel" id="fSub" aria-label="소분류 고르기">전체 소분류</button>
+        <button class="fsel" id="fPg" aria-label="가격구분 고르기">전체 가격구분</button>
       </div>
       <div id="demoBar" class="demo" hidden></div>
       <div id="installBar" class="ok row" style="margin:6px 0" hidden><span class="grow">📱 홈 화면에 앱으로 설치하면 아이콘으로 바로 열려요.</span><button class="btn pri" id="installBtn" style="padding:7px 12px">설치</button><button class="ib" id="installX" aria-label="닫기" style="width:32px;height:32px">✕</button></div>
