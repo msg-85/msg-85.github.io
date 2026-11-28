@@ -259,18 +259,101 @@
     return { days, total: all.length, list: all.slice(0, chartMax()) };
   }
   const niceStep = span => { const raw = span / 4, p = Math.pow(10, Math.floor(Math.log10(raw || 1))); return [1, 2, 2.5, 5, 10].map(x => x * p).find(x => x >= raw) || p * 10; };
+  // ---- 경쟁사 비교 (베타): 쿠팡 계열 (로켓배송·로켓프레시·로켓직구) 하루 최저가 from the price tracker (table market_prices).
+  // Graph only; picked products are dashed lines. Picks are kept on this device (evcal-mk).
+  const MK_MAX = 6, MK_COLORS = ['#e53935', '#8e24aa', '#00897b', '#f9a825', '#3949ab', '#6d4c41'];
+  S.mk = (() => { try { const v = JSON.parse(localStorage.getItem('evcal-mk') || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } })();
+  S.market = { key: '', rows: [] };
+  const MKP = new Map(); // month key -> pending load
+  const mkKey = r => r.vid + '|' + r.qty;
+  const squash = s => String(s || '').toLowerCase().replace(/[\s,]/g, '');
+  const mkName = r => {
+    const base = !r.variant || squash(r.brand).includes(squash(r.variant)) ? r.brand : `${r.brand} ${r.variant}`;
+    return `${base}${r.size && !squash(base).includes(squash(r.size)) ? ' ' + r.size : ''} ×${r.qty}${r.unit || '개'}`;
+  };
+  const monthKey = () => S.y + '-' + S.m;
+  function loadMarket() {
+    const key = monthKey(); if (S.market.key === key) return Promise.resolve(S.market.rows);
+    if (MKP.has(key)) return MKP.get(key);
+    const p = Promise.resolve(api.listMarket ? api.listMarket(ymd(S.y, S.m, 1), ymd(S.y, S.m + 1, 0)) : []).catch(() => [])
+      .then(rows => { MKP.delete(key); if (monthKey() === key) S.market = { key, rows: rows || [] }; return rows || []; });
+    MKP.set(key, p); return p;
+  }
+  async function pickMarket() {
+    const rows = await loadMarket();
+    const by = new Map(); // product -> latest row
+    for (const r of rows) { const k = mkKey(r), c = by.get(k); if (!c || r.d > c.d) by.set(k, r); }
+    const items = [...by.values()].sort((a, b) => [a.grp, a.maker, a.brand, a.variant].join('|').localeCompare([b.grp, b.maker, b.brand, b.variant].join('|')) || a.qty - b.qty);
+    const chosen = new Set(S.mk);
+    if (!items.length) return sheet('경쟁사 비교 (베타)', el('div', {}, el('div', { class: 'empty' }, '이 달에는 아직 쿠팡 시세 기록이 없습니다.'),
+      el('p', { class: 's', style: 'color:var(--muted);font-size:13px' }, '가격 추적이 돌 때마다 (하루 2번) 쿠팡 계열 최저가가 자동으로 들어옵니다.')));
+    const sel = (name) => el('select', { class: 'in', 'aria-label': name, style: 'flex:1;min-width:0;padding:8px' });
+    const sG = sel('품목군'), sM = sel('제조사'), sB = sel('브랜드');
+    const q = el('input', { class: 'in', placeholder: '검색 (예: 서울우유, 900)', style: 'margin:8px 0' });
+    const info = el('span', { class: 'fpick-n' }), list = el('div', { class: 'fpick' });
+    const fill = (s, vals, all) => { const cur = s.value; s.replaceChildren(el('option', { value: '' }, all), ...vals.map(v => el('option', { value: v }, v))); s.value = vals.includes(cur) ? cur : ''; };
+    const refill = () => {
+      fill(sG, uniq(items.map(r => r.grp)), '전체 품목군');
+      fill(sM, uniq(items.filter(r => !sG.value || r.grp === sG.value).map(r => r.maker)), '전체 제조사');
+      fill(sB, uniq(items.filter(r => (!sG.value || r.grp === sG.value) && (!sM.value || r.maker === sM.value)).map(r => r.brand)), '전체 브랜드');
+    };
+    const show = () => { info.textContent = `${chosen.size}개 선택 (최대 ${MK_MAX}개)`; };
+    const drawL = () => {
+      const w = q.value.trim().toLowerCase().replace(/\s+/g, '');
+      const sh = items.filter(r => (!sG.value || r.grp === sG.value) && (!sM.value || r.maker === sM.value) && (!sB.value || r.brand === sB.value) && (!w || (r.maker + mkName(r)).toLowerCase().replace(/\s+/g, '').includes(w)));
+      list.replaceChildren(...(sh.length ? sh.map(r => {
+        const k = mkKey(r), cb = el('input', { type: 'checkbox' }); cb.checked = chosen.has(k);
+        cb.addEventListener('change', () => {
+          if (cb.checked && chosen.size >= MK_MAX) { cb.checked = false; return toast(`경쟁 품목은 ${MK_MAX}개까지 고를 수 있어요.`); }
+          cb.checked ? chosen.add(k) : chosen.delete(k); show();
+        });
+        return el('label', {}, cb, el('span', { style: 'min-width:0' }, mkName(r), el('small', { style: 'display:block;color:var(--muted);font-size:12px' }, `${r.grp} · ${r.maker} · 최근 ${won(r.price)} (${r.channel}, ${fmtD(r.d)})`)));
+      }) : [el('div', { class: 'empty' }, '맞는 품목이 없습니다.')]));
+      show();
+    };
+    for (const s of [sG, sM, sB]) s.addEventListener('change', () => { refill(); drawL(); });
+    q.addEventListener('input', drawL);
+    let close;
+    const clear = el('button', { class: 'chip', onclick: () => { chosen.clear(); drawL(); } }, '전체 해제');
+    const apply = el('button', { class: 'btn pri', onclick: () => {
+      S.mk = [...chosen]; try { localStorage.setItem('evcal-mk', JSON.stringify(S.mk)); } catch (x) {}
+      close(); drawChart();
+    } }, '적용');
+    close = sheet('경쟁사 비교 (베타 · 쿠팡가 기준)', el('div', {},
+      el('p', { class: 's', style: 'color:var(--muted);font-size:13px;margin:0 0 8px' }, '가격 추적에서 쿠팡 계열(로켓배송·로켓프레시·로켓직구) 하루 최저가를 가져와 점선으로 겹쳐 그립니다. 입수량이 같은 품목끼리 비교하세요.'),
+      el('div', { style: 'display:flex;gap:6px' }, sG, sM, sB), q,
+      el('div', { class: 'fpick-h' }, info, el('span', { class: 'grow' }), clear), list, el('div', { class: 'acts' }, apply)));
+    refill(); drawL();
+  }
   function drawChart() {
     const box = $('chartBox'), { days, total, list } = chartSeries();
     const subShort = s => String(s || '').replace(/^[A-Za-z]?\d*\.\s*/, '');
-    const label = s => `${s.ch} · ${S.fSub.length === 1 ? '' : subShort(s.sub) + ' '}${s.pg}`;
-    const head = el('div', { class: 'ch-h' }, el('span', {}, '판매가 추이 ', el('small', {}, `${S.m + 1}/1 ~ ${S.m + 1}/${days.length}`)), el('small', {}, list.length ? `선 ${list.length}개` : ''));
-    if (!list.length) return box.replaceChildren(head, el('div', { class: 'empty' }, '이 달에 고른 조건의 행사가 없습니다.'));
+    const label = s => s.comp ? s.name : `${s.ch} · ${S.fSub.length === 1 ? '' : subShort(s.sub) + ' '}${s.pg}`;
+    // competitor lines (once this month's market rows are loaded)
+    const mkReady = S.market.key === monthKey();
+    if (S.mk.length && !mkReady) loadMarket().then(() => { if (S.view === 'chart') drawChart(); });
+    const comps = [], noData = [];
+    if (mkReady) S.mk.forEach((k, i) => {
+      const rs = S.market.rows.filter(r => mkKey(r) === k);
+      if (!rs.length) return noData.push(k);
+      const byD = new Map(rs.map(r => [r.d, r])), vals = days.map(d => (byD.has(d) ? byD.get(d).price : null));
+      if (!vals.some(v => v != null)) return noData.push(k);
+      const r = vals.filter(v => v != null);
+      comps.push({ k: 'mk:' + k, comp: true, name: mkName(rs[0]), vals, hi: vals, chs: days.map(d => (byD.has(d) ? byD.get(d).channel : '')), min: Math.min(...r), max: Math.max(...r), col: MK_COLORS[i % MK_COLORS.length] });
+    });
+    list.forEach((s, i) => { s.col = LINE_COLORS[i % LINE_COLORS.length]; });
+    const series = list.concat(comps);
+    const mkBtn = el('button', { class: 'fsel' + (S.mk.length ? ' on' : ''), onclick: pickMarket }, S.mk.length ? `경쟁사 비교 ${S.mk.length}` : '경쟁사 비교');
+    const mkbar = el('div', { class: 'mkbar' }, mkBtn, el('span', { class: 'beta' }, '베타'), el('small', {}, '쿠팡가 기준'));
+    const head = el('div', { class: 'ch-h' }, el('span', {}, '판매가 추이 ', el('small', {}, `${S.m + 1}/1 ~ ${S.m + 1}/${days.length}`)), el('small', {}, list.length ? `선 ${list.length}개` + (comps.length ? ` + 경쟁 ${comps.length}` : '') : ''));
+    const mkNote = noData.length ? el('div', { class: 'ch-note' }, `고른 경쟁 품목 중 ${noData.length}개는 이 달 쿠팡 시세 기록이 없어요.`) : null;
+    if (!series.length) return box.replaceChildren(head, mkbar, mkNote || '', el('div', { class: 'empty' }, '이 달에 고른 조건의 행사가 없습니다.'));
     const note = total > chartMax() ? el('div', { class: 'ch-note' }, `선이 ${total}개라 판매가 높은 ${chartMax()}개만 보여요. 위 필터로 좁히면 다 보여요.`) : null;
-    if (S.hl && !list.some(s => s.k === S.hl)) S.hl = '';
+    if (S.hl && !series.some(s => s.k === S.hl)) S.hl = '';
     // geometry (px, drawn at the box's real width so text stays the same size on any screen)
     const W = Math.max(280, (box.clientWidth || 360) - 16), H = Math.round(Math.min(260, Math.max(190, W * 0.55)));
-    const L = 44, R = 10, T = 10, B = 22, pw = W - L - R, ph = H - T - B;
-    let lo = Math.min(...list.map(s => s.min)), hi = Math.max(...list.map(s => s.max));
+    const L = 48, R = 10, T = 10, B = 22, pw = W - L - R, ph = H - T - B;
+    let lo = Math.min(...series.map(s => s.min)), hi = Math.max(...series.map(s => s.max));
     if (lo === hi) { lo -= 500; hi += 500; }
     const step = niceStep(hi - lo); lo = Math.max(0, Math.floor((lo - step * 0.2) / step) * step); hi = Math.ceil((hi + step * 0.2) / step) * step; if (hi === lo) hi = lo + step;
     const X = i => L + (days.length === 1 ? pw / 2 : i * pw / (days.length - 1)), Y = v => T + ph - (v - lo) / (hi - lo) * ph;
@@ -283,9 +366,9 @@
     if (ti >= 0) g += `<line x1="${f1(X(ti))}" x2="${f1(X(ti))}" y1="${T}" y2="${T + ph}" style="stroke:var(--muted);stroke-dasharray:2 3"/>`;
     if (si >= 0) g += `<line x1="${f1(X(si))}" x2="${f1(X(si))}" y1="${T}" y2="${T + ph}" style="stroke:var(--ink);stroke-width:1.2"/>`;
     // highlighted line drawn last so it sits on top
-    const order = list.map((s, i) => [s, i]).sort((a, b) => (a[0].k === S.hl) - (b[0].k === S.hl));
-    for (const [s, i] of order) {
-      const col = LINE_COLORS[i % LINE_COLORS.length], dim = S.hl && s.k !== S.hl, sw = s.k === S.hl ? 3 : 2;
+    const order = series.slice().sort((a, b) => (a.k === S.hl) - (b.k === S.hl));
+    for (const s of order) {
+      const col = s.col, dim = S.hl && s.k !== S.hl, sw = s.k === S.hl ? 3 : 2;
       let d = '', pts = '';
       s.vals.forEach((v, j) => {
         if (v == null) return;
@@ -294,9 +377,9 @@
         // dots where a run starts / ends / the price changes
         if (prev == null || next == null || prev !== v) pts += `<circle cx="${f1(X(j))}" cy="${f1(Y(v))}" r="${prev == null && next == null ? 3 : 2.4}" fill="${col}"/>`;
       });
-      g += `<g style="opacity:${dim ? 0.18 : 1}"><path d="${d}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>${pts}</g>`;
+      g += `<g style="opacity:${dim ? 0.18 : 1}"><path d="${d}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"${s.comp ? ' stroke-dasharray="6 4"' : ''}/>${pts}</g>`;
     }
-    if (si >= 0) for (const [s, i] of order) { const v = s.vals[si]; if (v != null && !(S.hl && s.k !== S.hl)) g += `<circle cx="${f1(X(si))}" cy="${f1(Y(v))}" r="4" fill="${LINE_COLORS[i % LINE_COLORS.length]}" style="stroke:var(--sheet);stroke-width:2"/>`; }
+    if (si >= 0) for (const s of order) { const v = s.vals[si]; if (v != null && !(S.hl && s.k !== S.hl)) g += `<circle cx="${f1(X(si))}" cy="${f1(Y(v))}" r="4" fill="${s.col}" style="stroke:var(--sheet);stroke-width:2"/>`; }
     const holder = el('div', {}); holder.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="일자별 판매가 그래프">${g}</svg>`;
     const svg = holder.firstChild;
     // tap / click on the graph picks that day (the list below follows it)
@@ -306,16 +389,21 @@
       S.sel = days[i]; draw();
     });
     const selTxt = si >= 0 ? fmtD(S.sel) : '';
-    const lg = el('div', { class: 'lg' }, el('div', { class: 'lh' }, el('span', {}, '채널 · 가격구분 (눌러서 강조)'), el('span', {}, selTxt ? selTxt + ' 판매가' : '')),
-      ...list.map((s, i) => {
-        const v = si >= 0 ? s.vals[si] : null, vh = si >= 0 ? s.hi[si] : null;
-        return el('div', { class: 'li' + (S.hl && s.k !== S.hl ? ' dim' : ''), title: label(s), onclick: () => { S.hl = S.hl === s.k ? '' : s.k; drawChart(); } },
-          el('span', { class: 'sw', style: 'background:' + LINE_COLORS[i % LINE_COLORS.length] }),
-          el('span', { class: 'nm' }, label(s)),
-          el('span', { class: 'r' }, rng(s.min, s.max, x => x.toLocaleString('ko-KR'))),
-          el('span', { class: 'v' }, v == null ? '-' : rng(v, vh, x => x.toLocaleString('ko-KR')) + '원'));
-      }));
-    box.replaceChildren(head, note || '', svg, lg);
+    const fmt = x => x.toLocaleString('ko-KR');
+    const legendRow = s => {
+      const v = si >= 0 ? s.vals[si] : null, vh = si >= 0 ? s.hi[si] : null;
+      return el('div', { class: 'li' + (S.hl && s.k !== S.hl ? ' dim' : ''), title: label(s), onclick: () => { S.hl = S.hl === s.k ? '' : s.k; drawChart(); } },
+        el('span', { class: 'sw' + (s.comp ? ' dash' : ''), style: s.comp ? 'color:' + s.col : 'background:' + s.col }),
+        el('span', { class: 'nm' }, label(s), s.comp && v != null && s.chs[si] ? el('small', { class: 'mkch' }, ' ' + s.chs[si]) : null),
+        el('span', { class: 'r' }, rng(s.min, s.max, fmt)),
+        el('span', { class: 'v' }, v == null ? '-' : rng(v, vh, fmt) + '원'));
+    };
+    const lg = el('div', { class: 'lg' },
+      list.length ? el('div', { class: 'lh' }, el('span', {}, '채널 · 가격구분 (눌러서 강조)'), el('span', {}, selTxt ? selTxt + ' 판매가' : '')) : null,
+      ...list.map(legendRow),
+      comps.length ? el('div', { class: 'lh' }, el('span', {}, '경쟁사 · 쿠팡가 기준 (베타)'), el('span', {}, selTxt && !list.length ? selTxt + ' 판매가' : '')) : null,
+      ...comps.map(legendRow));
+    box.replaceChildren(head, mkbar, note || '', mkNote || '', svg, lg);
   }
   function drawDay() {
     const d = S.sel, list = visible().filter(e => e.start_date <= d && e.end_date >= d);
