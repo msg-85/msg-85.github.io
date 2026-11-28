@@ -7,7 +7,7 @@
   const useDemo = params.has('demo') || !cfg.url || !cfg.anonKey;
   const api = useDemo ? new Cal.DemoBackend() : new Cal.SupabaseBackend(cfg.url, cfg.anonKey);
 
-  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], requests: [], fTeam: '', fCh: '', fBr: '', fSub: '', fPg: '', dv: (() => { try { return localStorage.getItem('evcal-dv') || 'sub'; } catch (e) { return 'sub'; } })() };
+  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], requests: [], fTeam: '', fCh: '', fBr: '', fSub: '', fPg: '', hl: '', view: (() => { try { return localStorage.getItem('evcal-view') || 'cal'; } catch (e) { return 'cal'; } })(), dv: (() => { try { return localStorage.getItem('evcal-dv') || 'sub'; } catch (e) { return 'sub'; } })() };
   const PALETTE = ['#2e7d6b', '#c2571a', '#3b62c4', '#a33ea1', '#b8860b', '#c0392b', '#00838f', '#6d4c41', '#5e35b1', '#558b2f'];
   const won = n => (n == null || n === '' ? '-' : Number(n).toLocaleString('ko-KR') + '원');
   const num = s => { if (s == null) return NaN; const t = String(s).replace(/[,\s원]/g, ''); return t === '' ? NaN : Number(t); };
@@ -66,7 +66,7 @@
     const t = todayKst().split('-').map(Number); S.y = t[0]; S.m = t[1] - 1;
     try { [S.channels, S.products, S.users] = await Promise.all([api.listChannels(), api.listProducts(), api.listUsers()]); }
     catch (x) { return fail(x); }
-    fillFilters(); await load(); refreshRequests();
+    fillFilters(); await load(); if (S.view === 'chart' && chartDefault()) draw(); refreshRequests();
     if (S.user.mustChange) return changePw(true);
     // first login on this device (per role): show the short guide once
     try { const k = 'evcal-help-seen-' + S.user.role; if (!localStorage.getItem(k)) { localStorage.setItem(k, '1'); showHelp(); } } catch (e) {}
@@ -142,6 +142,9 @@
   function draw() {
     $('monthLabel').textContent = `${S.y}년 ${S.m + 1}월`;
     fillFilters();
+    for (const b of $('viewSeg').children) b.className = b.dataset.v === S.view ? 'on' : '';
+    $('calBox').hidden = S.view === 'chart'; $('chartBox').hidden = S.view !== 'chart';
+    if (S.view === 'chart') { drawChart(); return drawDay(); }
     const { from, to } = gridRange(), evs = visible(), today = todayKst(), grid = $('grid');
     grid.replaceChildren();
     const LANES = 3, LH = 18, TOP = 28;
@@ -186,6 +189,103 @@
       grid.append(wk);
     }
     drawDay();
+  }
+  // ---------------- graph view ----------------
+  // 달력 / 그래프 toggle next to the month. The graph shows 판매가 per day (1일 ~ 말일) for the filtered events,
+  // one line per 채널(+세부채널) × 소분류 × 가격구분 (the lowest 판매가 of its SKUs that day). Gaps = no 행사.
+  const CHART_MAX = 10;
+  $('viewSeg').addEventListener('click', e => {
+    const v = e.target.dataset && e.target.dataset.v; if (!v || v === S.view) return;
+    S.view = v; try { localStorage.setItem('evcal-view', v); } catch (x) {}
+    if (v === 'chart') chartDefault();
+    draw();
+  });
+  // with no filter picked, the graph opens on 시유 GT 900 · 2입 (소분류 "…시유 GT 900", the 가격구분 of its 2입 set)
+  function chartDefault() {
+    if (S.fTeam || S.fCh || S.fBr || S.fSub || S.fPg) return false;
+    const inSub = S.events.filter(e => /시유\s*GT\s*900$/.test(catOf(e).s));
+    if (!inSub.length) return false;
+    const two = inSub.find(e => /2입/.test(e.product_name || '')) || inSub[0];
+    S.fBr = catOf(two).l; S.fSub = catOf(two).s; S.fPg = pgOf(two);
+    return true;
+  }
+  function chartSeries() {
+    const first = ymd(S.y, S.m, 1), nd = new Date(Date.UTC(S.y, S.m + 1, 0)).getUTCDate(), last = ymd(S.y, S.m, nd);
+    const days = Array.from({ length: nd }, (_, i) => ymd(S.y, S.m, i + 1));
+    const m = new Map();
+    for (const e of visible()) {
+      if (e.start_date > last || e.end_date < first) continue;
+      const v = Number(e.sale_price); if (!(v > 0)) continue;
+      const c = catOf(e), pg = pgOf(e);
+      const k = [e.channel_code, e.channel_detail || '', c.s, pg].join('\u0001');
+      if (!m.has(k)) m.set(k, { k, ch: chName(e), code: e.channel_code, sub: c.s, pg, vals: days.map(() => null), hi: days.map(() => null), n: new Set() });
+      const s = m.get(k); s.n.add(e.product_code);
+      days.forEach((d, i) => { if (e.start_date <= d && e.end_date >= d) { s.vals[i] = s.vals[i] == null ? v : Math.min(s.vals[i], v); s.hi[i] = Math.max(s.hi[i] || 0, v); } });
+    }
+    const all = [...m.values()].filter(s => s.vals.some(v => v != null));
+    for (const s of all) { const r = s.vals.filter(v => v != null); s.min = Math.min(...r); s.max = Math.max(...r); }
+    // too many lines to read: keep the 10 with the highest 판매가
+    all.sort((a, b) => b.max - a.max || chIx(a.code) - chIx(b.code) || a.k.localeCompare(b.k));
+    return { days, total: all.length, list: all.slice(0, CHART_MAX) };
+  }
+  const niceStep = span => { const raw = span / 4, p = Math.pow(10, Math.floor(Math.log10(raw || 1))); return [1, 2, 2.5, 5, 10].map(x => x * p).find(x => x >= raw) || p * 10; };
+  function drawChart() {
+    const box = $('chartBox'), { days, total, list } = chartSeries();
+    const subShort = s => String(s || '').replace(/^[A-Za-z]?\d*\.\s*/, '');
+    const label = s => `${s.ch} · ${S.fSub ? '' : subShort(s.sub) + ' '}${s.pg}`;
+    const head = el('div', { class: 'ch-h' }, el('span', {}, '판매가 추이 ', el('small', {}, `${S.m + 1}/1 ~ ${S.m + 1}/${days.length}`)), el('small', {}, list.length ? `선 ${list.length}개` : ''));
+    if (!list.length) return box.replaceChildren(head, el('div', { class: 'empty' }, '이 달에 고른 조건의 행사가 없습니다.'));
+    const note = total > CHART_MAX ? el('div', { class: 'ch-note' }, `선이 ${total}개라 판매가 높은 ${CHART_MAX}개만 보여요. 위 필터로 좁히면 다 보여요.`) : null;
+    if (S.hl && !list.some(s => s.k === S.hl)) S.hl = '';
+    // geometry (px, drawn at the box's real width so text stays the same size on any screen)
+    const W = Math.max(280, (box.clientWidth || 360) - 16), H = Math.round(Math.min(260, Math.max(190, W * 0.55)));
+    const L = 44, R = 10, T = 10, B = 22, pw = W - L - R, ph = H - T - B;
+    let lo = Math.min(...list.map(s => s.min)), hi = Math.max(...list.map(s => s.max));
+    if (lo === hi) { lo -= 500; hi += 500; }
+    const step = niceStep(hi - lo); lo = Math.max(0, Math.floor((lo - step * 0.2) / step) * step); hi = Math.ceil((hi + step * 0.2) / step) * step; if (hi === lo) hi = lo + step;
+    const X = i => L + (days.length === 1 ? pw / 2 : i * pw / (days.length - 1)), Y = v => T + ph - (v - lo) / (hi - lo) * ph;
+    const f1 = n => Math.round(n * 10) / 10;
+    let g = '';
+    for (let v = lo; v <= hi + 1e-9; v += step) g += `<line x1="${L}" x2="${W - R}" y1="${f1(Y(v))}" y2="${f1(Y(v))}" style="stroke:var(--line)"/><text x="${L - 6}" y="${f1(Y(v) + 3.5)}" text-anchor="end">${Math.round(v).toLocaleString('ko-KR')}</text>`;
+    const ticks = [1, 5, 10, 15, 20, 25, days.length].filter((d, i, a) => a.indexOf(d) === i && (d === days.length || days.length - d >= 3));
+    for (const d of ticks) g += `<text x="${f1(X(d - 1))}" y="${H - 6}" text-anchor="middle">${d}일</text>`;
+    const today = todayKst(), ti = days.indexOf(today), si = days.indexOf(S.sel);
+    if (ti >= 0) g += `<line x1="${f1(X(ti))}" x2="${f1(X(ti))}" y1="${T}" y2="${T + ph}" style="stroke:var(--muted);stroke-dasharray:2 3"/>`;
+    if (si >= 0) g += `<line x1="${f1(X(si))}" x2="${f1(X(si))}" y1="${T}" y2="${T + ph}" style="stroke:var(--ink);stroke-width:1.2"/>`;
+    // highlighted line drawn last so it sits on top
+    const order = list.map((s, i) => [s, i]).sort((a, b) => (a[0].k === S.hl) - (b[0].k === S.hl));
+    for (const [s, i] of order) {
+      const col = PALETTE[i % PALETTE.length], dim = S.hl && s.k !== S.hl, sw = s.k === S.hl ? 3 : 2;
+      let d = '', pts = '';
+      s.vals.forEach((v, j) => {
+        if (v == null) return;
+        const prev = j > 0 ? s.vals[j - 1] : null, next = j < s.vals.length - 1 ? s.vals[j + 1] : null;
+        d += (prev == null ? 'M' : 'L') + f1(X(j)) + ' ' + f1(Y(v)) + ' ';
+        // dots where a run starts / ends / the price changes
+        if (prev == null || next == null || prev !== v) pts += `<circle cx="${f1(X(j))}" cy="${f1(Y(v))}" r="${prev == null && next == null ? 3 : 2.4}" fill="${col}"/>`;
+      });
+      g += `<g style="opacity:${dim ? 0.18 : 1}"><path d="${d}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>${pts}</g>`;
+    }
+    if (si >= 0) for (const [s, i] of order) { const v = s.vals[si]; if (v != null && !(S.hl && s.k !== S.hl)) g += `<circle cx="${f1(X(si))}" cy="${f1(Y(v))}" r="4" fill="${PALETTE[i % PALETTE.length]}" style="stroke:var(--sheet);stroke-width:2"/>`; }
+    const holder = el('div', {}); holder.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="일자별 판매가 그래프">${g}</svg>`;
+    const svg = holder.firstChild;
+    // tap / click on the graph picks that day (the list below follows it)
+    svg.addEventListener('click', ev => {
+      const r = svg.getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width;
+      const i = Math.max(0, Math.min(days.length - 1, Math.round((x - L) / pw * (days.length - 1))));
+      S.sel = days[i]; draw();
+    });
+    const selTxt = si >= 0 ? fmtD(S.sel) : '';
+    const lg = el('div', { class: 'lg' }, el('div', { class: 'lh' }, el('span', {}, '채널 · 가격구분 (눌러서 강조)'), el('span', {}, selTxt ? selTxt + ' 판매가' : '')),
+      ...list.map((s, i) => {
+        const v = si >= 0 ? s.vals[si] : null, vh = si >= 0 ? s.hi[si] : null;
+        return el('div', { class: 'li' + (S.hl && s.k !== S.hl ? ' dim' : ''), title: label(s), onclick: () => { S.hl = S.hl === s.k ? '' : s.k; drawChart(); } },
+          el('span', { class: 'sw', style: 'background:' + PALETTE[i % PALETTE.length] }),
+          el('span', { class: 'nm' }, label(s)),
+          el('span', { class: 'r' }, rng(s.min, s.max, x => x.toLocaleString('ko-KR'))),
+          el('span', { class: 'v' }, v == null ? '-' : rng(v, vh, x => x.toLocaleString('ko-KR')) + '원'));
+      }));
+    box.replaceChildren(head, note || '', svg, lg);
   }
   function drawDay() {
     const d = S.sel, list = visible().filter(e => e.start_date <= d && e.end_date >= d);
