@@ -200,13 +200,13 @@
     if (v === 'chart') chartDefault();
     draw();
   });
-  // with no filter picked, the graph opens on 시유 GT 900 · 2입 (소분류 "…시유 GT 900", the 가격구분 of its 2입 set)
+  // with no filter picked, the graph opens on 시유 GT 900ml 2입: the 대분류 of 소분류 "…시유 GT 900", all its 소분류 (일반 + 저지방 + …), 가격구분 of the 2입 set
   function chartDefault() {
     if (S.fTeam || S.fCh || S.fBr || S.fSub || S.fPg) return false;
     const inSub = S.events.filter(e => /시유\s*GT\s*900$/.test(catOf(e).s));
     if (!inSub.length) return false;
     const two = inSub.find(e => /2입/.test(e.product_name || '')) || inSub[0];
-    S.fBr = catOf(two).l; S.fSub = catOf(two).s; S.fPg = pgOf(two);
+    S.fBr = catOf(two).l; S.fSub = ''; S.fPg = pgOf(two);
     return true;
   }
   function chartSeries() {
@@ -306,7 +306,7 @@
   const DIV = { A: ['01.도매', 'A.상온'], B: ['01.도매', 'B.유제품'], C: ['02.유통', 'C.Hyper'], D: ['02.유통', 'D.SSM'], E: ['02.유통', 'E.CVS'], F: ['03.E커머스', 'F.E-1'], G: ['03.E커머스', 'G.E-2'], H: ['04.FS', 'H.FS기획'], I: ['04.FS', 'I.FS영업1'], J: ['04.FS', 'J.FS영업2'] };
   const divOf = code => DIV[String(code)[0]] || ['09.기타', String(code)[0] + '.기타'];
   // 가격 그룹 from the product name: 단계 (1공관 / 2스틱 / 1단계) + 규격 (last size token: 800g, 250ml, 180+20T).
-  // Taste variants fall into the same group; 입수 is part of the group (12입 and 3*4입 both read 12입). Later this can come from a 가격그룹 column in the product master.
+  // Taste variants fall into the same group; 입수 is part of the group (24입 = box; 6*4입 / 4*6입 = bundles, kept apart from 24입 and from each other). Later this can come from a 가격그룹 column in the product master.
   const PG = new Map();
   function pgOf(x) {
     const name = x.product_name || ''; if (PG.has(name)) return PG.get(name);
@@ -314,14 +314,14 @@
     const st = n.match(/(\d)(공관|스틱|단계)/), sizes = [...n.matchAll(/(\d+(?:\.\d+)?(?:\+\d+)?)(T|ml|L|kg|g|매)(?![a-zA-Z가-힣])/gi)];
     const sz = sizes.length ? sizes[sizes.length - 1] : null;
     const unit = sz ? (/^ml$/i.test(sz[2]) ? 'ml' : /^kg$/i.test(sz[2]) ? 'kg' : /^g$/i.test(sz[2]) ? 'g' : /^l$/i.test(sz[2]) ? 'L' : sz[2].toUpperCase() === 'T' ? 'T' : sz[2]) : '';
-    // 입수: the last "N입" / "A*B입" token (outer pack, e.g. "(150g*4입)(8입)" -> 8입), else "(6*4)" -> 24입
-    const pks = [...n.matchAll(/(\d+)(?:\*(\d+))?입/g)], pk2 = pks.length ? null : n.match(/\((\d+)\*(\d+)\)/);
-    const pack = pks.length ? (+pks[pks.length - 1][1]) * (+(pks[pks.length - 1][2] || 1)) + '입' : pk2 ? (+pk2[1]) * (+pk2[2]) + '입' : '';
+    // 입수: the last "N입" / "A*B입" token (outer pack, e.g. "(150g*4입)(8입)" -> 8입), else "(6*4)" -> 6*4입. A*B stays as written (a bundle, not a 24입 box)
+    const pks = [...n.matchAll(/(\d+)(?:번들)?(?:\*(\d+))?입/g)], pk2 = pks.length ? null : n.match(/\((\d+)\*(\d+)\)/);
+    const lp = pks[pks.length - 1], pack = lp ? (lp[2] ? +lp[1] + '*' + +lp[2] : +lp[1]) + '입' : pk2 ? +pk2[1] + '*' + +pk2[2] + '입' : '';
     const g = [st ? st[1] + '단계' + (st[2] === '스틱' ? ' 스틱' : '') : '', sz ? sz[1] + unit : '', pack].filter(Boolean).join(' ') || '기타';
     PG.set(name, g); return g;
   }
-  const pkN = s => { const m = s.match(/(\d+)입$/); return m ? +m[1] : 0; };
-  const pgSort = (a, b) => (parseFloat(a.replace(/^\d단계\s*/, '')) || 0) - (parseFloat(b.replace(/^\d단계\s*/, '')) || 0) || a.replace(/\s*\d+입$/, '').localeCompare(b.replace(/\s*\d+입$/, '')) || pkN(a) - pkN(b);
+  const pkN = s => { const m = s.match(/(\d+)(?:\*(\d+))?입$/); return m ? +m[1] * (+(m[2] || 1)) + (m[2] ? 0.5 : 0) : 0; };
+  const pgSort = (a, b) => (parseFloat(a.replace(/^\d단계\s*/, '')) || 0) - (parseFloat(b.replace(/^\d단계\s*/, '')) || 0) || a.replace(/\s*[\d*]+입$/, '').localeCompare(b.replace(/\s*[\d*]+입$/, '')) || pkN(a) - pkN(b);
   const pgroups = xs => [...groupBy(xs, pgOf).entries()].sort((a, b) => pgSort(a[0], b[0]));
   // open/closed state survives redraws
   const OPEN = new Set();
