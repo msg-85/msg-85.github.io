@@ -808,7 +808,8 @@
       isM ? mi('📋 기준정보 (채널 · 제품) 올리기', masterData) : null,
       isM ? mi('🕘 변경 이력', showLog) : null,
       isM ? mi('📥 변경 이력 엑셀로 받기', exportLog) : null,
-      isM ? mi('🛒 쿠팡 가격 추적', () => openLink('coupang')) : null,
+      el('div', { class: 'sec' }, '가격'),
+      mi(isM ? '🛒 쿠팡 가격 추적' : '🛒 쿠팡 가격 추적 (조회 전용)', () => openLink(isM ? 'coupang' : 'coupang_view')),
       el('div', { class: 'sec' }, '기타'),
       mi('❓ 사용 안내', showHelp),
       mi('🔒 비밀번호 변경', () => changePw(false)),
@@ -823,11 +824,12 @@
     let link;
     try { link = await api.getLink(key); } catch (e) { return toast(e.message || '불러오지 못했습니다.'); }
     if (!link || !/^https:\/\//.test(link.url)) return toast('아직 연결된 주소가 없습니다.');
+    if (!link.secret && S.user.role !== 'master') return toast('아직 준비 중입니다. 조금 뒤에 다시 열어 주세요.');
     const frame = el('iframe', { src: link.url, title: link.label, referrerpolicy: 'no-referrer' });
     const view = el('div', { class: 'fullview', role: 'dialog', 'aria-label': link.label });
     const close = () => { view.remove(); document.body.style.overflow = ''; };
     view.append(el('div', { class: 'fvh' }, el('h2', {}, link.label),
-      el('button', { class: 'btn', onclick: () => window.open(link.url, '_blank', 'noopener') }, '새 창'),
+      S.user.role === 'master' ? el('button', { class: 'btn', onclick: () => window.open(link.url, '_blank', 'noopener') }, '새 창') : null,
       el('button', { class: 'ib', 'aria-label': '닫기', onclick: close }, '✕')), frame);
     let tried = false;
     frame.addEventListener('load', () => {
