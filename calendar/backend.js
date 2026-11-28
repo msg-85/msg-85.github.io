@@ -270,7 +270,7 @@
     async listLogRange(from, to) { this._master(); return this.db.log.filter(l => l.at >= from && l.at < to).reverse(); }
     async listRequestsRange(from, to) { this._master(); return (this.db.requests || []).filter(r => r.requested_at >= from && r.requested_at < to).sort((a, b) => a.id - b.id); }
     async listMarket(from, to) { this._guard(); return (window.DEMO_MARKET || []).filter(r => r.d >= from && r.d <= to); }
-    async getLink() { this._master(); return null; }
+    async getLink() { this._guard(); return null; }
     // ---- change requests (plan A: after the lock a manager asks, the master approves) ----
     async listRequests() {
       this._guard(); const all = this.db.requests || [];
