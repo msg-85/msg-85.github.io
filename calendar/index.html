@@ -71,6 +71,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
 .seg button { border: 0; background: var(--sheet); color: var(--muted); padding: 6px 12px; font-size: 13px; cursor: pointer; }
 .seg button.on { background: var(--ink); color: var(--sheet); font-weight: 600; }
+.vseg { margin-left: 4px; flex: none; } .vseg button { padding: 5px 9px; }
+@media (max-width: 380px) { .month { font-size: 18px; } .vseg button { padding: 5px 7px; font-size: 12px; } .top .chip { padding: 5px 9px; } }
+.chartbox { background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; padding: 10px 8px 6px; }
+.chartbox .ch-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 0 6px 4px; font-size: 14px; font-weight: 700; }
+.chartbox .ch-h small { color: var(--muted); font-weight: 400; font-size: 12px; }
+.chartbox .ch-note { margin: 0 6px 6px; padding: 6px 10px; border-radius: 8px; background: var(--soft); color: var(--muted); font-size: 12px; }
+.chartbox svg { display: block; width: 100%; touch-action: pan-y; cursor: pointer; }
+.chartbox svg text { font-size: 10px; fill: var(--muted); }
+.lg { border-top: 1px solid var(--line); margin-top: 4px; }
+.lg .li { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-bottom: 1px solid var(--line); font-size: 13px; cursor: pointer; }
+.lg .li:last-child { border-bottom: 0; }
+.lg .li.dim { opacity: .4; }
+.lg .sw { width: 14px; height: 4px; border-radius: 2px; flex: none; }
+.lg .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg .v { font-weight: 700; white-space: nowrap; } .lg .r { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.lg .lh { font-size: 11px; color: var(--muted); padding: 6px 6px 2px; display: flex; justify-content: space-between; }
 .sub .nm { white-space: normal; }
 .sub .nm small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
 .pgh { padding: 8px 14px 4px; font-size: 12px; font-weight: 700; color: var(--ink); background: var(--soft); border-bottom: 1px solid var(--line); }
@@ -200,6 +216,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
         <button class="ib" id="prevBtn" aria-label="이전 달">‹</button>
         <div class="month" id="monthLabel"></div>
         <button class="ib" id="nextBtn" aria-label="다음 달">›</button>
+        <div class="seg vseg" id="viewSeg"><button data-v="cal">달력</button><button data-v="chart">그래프</button></div>
         <div class="grow"></div>
         <button class="chip" id="todayBtn">오늘</button>
         <button class="ib" id="menuBtn" aria-label="메뉴" style="position:relative">☰<span id="menuBadge" class="nbadge" hidden></span></button>
@@ -214,7 +231,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
       <div id="demoBar" class="demo" hidden></div>
       <div id="installBar" class="ok row" style="margin:6px 0" hidden><span class="grow">📱 홈 화면에 앱으로 설치하면 아이콘으로 바로 열려요.</span><button class="btn pri" id="installBtn" style="padding:7px 12px">설치</button><button class="ib" id="installX" aria-label="닫기" style="width:32px;height:32px">✕</button></div>
     </div>
-    <div class="cal">
+    <div id="chartBox" class="chartbox" hidden></div>
+    <div class="cal" id="calBox">
       <div class="dow"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
       <div id="grid"></div>
     </div>
