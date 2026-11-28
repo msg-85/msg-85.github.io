@@ -193,7 +193,9 @@
   // ---------------- graph view ----------------
   // 달력 / 그래프 toggle next to the month. The graph shows 판매가 per day (1일 ~ 말일) for the filtered events,
   // one line per 채널(+세부채널) × 소분류 × 가격구분 (the lowest 판매가 of its SKUs that day). Gaps = no 행사.
-  const CHART_MAX = 10;
+  // up to 15 lines once a 가격구분 is picked (the default view), 10 when it is all 가격구분
+  const chartMax = () => (S.fPg ? 15 : 10);
+  const LINE_COLORS = PALETTE.concat(['#d81b60', '#1e88e5', '#7cb342', '#ef6c00', '#78909c']);
   $('viewSeg').addEventListener('click', e => {
     const v = e.target.dataset && e.target.dataset.v; if (!v || v === S.view) return;
     S.view = v; try { localStorage.setItem('evcal-view', v); } catch (x) {}
@@ -226,7 +228,7 @@
     for (const s of all) { const r = s.vals.filter(v => v != null); s.min = Math.min(...r); s.max = Math.max(...r); }
     // too many lines to read: keep the 10 with the highest 판매가
     all.sort((a, b) => b.max - a.max || chIx(a.code) - chIx(b.code) || a.k.localeCompare(b.k));
-    return { days, total: all.length, list: all.slice(0, CHART_MAX) };
+    return { days, total: all.length, list: all.slice(0, chartMax()) };
   }
   const niceStep = span => { const raw = span / 4, p = Math.pow(10, Math.floor(Math.log10(raw || 1))); return [1, 2, 2.5, 5, 10].map(x => x * p).find(x => x >= raw) || p * 10; };
   function drawChart() {
@@ -235,7 +237,7 @@
     const label = s => `${s.ch} · ${S.fSub ? '' : subShort(s.sub) + ' '}${s.pg}`;
     const head = el('div', { class: 'ch-h' }, el('span', {}, '판매가 추이 ', el('small', {}, `${S.m + 1}/1 ~ ${S.m + 1}/${days.length}`)), el('small', {}, list.length ? `선 ${list.length}개` : ''));
     if (!list.length) return box.replaceChildren(head, el('div', { class: 'empty' }, '이 달에 고른 조건의 행사가 없습니다.'));
-    const note = total > CHART_MAX ? el('div', { class: 'ch-note' }, `선이 ${total}개라 판매가 높은 ${CHART_MAX}개만 보여요. 위 필터로 좁히면 다 보여요.`) : null;
+    const note = total > chartMax() ? el('div', { class: 'ch-note' }, `선이 ${total}개라 판매가 높은 ${chartMax()}개만 보여요. 위 필터로 좁히면 다 보여요.`) : null;
     if (S.hl && !list.some(s => s.k === S.hl)) S.hl = '';
     // geometry (px, drawn at the box's real width so text stays the same size on any screen)
     const W = Math.max(280, (box.clientWidth || 360) - 16), H = Math.round(Math.min(260, Math.max(190, W * 0.55)));
@@ -255,7 +257,7 @@
     // highlighted line drawn last so it sits on top
     const order = list.map((s, i) => [s, i]).sort((a, b) => (a[0].k === S.hl) - (b[0].k === S.hl));
     for (const [s, i] of order) {
-      const col = PALETTE[i % PALETTE.length], dim = S.hl && s.k !== S.hl, sw = s.k === S.hl ? 3 : 2;
+      const col = LINE_COLORS[i % LINE_COLORS.length], dim = S.hl && s.k !== S.hl, sw = s.k === S.hl ? 3 : 2;
       let d = '', pts = '';
       s.vals.forEach((v, j) => {
         if (v == null) return;
@@ -266,7 +268,7 @@
       });
       g += `<g style="opacity:${dim ? 0.18 : 1}"><path d="${d}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>${pts}</g>`;
     }
-    if (si >= 0) for (const [s, i] of order) { const v = s.vals[si]; if (v != null && !(S.hl && s.k !== S.hl)) g += `<circle cx="${f1(X(si))}" cy="${f1(Y(v))}" r="4" fill="${PALETTE[i % PALETTE.length]}" style="stroke:var(--sheet);stroke-width:2"/>`; }
+    if (si >= 0) for (const [s, i] of order) { const v = s.vals[si]; if (v != null && !(S.hl && s.k !== S.hl)) g += `<circle cx="${f1(X(si))}" cy="${f1(Y(v))}" r="4" fill="${LINE_COLORS[i % LINE_COLORS.length]}" style="stroke:var(--sheet);stroke-width:2"/>`; }
     const holder = el('div', {}); holder.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="일자별 판매가 그래프">${g}</svg>`;
     const svg = holder.firstChild;
     // tap / click on the graph picks that day (the list below follows it)
@@ -280,7 +282,7 @@
       ...list.map((s, i) => {
         const v = si >= 0 ? s.vals[si] : null, vh = si >= 0 ? s.hi[si] : null;
         return el('div', { class: 'li' + (S.hl && s.k !== S.hl ? ' dim' : ''), title: label(s), onclick: () => { S.hl = S.hl === s.k ? '' : s.k; drawChart(); } },
-          el('span', { class: 'sw', style: 'background:' + PALETTE[i % PALETTE.length] }),
+          el('span', { class: 'sw', style: 'background:' + LINE_COLORS[i % LINE_COLORS.length] }),
           el('span', { class: 'nm' }, label(s)),
           el('span', { class: 'r' }, rng(s.min, s.max, x => x.toLocaleString('ko-KR'))),
           el('span', { class: 'v' }, v == null ? '-' : rng(v, vh, x => x.toLocaleString('ko-KR')) + '원'));
