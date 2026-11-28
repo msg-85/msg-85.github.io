@@ -808,6 +808,7 @@
       isM ? mi('📋 기준정보 (채널 · 제품) 올리기', masterData) : null,
       isM ? mi('🕘 변경 이력', showLog) : null,
       isM ? mi('📥 변경 이력 엑셀로 받기', exportLog) : null,
+      isM ? mi('🛒 쿠팡 가격 추적', () => openLink('coupang')) : null,
       el('div', { class: 'sec' }, '기타'),
       mi('❓ 사용 안내', showHelp),
       mi('🔒 비밀번호 변경', () => changePw(false)),
@@ -817,6 +818,28 @@
       mi('로그아웃', () => { api.logout(); S.user = null; showLogin(); }));
     close = sheet('메뉴', body);
   });
+  // master-only full-screen view of a linked page (app_links). Same-origin share links get their password filled in.
+  async function openLink(key) {
+    let link;
+    try { link = await api.getLink(key); } catch (e) { return toast(e.message || '불러오지 못했습니다.'); }
+    if (!link || !/^https:\/\//.test(link.url)) return toast('아직 연결된 주소가 없습니다.');
+    const frame = el('iframe', { src: link.url, title: link.label, referrerpolicy: 'no-referrer' });
+    const view = el('div', { class: 'fullview', role: 'dialog', 'aria-label': link.label });
+    const close = () => { view.remove(); document.body.style.overflow = ''; };
+    view.append(el('div', { class: 'fvh' }, el('h2', {}, link.label),
+      el('button', { class: 'btn', onclick: () => window.open(link.url, '_blank', 'noopener') }, '새 창'),
+      el('button', { class: 'ib', 'aria-label': '닫기', onclick: close }, '✕')), frame);
+    let tried = false;
+    frame.addEventListener('load', () => {
+      if (tried || !link.secret) return;
+      try {
+        const d = frame.contentDocument, pw = d && d.getElementById('pw'), f = d && d.getElementById('f');
+        if (!pw || !f) return;
+        tried = true; pw.value = link.secret; f.requestSubmit();
+      } catch (e) { /* other origin: the viewer asks for the password itself */ }
+    });
+    document.body.append(view); document.body.style.overflow = 'hidden';
+  }
   function download(blob, name) { const a = el('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); }
   // upload form = download form: the first 9 columns are read back; '(자동)' columns are filled on download and ignored on upload
   const EV_HEAD = ['채널', '세부채널명', '행사명', '제품번호', '시작일', '종료일', '단위당 정상가', '단위당 판매가', '단위당 입수량', '예상수량', '메모'];
