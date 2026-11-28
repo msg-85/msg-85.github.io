@@ -7,7 +7,7 @@
   const useDemo = params.has('demo') || !cfg.url || !cfg.anonKey;
   const api = useDemo ? new Cal.DemoBackend() : new Cal.SupabaseBackend(cfg.url, cfg.anonKey);
 
-  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], requests: [], fTeam: '', fCh: '', fBr: '', fSub: '', fPg: '', hl: '', view: (() => { try { return localStorage.getItem('evcal-view') || 'cal'; } catch (e) { return 'cal'; } })(), dv: (() => { try { return localStorage.getItem('evcal-dv') || 'sub'; } catch (e) { return 'sub'; } })() };
+  const S = { user: null, y: 0, m: 0, sel: todayKst(), events: [], channels: [], products: [], users: [], requests: [], fTeam: [], fCh: [], fBr: [], fSub: [], fPg: [], hl: '', view: (() => { try { return localStorage.getItem('evcal-view') || 'cal'; } catch (e) { return 'cal'; } })(), dv: (() => { try { return localStorage.getItem('evcal-dv') || 'sub'; } catch (e) { return 'sub'; } })() };
   const PALETTE = ['#2e7d6b', '#c2571a', '#3b62c4', '#a33ea1', '#b8860b', '#c0392b', '#00838f', '#6d4c41', '#5e35b1', '#558b2f'];
   const won = n => (n == null || n === '' ? '-' : Number(n).toLocaleString('ko-KR') + '원');
   const num = s => { if (s == null) return NaN; const t = String(s).replace(/[,\s원]/g, ''); return t === '' ? NaN : Number(t); };
@@ -95,31 +95,59 @@
     setTimeout(() => cur.focus(), 60);
   }
   function fail(x) { if (x.code === 401) { api.logout(); showLogin(); } else toast(x.message); }
-  // filters: 팀 -> 채널, 대분류 -> 소분류 -> 가격구분 (each list follows the one before it).
-  // Lists only hold values that appear in the loaded events (the shown month), so nothing empty can be picked.
-  const opts = (sel, all, items, cur) => { sel.replaceChildren(el('option', { value: '' }, all), ...items.map(([v, t]) => el('option', { value: v }, t))); sel.value = items.some(([v]) => v === cur) ? cur : ''; return sel.value; };
+  // filters: 팀 -> 채널, 대분류 -> 소분류 -> 가격구분. Each one is a multi-pick (checkboxes; nothing picked = 전체),
+  // and each list follows the picks before it. Lists only hold values in the loaded events (the shown month).
   const uniq = xs => [...new Set(xs.filter(Boolean))];
+  const FILTERS = [
+    { id: 'fTeam', key: 'fTeam', all: '전체 팀', name: '팀', of: e => divOf(e.channel_code)[1] },
+    { id: 'fChannel', key: 'fCh', all: '전체 채널', name: '채널', of: e => e.channel_code, label: c => chLabel(c), sort: (a, b) => chIx(a) - chIx(b) },
+    { id: 'fBrand', key: 'fBr', all: '전체 대분류', name: '대분류', of: e => catOf(e).l },
+    { id: 'fSub', key: 'fSub', all: '전체 소분류', name: '소분류', of: e => catOf(e).s },
+    { id: 'fPg', key: 'fPg', all: '전체 가격구분', name: '가격구분', of: e => pgOf(e), sort: (a, b) => pgSort(a, b) },
+  ];
+  const PARENTS = { fCh: ['fTeam'], fSub: ['fBr'], fPg: ['fBr', 'fSub'] };
+  const fByKey = k => FILTERS.find(f => f.key === k);
+  const pass = (e, k) => !S[k].length || S[k].includes(fByKey(k).of(e));
+  const filterOpts = f => uniq(S.events.filter(e => (PARENTS[f.key] || []).every(p => pass(e, p))).map(f.of)).sort(f.sort || ((a, b) => a.localeCompare(b)));
+  const anyFilter = () => FILTERS.some(f => S[f.key].length);
   function fillFilters() {
-    const ev = S.events;
-    S.fTeam = opts($('fTeam'), '전체 팀', uniq(ev.map(e => divOf(e.channel_code)[1])).sort().map(t => [t, t]), S.fTeam);
-    const chs = new Set(ev.filter(e => !S.fTeam || divOf(e.channel_code)[1] === S.fTeam).map(e => e.channel_code));
-    S.fCh = opts($('fChannel'), '전체 채널', [...chs].sort((a, b) => chIx(a) - chIx(b)).map(c => [c, chLabel(c)]), S.fCh);
-    S.fBr = opts($('fBrand'), '전체 대분류', uniq(ev.map(e => catOf(e).l)).sort().map(b => [b, b]), S.fBr);
-    fillSub();
+    for (const f of FILTERS) {
+      const o = filterOpts(f), lab = f.label || (x => x);
+      S[f.key] = S[f.key].filter(v => o.includes(v));   // picks that no longer exist in the list are dropped
+      const cur = S[f.key], b = $(f.id);
+      b.textContent = !cur.length ? f.all : cur.length === 1 ? lab(cur[0]) : `${lab(cur[0])} 외 ${cur.length - 1}`;
+      b.classList.toggle('on', cur.length > 0);
+    }
   }
-  function fillSub() {
-    S.fSub = opts($('fSub'), '전체 소분류', uniq(S.events.filter(e => !S.fBr || catOf(e).l === S.fBr).map(e => catOf(e).s)).sort().map(s => [s, s]), S.fSub);
-    fillPg();
+  // bottom sheet with a checkbox per value, a search box for long lists, and 적용
+  function pickFilter(f) {
+    const o = filterOpts(f), lab = f.label || (x => x), chosen = new Set(S[f.key]);
+    const q = el('input', { class: 'in', placeholder: f.name + ' 검색', style: 'margin-bottom:8px' });
+    const list = el('div', { class: 'fpick' }), info = el('span', { class: 'fpick-n' });
+    const shown = () => { const w = q.value.trim().toLowerCase(); return o.filter(v => !w || lab(v).toLowerCase().includes(w)); };
+    const all = el('button', { class: 'chip' });
+    const show = () => {
+      info.textContent = chosen.size ? `${chosen.size}개 선택` : '선택 없음 = 전체';
+      const sh = shown(); all.textContent = sh.length && sh.every(v => chosen.has(v)) ? '보이는 항목 해제' : '보이는 항목 모두 선택';
+    };
+    const drawL = () => {
+      const sh = shown();
+      list.replaceChildren(...(sh.length ? sh.map(v => {
+        const cb = el('input', { type: 'checkbox' }); cb.checked = chosen.has(v);
+        cb.addEventListener('change', () => { cb.checked ? chosen.add(v) : chosen.delete(v); show(); });
+        return el('label', {}, cb, el('span', {}, lab(v)));
+      }) : [el('div', { class: 'empty' }, '맞는 항목이 없습니다.')]));
+      show();
+    };
+    all.addEventListener('click', () => { const sh = shown(), on = sh.every(v => chosen.has(v)); for (const v of sh) on ? chosen.delete(v) : chosen.add(v); drawL(); });
+    const clear = el('button', { class: 'chip', onclick: () => { chosen.clear(); drawL(); } }, '전체 해제');
+    let close;
+    const apply = el('button', { class: 'btn pri', onclick: () => { S[f.key] = o.filter(v => chosen.has(v)); S.hl = ''; close(); draw(); } }, '적용');
+    close = sheet(f.name + ' 고르기 (여러 개 가능)', el('div', {},
+      o.length > 8 ? q : null, el('div', { class: 'fpick-h' }, info, el('span', { class: 'grow' }), all, clear), list, el('div', { class: 'acts' }, apply)));
+    q.addEventListener('input', drawL); drawL();
   }
-  function fillPg() {
-    const xs = S.events.filter(e => (!S.fBr || catOf(e).l === S.fBr) && (!S.fSub || catOf(e).s === S.fSub));
-    S.fPg = opts($('fPg'), '전체 가격구분', uniq(xs.map(pgOf)).sort(pgSort).map(g => [g, g]), S.fPg);
-  }
-  $('fTeam').addEventListener('change', e => { S.fTeam = e.target.value; draw(); });
-  $('fChannel').addEventListener('change', e => { S.fCh = e.target.value; draw(); });
-  $('fBrand').addEventListener('change', e => { S.fBr = e.target.value; draw(); });
-  $('fSub').addEventListener('change', e => { S.fSub = e.target.value; draw(); });
-  $('fPg').addEventListener('change', e => { S.fPg = e.target.value; draw(); });
+  for (const f of FILTERS) $(f.id).addEventListener('click', () => pickFilter(f));
   // one 행사 = same channel, 세부채널, 행사명 and dates; its SKUs are grouped by 소분류
   const promoKey = e => [e.channel_code, e.channel_detail || '', e.title, e.start_date, e.end_date].join('\u0001');
   function promos(list) {
@@ -136,7 +164,7 @@
     try { S.events = await api.listEvents(from, to); } catch (x) { return fail(x); }
     draw();
   }
-  const visible = () => S.events.filter(e => (!S.fTeam || divOf(e.channel_code)[1] === S.fTeam) && (!S.fPg || pgOf(e) === S.fPg) && (!S.fCh || e.channel_code === S.fCh) && (!S.fBr || catOf(e).l === S.fBr) && (!S.fSub || catOf(e).s === S.fSub));
+  const visible = () => S.events.filter(e => FILTERS.every(f => pass(e, f.key)));
   // month grid: one lane per 팀, ranked by how many channels (incl. 세부채널) run a promo that week.
   // Lanes 1-3 show the top 3 팀 as "Hyper · 이마트 외 2개처"; the rest is "+n팀" under the day.
   function draw() {
@@ -194,7 +222,7 @@
   // 달력 / 그래프 toggle next to the month. The graph shows 판매가 per day (1일 ~ 말일) for the filtered events,
   // one line per 채널(+세부채널) × 소분류 × 가격구분 (the lowest 판매가 of its SKUs that day). Gaps = no 행사.
   // up to 15 lines once a 가격구분 is picked (the default view), 10 when it is all 가격구분
-  const chartMax = () => (S.fPg ? 15 : 10);
+  const chartMax = () => (S.fPg.length ? 15 : 10);
   const LINE_COLORS = PALETTE.concat(['#d81b60', '#1e88e5', '#7cb342', '#ef6c00', '#78909c']);
   $('viewSeg').addEventListener('click', e => {
     const v = e.target.dataset && e.target.dataset.v; if (!v || v === S.view) return;
@@ -204,11 +232,11 @@
   });
   // with no filter picked, the graph opens on 시유 GT 900ml 2입: the 대분류 of 소분류 "…시유 GT 900", all its 소분류 (일반 + 저지방 + …), 가격구분 of the 2입 set
   function chartDefault() {
-    if (S.fTeam || S.fCh || S.fBr || S.fSub || S.fPg) return false;
+    if (anyFilter()) return false;
     const inSub = S.events.filter(e => /시유\s*GT\s*900$/.test(catOf(e).s));
     if (!inSub.length) return false;
     const two = inSub.find(e => /2입/.test(e.product_name || '')) || inSub[0];
-    S.fBr = catOf(two).l; S.fSub = ''; S.fPg = pgOf(two);
+    S.fBr = [catOf(two).l]; S.fSub = []; S.fPg = [pgOf(two)];
     return true;
   }
   function chartSeries() {
@@ -234,7 +262,7 @@
   function drawChart() {
     const box = $('chartBox'), { days, total, list } = chartSeries();
     const subShort = s => String(s || '').replace(/^[A-Za-z]?\d*\.\s*/, '');
-    const label = s => `${s.ch} · ${S.fSub ? '' : subShort(s.sub) + ' '}${s.pg}`;
+    const label = s => `${s.ch} · ${S.fSub.length === 1 ? '' : subShort(s.sub) + ' '}${s.pg}`;
     const head = el('div', { class: 'ch-h' }, el('span', {}, '판매가 추이 ', el('small', {}, `${S.m + 1}/1 ~ ${S.m + 1}/${days.length}`)), el('small', {}, list.length ? `선 ${list.length}개` : ''));
     if (!list.length) return box.replaceChildren(head, el('div', { class: 'empty' }, '이 달에 고른 조건의 행사가 없습니다.'));
     const note = total > chartMax() ? el('div', { class: 'ch-note' }, `선이 ${total}개라 판매가 높은 ${chartMax()}개만 보여요. 위 필터로 좁히면 다 보여요.`) : null;
